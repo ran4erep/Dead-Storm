@@ -1,0 +1,290 @@
+{
+  "npcs": {
+    "name": "/",
+    "description": "/",
+    "hp": 0,
+    "dialogueId": "",
+    "corpseScale": 0,
+    "deadScale": 0,
+    "roamRadius": 0,
+    "assets": {
+      "map": { "assetId": "", "scale": 0 },
+      "dead": { "assetId": "", "scale": 0 },
+      "portrait": { "assetId": "", "scale": 0 },
+      "dialogue_portrait": { "assetId": "", "scale": 0 }
+    },
+    "voice": {
+      "pitch": 0,
+      "rate": 0,
+      "volume": 0,
+      "resonance": 0,
+      "waveform": ""
+    },
+    "tradeItems": [
+      {"id": "", "price": 0, "count": 0}
+    ],
+    "tradeResponses": {
+      "success": "/",
+      "sell_success": "/",
+      "no_money": "/",
+      "no_space": "/"
+    },
+    "keepPrice": 0
+  },
+  
+  "items": {
+	"name": "/",
+	"description": "/",
+	"text": "/",
+	"textScale": 0,
+	"textOffsetX": 0,
+	"textOffsetY": 0,
+	"assetId": "",
+	"scale": 0,
+    "type": "",
+	"equip": "",
+	"throwDamage": "0d0",
+	"price": 0,
+	"powerSource": "",
+	"WEAPON": "------------",
+	"shootType": "",
+	"ammoType": "",
+	"loseAmmoOnReload": false,
+	"ejectAllOnReload": false,
+	"knockbackChance": 0,
+	"magazineMax": 0,
+    "currentAmmo": 0,
+    "dischargeRate": 0,
+    "muzzleFlash": false,
+    "vibrationPattern": 0,
+	"vibrationPattern": [0,0,0],
+	"akimbo": false,
+	"damageDice": "0d0",
+	"accuracy": 0,
+	"range": 0,
+    "handAsset": "",
+	"handScale": 0,
+    "handFemaleAsset": "",
+	"handOffset": {
+      "x": 0,
+      "y": 0
+    },
+    "attackAsset": "",
+    "attackAssetFemale": "",
+	"attackAnimation": [
+		{
+			"duration": 0,
+			"x": 0,
+			"y": 0,
+			"scale": 0
+		}
+	],
+    "casingAsset": "",
+    "casingScale": 0,
+	"casingDirection": "",
+    "casingGroundScaleMultiplier": 0,
+    "casingSpawnPoint": {
+      "x": 0,
+      "y": 0
+    },
+	"WEARING": "------------",
+	"slot": "",
+	"dollAssetId": "",
+	"zIndex": 0,
+	"maxDurability": 0,
+	"protection": 0,
+	"inventorySlots": 0,
+	"femaleOffsetX": 0,
+	"SOUNDS": "------------",
+	"sounds": {
+      "attack": "",
+      "reload": "",
+      "casing": "",
+	  "use": "",
+	  "prime": "",
+      "bounce": "",
+	  "radio_on": "",
+      "radio_off": "",
+	  "beep": "",
+      "explosion": ""
+    },
+	"AMMO": "------------",
+    "ammoType": "",
+    "count": 0,
+    "maxStack": 0,
+	"THROWABLE": "------------",
+	"throwId": "",
+    "explosionId": "",
+    "explosionSoundId": "",
+	"fireObjectId": "",
+    "glassTextureId": "",
+	"duration": 0,
+	"timer": 0,
+    "explosionRange": 0,
+	"COMMON": "------------",
+	"healDice": "0d0",
+	"onUseEffect": {
+      "id": "",
+      "chance": 0
+    },
+	"maskAsset": "",
+	"drawScale": 0,
+	"valuable": "0-0",
+	"wallAssetId": ""
+  },
+  
+  "enemies": {
+    "name": "/",
+	"description": "/",
+	"hp": 0,
+    "maxHp": 0,
+	"baseXP": 0,
+    "damageDice": "0d0",
+    "accuracy": 0,
+    "attackRange": 0,
+	"armor": 0,
+	"muzzleFlash": false,
+	"casing": {
+      "assetId": "",
+      "direction": "",
+      "scale": 0,
+      "groundScaleMultiplier": 0
+    },
+    "speed": 0,
+	"movementType": "",
+    "patrolRange": 0,
+	"assets": {
+      "map": { "assetId": "", "scale": 0 },
+      "portrait": { "assetId": "", "scale": 0 },
+      "attack": { "assetId": "", "scale": 0 },
+	  "distanceAttack": { "assetId": "", "scale": 0 },
+      "dead": { "assetId": "", "scale": 0 },
+      "gibMask": ""
+    },
+    "gibCounts": { "head": 0, "body": 0, "arms": 0, "legs": 0 },
+    "sounds": {
+      "attack": "",
+      "damage": "",
+      "death": "",
+	  "casing": "",
+	  "armorHit": ""
+    },
+	"onHitEffect": {
+        "id": "",
+        "chance": 0
+    },
+	"loot": [
+      { "id": "", "chanceToDrop": 0, "min": 0, "max": 0 }
+    ]
+  },
+  
+  "decorations": {
+    "name": "/",
+    "description": "/",
+    "assetId": "",
+    "scale": 0,
+	"yOffset": 0,
+    "blocking": false,
+	"destructable": false,
+    "hp": 0,
+    "maxHp": 0,
+    "destroyedAssetId": "",
+    "walkableWhenDestroyed": false,
+    "deadScale": 1.0,
+    "destructionSoundId": "",
+    "explosion_damage": "0d0",
+	"isWorkbench": false,
+	"damaging": false,
+	"noBleeding": false,
+    "lifeTime": 0,
+    "damageDice": "0d0",
+    "foreground": false,
+	"soundId": "",
+	"isBox": false,
+	"boxSize": 0.0,
+	"moveSound": "",
+	"light": {
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "intensity": 0,
+      "range": 0,
+      "mode": ""
+    },
+	"isSavePoint": false,
+  "isEmptyness": false,
+	"MESH": "------------",
+	"renderMode": "mesh",
+	"meshWidth": 0,
+    "worldOffsetX": 0,
+    "worldOffsetY": 0,
+	"wallSide": ""
+  },
+  
+  "animations": {
+	"frames": ["", ""],
+	"fps": 0,
+	"scale": 0,
+	"centered": false,
+    "repeat": false,
+    "randomRepeat": "0-0"
+  },
+  
+  "de-buffs": {
+	"id": "",
+    "name": "/",
+    "description": "/",
+    "type": "DEBUFF",
+    "icon": "",
+    "iconType": "",
+    "color": "",
+    "duration": 0,
+    "tickEffect": {
+      "stat": "",
+      "value": 0
+    }
+  },
+  
+  "dialogues": {
+	"id": "",
+    "rootNodeId": "",
+    "nodes": {
+      "NAME": {
+        "id": "",
+        "speaker": "",
+        "text": "/",
+		"action": "",
+		"options": [
+          {
+            "text": "/",
+            "nextNodeId": ""
+          }
+        ],
+        "next": "",
+        "once": false
+	  }
+	}
+  },
+  
+  "recipes": {
+	"id": "",
+	"item1": "",
+	"item2": "",
+	"result": ""
+  },
+  
+  "sounds": {
+	"SYS_NAME": {
+	  "alias": ""
+	},
+	"assetId": "",
+	"triggerRange": 0,
+    "volume": 0,
+    "looped": false,
+    "allowOverlap": false,
+    "streaming": false,
+    "randomizePitch": false,
+	"reverberationIgnored": false
+  }
+  
+}

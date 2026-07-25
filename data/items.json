@@ -1,0 +1,980 @@
+{
+  "fists": {
+    "type": "WEAPON",
+    "akimbo": true,
+    "damageDice": "1d1",
+    "accuracy": 0.5,
+    "range": 1,
+    "handAsset": "HAND_FISTS",
+    "handFemaleAsset": "HAND_FISTS_FEMALE",
+    "handScale": 1.2,
+    "handOffset": {
+      "x": 90,
+      "y": 100
+    },
+    "attackAnimation": [
+      {
+        "duration": 80,
+        "x": 20,
+        "y": 60,
+        "scale": 1
+      },
+      {
+        "duration": 60,
+        "x": -80,
+        "y": -130,
+        "scale": 1.1
+      },
+      {
+        "duration": 200,
+        "x": 0,
+        "y": 0,
+        "scale": 1
+      }
+    ],
+    "sounds": {
+      "attack": "PUNCHING"
+    },
+    "shootType": "default",
+    "muzzleFlash": false,
+    "vibrationPattern": 50,
+    "price": 0
+  },
+  "knife": {
+    "type": "WEAPON",
+    "equip": "WEAPON",
+    "damageDice": "1d6",
+    "throwDamage": "1d3",
+    "accuracy": 1,
+    "range": 1,
+    "assetId": "KNIFE",
+    "scale": 0.07,
+    "dollAssetId": "KNIFE_DOLL",
+    "handAsset": "HAND_KNIFE",
+    "handFemaleAsset": "HAND_KNIFE_FEMALE",
+    "handScale": 1,
+    "handOffset": {
+      "x": 30,
+      "y": 20
+    },
+    "zIndex": 5,
+    "slot": "weapon",
+    "maxDurability": 40,
+    "name": "Боевой нож/Combat Knife",
+    "description": "Тяжелый армейский нож. Надёжный инструмент выживания./Heavy military knife. Reliable survival tool.",
+    "attackAnimation": [
+      {
+        "duration": 80,
+        "x": 30,
+        "y": 30,
+        "scale": 1
+      },
+      {
+        "duration": 60,
+        "x": -20,
+        "y": -50,
+        "scale": 1.1
+      },
+      {
+        "duration": 200,
+        "x": 0,
+        "y": 0,
+        "scale": 1
+      }
+    ],
+    "sounds": {
+      "attack": "KNIFE_HIT"
+    },
+    "shootType": "default",
+    "muzzleFlash": false,
+    "vibrationPattern": 50,
+    "price": 15
+  },
+  "grenade": {
+    "name": "Граната/Grenade",
+    "description": "Осколочная граната./Frag grenade.",
+    "type": "GRENADE",
+    "equip": "NONE",
+    "assetId": "GRENADE",
+    "throwId": "GRENADE_ARMED",
+    "explosionId": "ANIM_EXPLOSION",
+    "explosionSoundId": "EXPLOSION",
+    "scale": 0.15,
+    "damageDice": "4d4",
+    "throwDamage": "1d1",
+    "timer": 1,
+    "explosionRange": 1,
+    "sounds": {
+      "prime": "GRENADE_USE",
+      "bounce": "BOUNCE"
+    },
+    "vibrationPattern": 1000,
+    "maxStack": 5,
+    "price": 50
+  },
+  "molotov": {
+    "name": "Коктейль Молотова/Molotov cocktail",
+    "description": "Бутылка наполненная горючим./Bottle filled with gas.",
+    "type": "MOLOTOV",
+    "equip": "NONE",
+    "assetId": "MOLOTOV",
+    "throwId": "MOLOTOV_ARMED_ANIM",
+    "fireObjectId": "fire",
+    "glassTextureId": "BOTTLE_GLASS",
+    "explosionSoundId": "GLASS",
+    "scale": 0.22,
+    "throwDamage": "1d1",
+    "timer": 0,
+    "explosionRange": 1,
+    "sounds": {
+      "prime": "BOTTLE_SHAKE"
+    },
+    "vibrationPattern": 1000,
+    "maxStack": 5,
+    "price": 50
+  },
+  "flashbang": {
+    "name": "Светошумовая граната/Flashbang grenade",
+    "description": "Создаёт сильную вспышку и громкий звук./Produces a bright flash and a loud sound.",
+    "type": "FLASHBANG",
+    "equip": "NONE",
+    "assetId": "FLASHBANG",
+    "throwId": "FLASHBANG_ARMED",
+    "explosionSoundId": "FLASHBANG_EXPLOSION",
+    "scale": 0.17,
+    "damageDice": "0d0",
+    "throwDamage": "1d1",
+    "duration": 4,
+    "timer": 1,
+    "explosionRange": 6,
+    "sounds": {
+      "prime": "GRENADE_USE",
+      "bounce": "BOUNCE"
+    },
+    "vibrationPattern": 1000,
+    "maxStack": 5,
+    "price": 50
+  },
+  "pistol": {
+    "type": "WEAPON",
+    "equip": "WEAPON",
+    "akimbo": true,
+    "damageDice": "1d8",
+    "throwDamage": "1d1",
+    "accuracy": 1,
+    "range": 5,
+    "assetId": "PISTOL",
+    "scale": 0.15,
+    "dollAssetId": "PISTOL_DOLL",
+    "handAsset": "HAND_PISTOL",
+    "handFemaleAsset": "HAND_PISTOL_FEMALE",
+    "attackAsset": "PISTOL_SHOT",
+    "attackAssetFemale": "PISTOL_SHOT_FEMALE",
+    "handScale": 1.1,
+    "casingAsset": "CASING_9MM",
+    "casingScale": 0.6,
+    "casingGroundScaleMultiplier": 0.08,
+    "casingSpawnPoint": {
+      "x": 65,
+      "y": 45
+    },
+    "casingDirection": "left",
+    "handOffset": {
+      "x": 20,
+      "y": 26
+    },
+    "zIndex": 5,
+    "slot": "weapon",
+    "magazineMax": 9,
+    "currentAmmo": 9,
+    "ammoType": "9mm",
+    "maxDurability": 60,
+    "name": "Пистолет Beretta M9/Beretta M9 Pistol",
+    "description": "Пистолет калибра 9мм./9mm sidearm.",
+    "attackAnimation": [
+      {
+        "duration": 80,
+        "x": 10,
+        "y": -60,
+        "scale": 1.1
+      },
+      {
+        "duration": 60,
+        "x": 5,
+        "y": -30,
+        "scale": 1.1
+      },
+      {
+        "duration": 200,
+        "x": 0,
+        "y": 0,
+        "scale": 1
+      }
+    ],
+    "sounds": {
+      "attack": "PISTOL_SHOT",
+      "reload": "PISTOL_RELOAD",
+      "casing": "CASING_9MM_SOUND"
+    },
+    "shootType": "default",
+    "muzzleFlash": true,
+    "vibrationPattern": 40,
+    "loseAmmoOnReload": true,
+    "price": 100
+  },
+  "revolver": {
+    "type": "WEAPON",
+    "equip": "WEAPON",
+    "akimbo": true,
+    "damageDice": "3d6",
+    "throwDamage": "1d1",
+    "accuracy": 0.1,
+    "range": 4,
+    "assetId": "REVOLVER",
+    "scale": 0.15,
+    "dollAssetId": "REVOLVER_DOLL",
+    "handAsset": "HAND_REVOLVER",
+    "handFemaleAsset": "HAND_REVOLVER_FEMALE",
+    "handScale": 1.1,
+    "handOffset": {
+      "x": 20,
+      "y": 20
+    },
+    "zIndex": 5,
+    "slot": "weapon",
+    "magazineMax": 6,
+    "currentAmmo": 6,
+    "ammoType": "357magnum",
+    "maxDurability": 80,
+    "name": "Револьвер Smith & Wesson 610 Mountain Gun/Smith & Wesson 610 Mountain Gun revolver",
+    "description": "Револьвер обладающий внушительной мощью./A revolver with impressive power.",
+    "attackAnimation": [
+      {
+        "duration": 80,
+        "x": 10,
+        "y": -40,
+        "scale": 1.1
+      },
+      {
+        "duration": 60,
+        "x": 5,
+        "y": -30,
+        "scale": 1.1
+      },
+      {
+        "duration": 200,
+        "x": 0,
+        "y": 0,
+        "scale": 1
+      }
+    ],
+    "sounds": {
+      "attack": "REVOLVER_SHOT",
+      "reload": "REVOLVER_RELOAD",
+      "casing": "CASING_9MM_SOUND"
+    },
+    "casingAsset": "CASING_9MM",
+    "casingScale": 0.6,
+    "shootType": "default",
+    "muzzleFlash": true,
+    "vibrationPattern": 120,
+    "loseAmmoOnReload": false,
+    "ejectAllOnReload": true,
+    "price": 31
+  },
+  "shotgun": {
+    "name": "Дробовик/Shotgun",
+    "type": "WEAPON",
+    "equip": "WEAPON",
+    "assetId": "SHOTGUN",
+    "dollAssetId": "SHOTGUN_DOLL",
+    "description": "Стандартный помповый дробовик используемый полицией./Standard pump-action shotgun used by police.",
+    "scale": 0.18,
+    "weight": 2,
+    "damageDice": "3d4",
+    "throwDamage": "1d1",
+    "accuracy": 1.5,
+    "range": 3,
+    "zIndex": 2,
+    "magazineMax": 4,
+    "currentAmmo": 4,
+    "ammoType": "12g",
+    "maxDurability": 70,
+    "casingAsset": "CASING_12G",
+    "casingScale": 1,
+    "casingGroundScaleMultiplier": 0.1,
+    "casingSpawnPoint": {
+      "x": 58,
+      "y": 52
+    },
+    "casingDirection": "left",
+    "handAsset": "HAND_SHOTGUN",
+    "handFemaleAsset": "HAND_SHOTGUN_FEMALE",
+    "attackAsset": "SHOTGUN_SHOT",
+    "attackAssetFemale": "SHOTGUN_SHOT_FEMALE",
+    "handScale": 1.5,
+    "handOffset": {
+      "x": 40,
+      "y": 70
+    },
+    "attackAnimation": [
+      {
+        "duration": 80,
+        "x": 10,
+        "y": -40,
+        "scale": 1.1
+      },
+      {
+        "duration": 60,
+        "x": 5,
+        "y": -30,
+        "scale": 1.1
+      },
+      {
+        "duration": 200,
+        "x": 0,
+        "y": 0,
+        "scale": 1
+      }
+    ],
+    "sounds": {
+      "attack": "SHOTGUN_SHOT",
+      "reload": "SHOTGUN_RELOAD",
+      "casing": "CASING_12G_SOUND"
+    },
+    "shootType": "shotgun",
+    "muzzleFlash": true,
+    "vibrationPattern": [
+      80,
+      20,
+      60
+    ],
+    "knockbackChance": 60,
+    "loseAmmoOnReload": false,
+    "price": 300
+  },
+  "medkit": {
+    "type": "CONSUMABLE",
+    "equip": "NONE",
+    "healDice": "2d6",
+    "throwDamage": "0",
+    "accuracy": 10,
+    "range": 0,
+    "assetId": "CONSUMABLE",
+    "scale": 0.2,
+    "name": "Армейская аптечка/Field Medkit",
+    "description": "Набор для оказания первой помощи./First aid supplies.",
+    "sounds": {
+      "use": "MEDKIT_USE"
+    },
+    "maxStack": 3,
+    "price": 40
+  },
+  "bandage": {
+    "name": "Бинт/Bandage",
+    "type": "CONSUMABLE",
+    "equip": "NONE",
+    "assetId": "BANDAGE",
+    "description": "Немного грязный, но всё ещё стерильный бинт./Slightly dirty but still sterile bandage.",
+    "scale": 0.15,
+    "healDice": "1d4",
+    "sounds": {
+      "use": "BANDAGE_USE"
+    },
+    "maxStack": 5,
+    "onUseEffect": {
+      "id": "antiseptic",
+      "chance": 100
+    },
+    "price": 50
+  },
+  "note": {
+    "name": "Записка/Note",
+    "type": "NOTE",
+    "equip": "NONE",
+    "assetId": "MAP",
+    "handAsset": "HAND_MAP",
+    "handFemaleAsset": "HAND_MAP_FEMALE",
+    "maskAsset": "HAND_MAP_MASK",
+    "description": "Рукописная записка./A handwritten note.",
+    "text": "Текст не разобрать.|Слишком размыто./Unreadable text.|Too blurry.",
+    "textScale": 8,
+    "textOffsetX": 0.5,
+    "textOffsetY": 0.5,
+    "handScale": 2.2,
+    "handOffset": {
+      "x": 0,
+      "y": 80
+    },
+    "scale": 0.15,
+    "sounds": {
+      "use": "RADIO_EQUIP",
+      "equip": "RADIO_EQUIP"
+    },
+    "price": 10
+  },
+  "map": {
+    "name": "Карта/Map",
+    "type": "MAP",
+    "equip": "NONE",
+    "assetId": "MAP",
+    "handAsset": "HAND_MAP",
+    "handFemaleAsset": "HAND_MAP_FEMALE",
+    "maskAsset": "HAND_MAP_MASK",
+    "description": "Карта локации: {sector}./Map of {sector}.",
+    "handScale": 2.2,
+    "handOffset": {
+      "x": 0,
+      "y": 80
+    },
+    "drawScale": 0.5,
+    "scale": 0.15,
+    "sounds": {
+      "use": "MAP_USE"
+    },
+    "price": 48
+  },
+  "game_console": {
+    "name": "Игровая консоль/Game Console",
+    "type": "CONSOLE",
+    "equip": "NONE",
+    "assetId": "CONSOLE",
+    "handAsset": "CONSOLE_STILL",
+    "handFemaleAsset": "CONSOLE_STILL_FEMALE",
+    "consoleAssets": {
+      "up": "CONSOLE_UP",
+      "down": "CONSOLE_DOWN",
+      "left": "CONSOLE_LEFT",
+      "right": "CONSOLE_RIGHT",
+      "action": "CONSOLE_ACTION",
+      "upFemale": "CONSOLE_UP_FEMALE",
+      "downFemale": "CONSOLE_DOWN_FEMALE",
+      "leftFemale": "CONSOLE_LEFT_FEMALE",
+      "rightFemale": "CONSOLE_RIGHT_FEMALE",
+      "actionFemale": "CONSOLE_ACTION_FEMALE"
+    },
+    "maskAsset": "CONSOLE_MASK",
+    "maskFemaleAsset": "CONSOLE_MASK_FEMALE",
+    "duration": 0,
+    "gameSound": "CONSOLE_FOOD",
+    "sounds": {
+      "use": "CONSOLE_START",
+      "button": "CONSOLE_BUTTON"
+    },
+    "description": "Старая портативная консоль. Есть Змейка./Old handheld. Has Snake game.",
+    "handScale": 2.2,
+    "handOffset": {
+      "x": 0,
+      "y": 80
+    },
+    "scale": 0.1,
+    "price": 150
+  },
+  "cartridge_snake": {
+    "name": "Картридж: Змейка/Cartridge: Snake",
+    "type": "CARTRIDGE",
+    "gameName": "Змейка/Snake",
+    "assetId": "BATTERY",
+    "scale": 0.2,
+    "price": 10,
+    "description": "Игровой картридж со Змейкой./Game cartridge with Snake."
+  },
+  "cartridge_tetris": {
+    "name": "Картридж: Тетрис/Cartridge: Tetris",
+    "type": "CARTRIDGE",
+    "gameName": "Тетрис/Tetris",
+    "assetId": "COMPASS",
+    "scale": 0.2,
+    "price": 15,
+    "description": "Игровой картридж с Тетрисом./Game cartridge with Tetris."
+  },
+  "cartridge_arkanoid": {
+    "name": "Картридж: Арканоид/Cartridge: Arkanoid",
+    "type": "CARTRIDGE",
+    "gameName": "Арканоид/Arkanoid",
+    "assetId": "FLASHLIGHT",
+    "scale": 0.2,
+    "price": 20,
+    "description": "Игровой картридж с Арканоидом./Game cartridge with Arkanoid."
+  },
+  "cartridge_pong": {
+    "name": "Картридж: Понг/Cartridge: Pong",
+    "type": "CARTRIDGE",
+    "gameName": "Понг/Pong",
+    "assetId": "COIN",
+    "scale": 0.2,
+    "price": 25,
+    "description": "Игровой картридж с Понгом./Game cartridge with Pong."
+  },
+  "cartridge_flappy": {
+    "name": "Картридж: Flappy Fly/Cartridge: Flappy Fly",
+    "type": "CARTRIDGE",
+    "gameName": "Flappy Fly/Flappy Fly",
+    "assetId": "PISTOL_AMMO",
+    "scale": 0.2,
+    "price": 30,
+    "description": "Игровой картридж с Flappy Fly./Game cartridge with Flappy Fly."
+  },
+  "radio": {
+    "name": "Рация/Walkie-talkie",
+    "type": "RADIO",
+    "equip": "NONE",
+    "assetId": "RADIO",
+    "handAsset": "HAND_RADIO",
+    "handFemaleAsset": "HAND_RADIO_FEMALE",
+    "description": "Портативная рация./Portable radio.",
+    "handScale": 1.1,
+    "handOffset": {
+      "x": 20,
+      "y": 10
+    },
+    "scale": 0.19,
+    "sounds": {
+      "use": "RADIO_ON",
+      "radio_on": "RADIO_ON",
+      "radio_off": "RADIO_OFF"
+    },
+    "cannotDrop": true,
+    "weight": 0,
+    "price": 100
+  },
+  "keycard": {
+    "name": "Ключ-карта/Keycard",
+    "type": "KEY",
+    "equip": "NONE",
+    "assetId": "KEY",
+    "description": "Синяя карта доступа./Blue access card.",
+    "scale": 0.1,
+    "price": 29
+  },
+  "compass": {
+    "name": "Компасс/Compass",
+    "type": "COMPASS",
+    "equip": "NONE",
+    "assetId": "COMPASS",
+    "description": "Всегда указывает на север./Always points to the north.",
+    "scale": 0.1,
+    "price": 17
+  },
+  "digital_map": {
+    "name": "Электронная карта/Digital Map",
+    "type": "DIGITAL_MAP",
+    "equip": "NONE",
+    "assetId": "CONSOLE",
+    "description": "Портативный экран, отображающий миникарту и направление взгляда./A portable screen displaying a minimap and your orientation.",
+    "scale": 0.1,
+    "price": 25,
+    "powerSource": "battery",
+    "currentAmmo": 100,
+    "magazineMax": 100,
+    "dischargeRate": 1
+  },
+  "cash": {
+    "name": "Деньги/Money",
+    "type": "CASH",
+    "equip": "NONE",
+    "assetId": "CASH",
+    "description": "Деньги не теряют свою ценность в любые времена./Money never loses its value, no matter what.",
+    "scale": 0.1,
+    "valuable": "5-20",
+    "price": 34
+  },
+  "ammo_9mm": {
+    "type": "AMMO",
+    "equip": "NONE",
+    "assetId": "PISTOL_AMMO",
+    "scale": 0.14,
+    "ammoType": "9mm",
+    "count": 30,
+    "maxStack": 50,
+    "throwDamage": "0",
+    "name": "Патроны 9мм/9mm Ammo",
+    "description": "Патроны калибра 9мм./9mm ammunition.",
+    "price": 1
+  },
+  "ammo_357_magnum": {
+    "type": "AMMO",
+    "equip": "NONE",
+    "assetId": "REVOLVER_AMMO",
+    "scale": 0.13,
+    "ammoType": "357magnum",
+    "count": 6,
+    "maxStack": 24,
+    "throwDamage": "0",
+    "name": "Патроны .357 Magnum/.357 Magnum Ammo",
+    "description": "Крупнокалиберные патроны .357 Magnum./.357 Large-caliber Magnum rounds.",
+    "price": 3
+  },
+  "flashlight": {
+    "type": "FLASHLIGHT",
+    "equip": "ACCESSORY",
+    "assetId": "FLASHLIGHT",
+    "scale": 0.12,
+    "throwDamage": "1",
+    "name": "Фонарик/Flashlight",
+    "description": "Нагрудный фонарик./Body flashlight",
+    "price": 45,
+    "powerSource": "battery",
+    "currentAmmo": 100,
+    "magazineMax": 100,
+    "dischargeRate": 1
+  },
+  "battery": {
+    "name": "2AA батарейка/2AA battery",
+    "description": "Используется для работы устройств требующих электрический ток./Used to power devices that require an electric current.",
+    "price": 45,
+    "type": "BATTERY",
+    "assetId": "BATTERY",
+    "scale": 0.12,
+    "sounds": {
+      "use": "BATTERY_USE"
+    },
+    "throwDamage": "0",
+    "charge": 100
+  },
+  "C4": {
+    "type": "C4",
+    "equip": "NONE",
+    "assetId": "C4",
+    "wallAssetId": "C4_WALL_ANIM",
+    "explosionId": "ANIM_C4_EXPLOSION",
+    "scale": 0.14,
+    "sounds": {
+      "use": "C4_PLANTED",
+      "beep": "BEEP",
+      "explosion": "EXPLOSION"
+    },
+    "throwDamage": "1",
+    "timer": 3,
+    "damageDice": "4d4",
+    "explosionRange": 1.5,
+    "name": "C4/C4",
+    "description": "Современная взрывчатка. Хорошо подходит для сноса стен./Modern explosive. Good for wall demolishing.",
+    "price": 26
+  },
+  "ammo_12g": {
+    "name": "Патроны 12 калибра/12-Gauge Shells",
+    "type": "AMMO",
+    "equip": "NONE",
+    "assetId": "SHOTGUN_AMMO",
+    "scale": 0.14,
+    "ammoType": "12g",
+    "count": 12,
+    "maxStack": 20,
+    "description": "Коробка с патронами для дробовика./Box of shotgun shells.",
+    "price": 2
+  },
+  "ammo_762": {
+    "name": "Патроны калибра 7.62/7.62 rounds",
+    "type": "AMMO",
+    "equip": "NONE",
+    "assetId": "RIFLE_AMMO",
+    "scale": 0.13,
+    "ammoType": "762",
+    "count": 30,
+    "maxStack": 90,
+    "description": "Коробка с патронами калибра 7.62./Box of 7.62 rounds.",
+    "price": 4
+  },
+  "helmet": {
+    "type": "ARMOR",
+    "equip": "HEAD",
+    "protection": 1,
+    "throwDamage": "1d1",
+    "zIndex": 4,
+    "slot": "helmet",
+    "assetId": "HELMET_ICON",
+    "scale": 0.2,
+    "dollAssetId": "HELMET",
+    "maxDurability": 30,
+    "name": "Военный шлем/Military Helmet",
+    "description": "Смягчает удары в голову./Softens blows to the head.",
+    "price": 43
+  },
+  "vest": {
+    "type": "ARMOR",
+    "equip": "BODY",
+    "protection": 2,
+    "throwDamage": "1d1",
+    "inventorySlots": 4,
+    "zIndex": 3,
+    "slot": "vest",
+    "assetId": "VEST_ICON",
+    "scale": 0.3,
+    "dollAssetId": "VEST",
+    "maxDurability": 60,
+    "name": "Бронежилет/Body Armor",
+    "description": "Армейский бронежилет. Надёжная защита торса./Military body armor. Reliable torso protection.",
+    "price": 17
+  },
+  "pants": {
+    "type": "ARMOR",
+    "equip": "LEGS",
+    "protection": 0,
+    "throwDamage": "1d1",
+    "inventorySlots": 2,
+    "zIndex": 2,
+    "slot": "pants",
+    "assetId": "PANTS_ICON",
+    "scale": 0.3,
+    "dollAssetId": "PANTS",
+    "maxDurability": 40,
+    "name": "Тактические штаны/Tactical Pants",
+    "description": "Прочные и функциональные./Durable and functional.",
+    "femaleOffsetX": -1,
+    "price": 19
+  },
+  "boots": {
+    "type": "ARMOR",
+    "equip": "FEET",
+    "protection": 0,
+    "throwDamage": "1d1",
+    "zIndex": 1,
+    "slot": "boots",
+    "assetId": "BOOTS_ICON",
+    "scale": 0.15,
+    "dollAssetId": "BOOTS",
+    "maxDurability": 30,
+    "name": "Армейские берцы/Combat Boots",
+    "description": "Защищают голеностоп./Protects the ankle.",
+    "price": 11
+  },
+  "hoodie": {
+    "type": "ARMOR",
+    "equip": "BODY",
+    "protection": 0,
+    "throwDamage": "1d1",
+    "inventorySlots": 2,
+    "zIndex": 3,
+    "slot": "vest",
+    "assetId": "HOODIE_ICON",
+    "scale": 0.3,
+    "dollAssetId": "HOODIE",
+    "maxDurability": 30,
+    "name": "Тёплое худи/Warm Hoodie",
+    "description": "Тёплая и мягкая толстовка с капюшоном./A warm and soft hooded sweatshirt.",
+    "price": 15
+  },
+  "dogtag": {
+    "type": "ARMOR",
+    "equip": "ACCESSORY",
+    "protection": 0,
+    "throwDamage": "1d1",
+    "zIndex": 2,
+    "slot": "accessory1",
+    "assetId": "DOGTAG_ICON",
+    "scale": 0.15,
+    "dollAssetId": "DOGTAG",
+    "maxDurability": 100,
+    "name": "Армейский жетон/Military Dogtag",
+    "description": "Металлический жетон выжившего военнослужащего./A metal identification tag of a surviving soldier.",
+    "price": 8
+  },
+  "cardigan": {
+    "type": "ARMOR",
+    "equip": "BODY",
+    "protection": 0,
+    "throwDamage": "1d1",
+    "inventorySlots": 1,
+    "zIndex": 3,
+    "slot": "vest",
+    "assetId": "CARDIGAN_ICON",
+    "scale": 0.3,
+    "dollAssetId": "CARDIGAN",
+    "maxDurability": 25,
+    "name": "Вязаный кардиган/Knitted Cardigan",
+    "description": "Мягкий кардиган из плотной пряжи./A soft cardigan made of thick yarn.",
+    "price": 12
+  },
+  "oxfords": {
+    "type": "ARMOR",
+    "equip": "FEET",
+    "protection": 0,
+    "throwDamage": "1d1",
+    "zIndex": 1,
+    "slot": "boots",
+    "assetId": "OXFORDS_ICON",
+    "scale": 0.15,
+    "dollAssetId": "OXFORDS",
+    "femaleOffsetX": -1,
+    "maxDurability": 20,
+    "name": "Туфли Оксфорды/Oxfords Shoes",
+    "description": "Классические кожаные туфли./Classic leather shoes.",
+    "price": 18
+  },
+  "jeans": {
+    "type": "ARMOR",
+    "equip": "LEGS",
+    "protection": 0,
+    "throwDamage": "1d1",
+    "inventorySlots": 2,
+    "zIndex": 2,
+    "slot": "pants",
+    "assetId": "JEANS_ICON",
+    "scale": 0.3,
+    "dollAssetId": "JEANS",
+    "maxDurability": 35,
+    "name": "Плотные джинсы/Sturdy Jeans",
+    "description": "Классические джинсы из плотного денима./Classic jeans made of sturdy denim.",
+    "price": 14
+  },
+  "sneakers": {
+    "type": "ARMOR",
+    "equip": "FEET",
+    "protection": 0,
+    "throwDamage": "1d1",
+    "zIndex": 1,
+    "slot": "boots",
+    "assetId": "SNEAKERS_ICON",
+    "scale": 0.15,
+    "dollAssetId": "SNEAKERS",
+    "maxDurability": 25,
+    "name": "Кроссовки/Sneakers",
+    "description": "Спортивная обувь для быстрого перемещения./Athletic shoes for agile movement.",
+    "price": 16
+  },
+  "skirt": {
+    "type": "ARMOR",
+    "equip": "LEGS",
+    "protection": 0,
+    "throwDamage": "1d1",
+    "inventorySlots": 1,
+    "zIndex": 2,
+    "slot": "pants",
+    "assetId": "SKIRT_ICON",
+    "scale": 0.3,
+    "dollAssetId": "SKIRT",
+    "maxDurability": 20,
+    "name": "Удобная юбка/Comfortable Skirt",
+    "description": "Лёгкая юбка, не стесняющая движения./A light skirt that does not restrict movement.",
+    "price": 10
+  },
+  "ak47": {
+    "type": "WEAPON",
+    "equip": "WEAPON",
+    "akimbo": false,
+    "damageDice": "1d6",
+    "throwDamage": "1d1",
+    "accuracy": 3,
+    "range": 7,
+    "assetId": "AK47",
+    "scale": 0.18,
+    "weight": 2,
+    "dollAssetId": "AK47_DOLL",
+    "handAsset": "HAND_AK47",
+    "handFemaleAsset": "HAND_AK47_FEMALE",
+    "attackAsset": "AK47_SHOT",
+    "attackAssetFemale": "AK47_SHOT_FEMALE",
+    "handScale": 1.5,
+    "casingAsset": "CASING_762",
+    "casingScale": 0.6,
+    "casingGroundScaleMultiplier": 0.08,
+    "casingSpawnPoint": {
+      "x": 65,
+      "y": 45
+    },
+    "casingDirection": "left",
+    "handOffset": {
+      "x": 40,
+      "y": 70
+    },
+    "zIndex": 5,
+    "slot": "weapon",
+    "magazineMax": 30,
+    "currentAmmo": 30,
+    "ammoType": "762",
+    "maxDurability": 60,
+    "name": "Автомат АК-47/AK-47 rifle",
+    "description": "Легендарный советский автомат./Legendary soviet rifle.",
+    "attackAnimation": [
+      {
+        "duration": 40,
+        "x": 15,
+        "y": -60,
+        "scale": 1.08
+      },
+      {
+        "duration": 70,
+        "x": 5,
+        "y": -20,
+        "scale": 1.03
+      },
+      {
+        "duration": 140,
+        "x": 0,
+        "y": 0,
+        "scale": 1
+      }
+    ],
+    "sounds": {
+      "attack": "AK47_SHOT",
+      "reload": "AK47_RELOAD",
+      "casing": "CASING_762_SOUND"
+    },
+    "shootType": "auto",
+    "muzzleFlash": true,
+    "vibrationPattern": 60,
+    "loseAmmoOnReload": true,
+    "price": 200
+  },
+  "kevlar": {
+    "type": "MATERIAL",
+    "name": "Пластина кевлара/Kevlar plate",
+    "description": "Прочный материал используемый при производстве бронежилетов. Пригодится для ремонта. /A durable material used in the manufacture of body armor. Useful for repairs.",
+    "assetId": "KEVLAR",
+    "scale": 0.2,
+    "maxStack": 15,
+    "price": 12
+  },
+  "gun_parts": {
+    "type": "MATERIAL",
+    "name": "Оружейные детали/Weapon Parts",
+    "description": "Высокоточное металлическое снаряжение для ремонта сложных пушек./High-precision metal components for repairing complex firearms.",
+    "assetId": "GUN_PARTS",
+    "scale": 0.25,
+    "maxStack": 10,
+    "price": 25
+  },
+    "passport_male": {
+    "name": "Паспорт Джона/John's passport",
+    "description": "Документ подтверждающий гражданство человека./A document proving a person's citizenship.",
+    "assetId": "PASSPORT_MALE",
+    "scale": 0.25
+  },
+    "passport_female": {
+    "name": "Паспорт Лилит/Lilith's passport",
+    "description": "Документ подтверждающий гражданство человека./A document proving a person's citizenship.",
+    "assetId": "PASSPORT_FEMALE",
+    "scale": 0.25
+  },
+  "bottle_of_water": {
+    "name": "Бутилированная газированная вода/Bottled sparkling water",
+    "description": "Отлично утоляет жажду в жаркие дни./It's great for quenching your thirst on hot days.",
+    "assetId": "BOTTLED_WATER",
+    "scale": 0.25
+  },
+  "test_container": {
+    "type": "CONTAINER",
+    "name": "Военный ящик/Military crate",
+    "description": "Тактический ящик военного образца, изготовлен из стойкой пластмассы/Tactical military-grade crate made of durable plastic.",
+    "blocking": true,
+    "assetId": "CRATE_CLOSED",
+    "openedAssetId": "CRATE_OPENED",
+    "openSound": "CASE_OPEN",
+    "scale": 0.5,
+    "loot": [
+      {
+        "id": "medkit",
+        "count": 2
+      },
+      {
+        "id": "ammo_9mm",
+        "count": 15
+      },
+      {
+        "id": "knife",
+        "count": 1
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Поигрушки 25.07 11:43",
+  "description": "Dungeon crawler RPG inspired by Doom RPG, Resident Evil Gaiden and roguelikes",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

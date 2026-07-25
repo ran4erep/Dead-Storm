@@ -1,0 +1,72 @@
+[
+  {
+    "id": "recipe_medkit",
+    "item1": "bandage",
+    "item2": "bandage",
+    "result": "medkit"
+  },
+  {
+    "id": "repair_pistol",
+    "item1": "pistol",
+    "item2": "gun_parts",
+    "result": "pistol",
+    "repairAmount": 50,
+    "repairMaterialsNeeded": 1
+  },
+  {
+    "id": "repair_revolver",
+    "item1": "revolver",
+    "item2": "gun_parts",
+    "result": "revolver",
+    "repairAmount": 40,
+    "repairMaterialsNeeded": 2
+  },
+  {
+    "id": "repair_shotgun",
+    "item1": "shotgun",
+    "item2": "gun_parts",
+    "result": "shotgun",
+    "repairAmount": 40,
+    "repairMaterialsNeeded": 2
+  },
+  {
+    "id": "repair_ak47",
+    "item1": "ak47",
+    "item2": "gun_parts",
+    "result": "ak47",
+    "repairAmount": 45,
+    "repairMaterialsNeeded": 3
+  },
+  {
+    "id": "repair_helmet",
+    "item1": "helmet",
+    "item2": "kevlar",
+    "result": "helmet",
+    "repairAmount": 50,
+    "repairMaterialsNeeded": 1
+  },
+  {
+    "id": "repair_vest",
+    "item1": "vest",
+    "item2": "kevlar",
+    "result": "vest",
+    "repairAmount": 40,
+    "repairMaterialsNeeded": 3
+  },
+  {
+    "id": "repair_pants",
+    "item1": "pants",
+    "item2": "kevlar",
+    "result": "pants",
+    "repairAmount": 60,
+    "repairMaterialsNeeded": 1
+  },
+  {
+    "id": "repair_boots",
+    "item1": "boots",
+    "item2": "kevlar",
+    "result": "boots",
+    "repairAmount": 65,
+    "repairMaterialsNeeded": 1
+  }
+]

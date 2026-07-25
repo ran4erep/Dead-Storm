@@ -1,0 +1,92 @@
+{
+  "baseStats": {
+    "hp": 30,
+    "maxHp": 30,
+    "xp": 0,
+    "maxXp": 300,
+    "level": 1,
+    "availablePoints": 0,
+    "stats": {
+      "str": 0,
+      "agi": 0,
+      "spd": 0,
+      "vit": 0
+    }
+  },
+  "sounds": {
+    "damage": "DAMAGE",
+    "damage_female": "DAMAGE_FEMALE",
+    "death": "DEATH",
+    "deathFemale": "DEATH_FEMALE",
+    "bodyHit": "BODY_HIT"
+  },
+  "voices": {
+    "male": {
+      "pitch": 0.8,
+      "rate": 1.1,
+      "waveform": "sawtooth",
+      "resonance": 0.9,
+      "volume": 1.0
+    },
+    "female": {
+      "pitch": 1.3,
+      "rate": 1.15,
+      "waveform": "sawtooth",
+      "resonance": 1.1,
+      "volume": 1.0
+    }
+  },
+  "loadouts": {
+    "male": {
+      "items": [
+        { "id": "helmet" },
+        { "id": "vest" },
+        { "id": "pants" },
+        { "id": "boots" },
+        { "id": "knife" },
+        { "id": "pistol" },
+        { "id": "medkit" },
+        { "id": "grenade" },
+        { "id": "ammo_9mm", "count": 11 }
+      ],
+      "equipment": {
+        "helmet": "helmet",
+        "vest": "vest",
+        "pants": "pants",
+        "boots": "boots",
+        "weapon": "pistol"
+      }
+    },
+    "female": {
+      "items": [
+        { "id": "helmet" },
+        { "id": "vest" },
+        { "id": "pants" },
+        { "id": "boots" },
+        { "id": "knife" },
+        { "id": "pistol" },
+        { "id": "medkit" },
+        { "id": "grenade" },
+        { "id": "ak47" },
+        { "id": "ammo_9mm", "count": 11 }
+      ],
+      "equipment": {
+        "helmet": "helmet",
+        "vest": "vest",
+        "pants": "pants",
+        "boots": "boots",
+        "weapon": "pistol"
+      }
+    }
+  },
+  "portraits": {
+    "male": {
+      "static": "MALE_PORTRAIT1",
+      "talk": "ANIM_JOHN_TALKING"
+    },
+    "female": {
+      "static": "FEMALE_PORTRAIT1",
+      "talk": "ANIM_LILITH_TALKING"
+    }
+  }
+}

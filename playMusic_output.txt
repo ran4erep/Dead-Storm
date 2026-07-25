@@ -1,0 +1,11 @@
+./hooks/useAudioOrchestrator.ts:    playMusic: (track: string, opts?: any) => void;
+./hooks/useAudioOrchestrator.ts:    playMusic,
+./hooks/useAudioOrchestrator.ts:                playMusic(desiredTrack, { fadeOutDuration: 0.5, fadeInDuration: 0.1, shouldResume: false });
+./hooks/useAudioOrchestrator.ts:                playMusic(desiredTrack, { fadeOutDuration: 0.5, fadeInDuration: 0.5, shouldResume: false });
+./hooks/useAudioOrchestrator.ts:                playMusic(desiredTrack, { fadeOutDuration: 0.5, fadeInDuration: 0.5, shouldResume: !isReturningToMenu });
+./hooks/useAudioOrchestrator.ts:    }, [gameState, loading, levelData?.soundtrack, levelData?.weather, combat.isActive, playMusic, playWeather, showIntroVideo]);
+./hooks/useGameEngine.ts:  const { playSound: originalPlaySound, stopSound, stopAllSounds, playMusic, playWeather, loadSound, initContext, prepareStream, updateSoundPosition } = soundSystem;
+./hooks/useGameEngine.ts:      playSound, stopSound, stopAllSounds, playMusic, playWeather, showIntroVideo, updateSoundPosition, initContext
+./hooks/useGameEngine.ts:      soundSystem, playSound, stopSound, stopAllSounds, playMusic, playWeather, loadSound, initContext, prepareStream, updateSoundPosition,
+./hooks/useSoundSystem.ts:  const playMusic = useCallback(async (trackId: string, options: { fadeOutDuration?: number, fadeInDuration?: number, shouldResume?: boolean } = {}) => {
+./hooks/useSoundSystem.ts:  return { playSound, stopSound, stopAllSounds, playMusic, playWeather, loadSound, initContext, prepareStream, updateSoundPosition };

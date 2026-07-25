@@ -1,0 +1,210 @@
+{
+  "locationName": "Тест скриптов/Scripts test",
+  "locationDescription": "Тестирование системы скриптов./Script system test.",
+  "tasks": [
+    {
+      "id": "task_test",
+      "descriptionKey": "Заценить скрипты/Check scripts",
+      "status": "ACTIVE"
+    }
+  ],
+  "triggers": [
+    {
+      "id": "test1",
+      "type": "ON_ENTER_TILE",
+      "params": {
+        "x": 1,
+        "y": 4
+      },
+      "runOnce": false,
+      "actions": [
+        {
+          "type": "ADD_LOG",
+          "params": {
+            "messageKey": "Проверка на локализацию/Localization test",
+            "toast": true
+          }
+        },
+        {
+          "type": "PLAY_SOUND",
+          "params": {
+            "soundId": "ZOMBIE_DAMAGE",
+            "x": 1,
+            "y": 3
+          }
+        },
+        {
+          "type": "SPAWN_ENTITY",
+          "params": {
+            "entityType": "ENEMY",
+            "definitionId": "soldier_guard",
+            "x": 5,
+            "y": 6
+          }
+        },
+        {
+          "type": "COMPLETE_TASK",
+          "params": {
+            "taskId": "task_test"
+          }
+        },
+        {
+          "type": "GIVE_ITEM",
+          "params": {
+            "itemDefinitionId": "C4",
+            "count": 1,
+            "spawnAtX": 2,
+            "spawnAtY": 1
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "test2",
+      "type": "ON_ITEM_PICKUP",
+      "params": {
+        "itemId": "flashlight",
+        "x": 3,
+        "y": 4
+      },
+      "runOnce": false,
+      "actions": [
+        {
+          "type": "ADD_LOG",
+          "params": {
+            "messageKey": "Нойс, фонарик!/Nice, flashlifht!",
+            "toast": true
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "test3",
+      "type": "ON_MAP_LOAD",
+      "runOnce": true,
+      "actions": [
+        {
+          "type": "ADD_LOG",
+          "params": {
+            "messageKey": "Скрипт сработал!/Script was triggered!",
+            "toast": true
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "test4",
+      "type": "ON_ENEMY_DEFEAT",
+      "params": {
+        "x": 3,
+        "y": 6
+      },
+      "runOnce": true,
+      "actions": [
+        {
+          "type": "ADD_LOG",
+          "params": {
+            "messageKey": "Лалка захуячена/Lalka is dead",
+            "toast": true
+          }
+        }
+      ]
+    }
+  ],
+  "soundtrack": "AMBIENT",
+  "globalLight": 1.0,
+  "ceilingType": "OUTDOOR",
+  "weather": "none",
+  "playerStart": {
+    "dir": "N"
+  },
+  "grids": [
+    [
+      "########",
+      "#X.....#",
+      "#......#",
+      "#......#",
+      "#,.,...#",
+      "#......#",
+      "#..Z...#",
+      "########"
+    ]
+  ],
+  "entities": [
+    [
+      "........",
+      "........",
+      "........",
+      "........",
+      "...F....",
+      "........",
+      "........",
+      "........"
+    ]
+  ],
+  "gridLight": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........"
+  ],
+  "lightDefinitions": {
+    "W": { "r": 255, "g": 255, "b": 255, "intensity": 0.66, "range": 6, "mode": "FLICKERING" }
+  },
+  "doorDefinitions": {
+
+  },
+  "portals": [
+    {
+      "symbol": "X",
+      "destination": "./data/levels/level1/sector1.json",
+      "assetId": "EXIT_ANIM",
+      "portalId": "secs_to_sec1",
+      "targetPortalId": "sec1_to_secs",
+      "targetDirection": "S"
+    }
+  ],
+  "NPCs": [
+
+  ],
+  "enemies": [
+    {
+      "symbol": "Z",
+      "id": "zombie_tech"
+    }
+  ],
+  "items": [
+    {
+      "symbol": "F",
+      "id": "flashlight"
+    }
+  ],
+  "construction": [
+    {
+      "symbol": ".",
+      "type": "floor",
+      "assetId": "FLOOR",
+      "footstepSound": "CONCRETE"
+    },
+    {
+      "symbol": ",",
+      "type": "floor",
+      "assetId": "GRASS",
+      "footstepSound": "GRASS_STEP"
+    },
+    {
+      "symbol": "#",
+      "type": "wall",
+      "assetId": "WALL",
+      "bottomTextureId": "CEILING",
+      "canBeDestroyed": true
+    }
+  ]
+}

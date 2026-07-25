@@ -1,0 +1,459 @@
+{
+  "box_test": {
+    "name": "Коробка/Box",
+    "description": "Тестовая коробка./Test box.",
+    "assetId": "CEILING",
+    "scale": 1,
+    "blocking": true,
+    "isBox": true,
+    "boxSize": 0.7,
+    "moveSound": "DOOR_SLIDE_OPEN",
+    "fallSound": "BODY_HIT",
+    "stepSound": "FOOTSTEP_DIRT"
+  },
+  "empty": {
+    "name": "Пустота/Emptyness",
+    "description": "Буквально пустота./Literally emptyness.",
+    "assetId": "TRANSPARENT",
+    "blocking": true,
+    "isEmptyness": true
+  },
+  "barrel": {
+    "name": "Бочка с маслом/Oil barrel",
+    "description": "Ржавая бочка с остатками топлива./Rusty barrel with fuel residue.",
+    "assetId": "BARREL",
+    "scale": 0.7,
+    "blocking": true
+  },
+  "explosive_barrel": {
+    "name": "Бочка с бензином/Gasoline barrel",
+    "description": "Бочка с бензином./Barrel filled with gasoline.",
+    "assetId": "EXPLOSIVE_BARREL",
+    "scale": 0.7,
+    "blocking": true,
+    "destructable": true,
+    "hp": 1,
+    "explosion_damage": "4d6"
+  },
+  "debris": {
+    "name": "Строительный мусор/Debris",
+    "description": "Куча обломков бетона и арматуры./Pile of concrete and rebar.",
+    "assetId": "DEBRIS",
+    "scale": 0.5,
+    "blocking": true
+  },
+  "tree": {
+    "name": "Дерево/A tree",
+    "description": "Просто дерево./Just a tree.",
+    "assetId": "TREE_ANIM",
+    "scale": 3.5,
+    "blocking": true,
+    "destructable": true,
+    "explode": true,
+    "explodeSound": "SYS_BRICK_HIT",
+    "destroyedAssetId": "STOMP",
+    "walkableWhenDestroyed": false,
+    "deadScale": 3.5,
+    "destructionSoundId": "TREE_DESTROYED",
+    "yOffset": 0
+  },
+  "car": {
+    "name": "Автомобиль/Vehicle",
+    "description": "Чёрный седан./Black sedan.",
+    "assetId": "CAR",
+    "scale": 0.84,
+    "blocking": true,
+    "yOffset": 1
+  },
+  "moto": {
+    "name": "Мотоцикл/Motorcycle",
+    "description": "Жёлтый мотоцикл./Yellow motorcycle.",
+    "assetId": "MOTO",
+    "scale": 0.56,
+    "blocking": true,
+    "yOffset": 0.2
+  },
+  "pipes": {
+    "name": "Трубы/Pipes",
+    "description": "Протекающие трубы./Leaking pipes.",
+    "assetId": "PIPES",
+    "scale": 0.4,
+    "blocking": true
+  },
+  "workbench": {
+    "name": "Верстак/Workbench",
+    "description": "Стол полный инструментов./Table full of instruments.",
+    "assetId": "WORKBENCH",
+    "scale": 0.7,
+    "blocking": true,
+    "isWorkbench": true
+  },
+  "fire": {
+    "name": "Огонь/Flame",
+    "description": "Огонь./Flame.",
+    "assetId": "FIRE_ANIM",
+    "scale": 0.6,
+    "blocking": false,
+    "damaging": true,
+    "damageDice": "2d5",
+    "noBleeding": true,
+    "lifeTime": 6,
+    "foreground": true,
+    "soundId": "FIRE_BURNING",
+    "light": {
+      "r": 120,
+      "g": 30,
+      "b": 0,
+      "intensity": 0.77,
+      "range": 5,
+      "mode": "FIRE"
+    }
+  },
+  "save_point": {
+    "name": "Точка сохранения/Save Point",
+    "description": "Позволяет сохранить игру./Allows to save the game.",
+    "assetId": "SAVE_POINT_ANIM",
+    "blocking": false,
+    "isSavePoint": true,
+    "yOffset": -0.3
+  },
+  "chain_fence_x": {
+    "name": "Ограждение/Fence",
+    "description": "Столбики с цепью между ними./Posts with a chain between them.",
+    "assetId": "CHAIN_FENCE",
+    "scale": 0.4,
+    "blocking": true,
+    "renderMode": "mesh",
+    "meshAxis": "NS",
+    "meshOffset": 1
+  },
+  "chain_fence_y": {
+    "name": "Ограждение/Fence",
+    "description": "Столбики с цепью между ними./Posts with a chain between them.",
+    "assetId": "CHAIN_FENCE",
+    "scale": 0.4,
+    "blocking": true,
+    "renderMode": "mesh",
+    "meshAxis": "WE",
+    "meshOffset": 0.5
+  },
+  "bench": {
+    "name": "Скамейка/Bench",
+    "description": "Деревянная уличная скамейка./Wooden outdoor bench.",
+    "assetId": "BENCH",
+    "scale": 0.65,
+    "blocking": true
+  },
+  "chalkboard": {
+    "name": "Обучающая доска/Chalkboard",
+    "description": "Доска для мела на металлических ножках./Chalkboard on metal legs.",
+    "assetId": "CHALKBOARD",
+    "scale": 0.75,
+    "blocking": true
+  },
+  "cone": {
+    "name": "Дорожный конус/Traffic cone",
+    "description": "Сигнальный дорожный конус./Traffic warning cone.",
+    "assetId": "CONE",
+    "scale": 0.35,
+    "blocking": true,
+    "yOffset": 0.2
+  },
+  "dumpster": {
+    "name": "Мусорный бак/Dumpster",
+    "description": "Большой металлический мусорный бак./Large metal garbage dumpster.",
+    "assetId": "DUMPSTER",
+    "scale": 0.85,
+    "blocking": true,
+    "yOffset": 0.3
+  },
+  "grass_patch": {
+    "name": "Кустик травы/Grass patch",
+    "description": "Зелёная густая трава./Thick green grass patch.",
+    "assetId": "GRASS_PATCH",
+    "scale": 0.35,
+    "blocking": false
+  },
+  "flowers_patch": {
+    "name": "Цветочная клумба/Flowers patch",
+    "description": "Яркие дикие цветы./Bright wild flowers patch.",
+    "assetId": "FLOWERS_PATCH",
+    "scale": 0.35,
+    "blocking": false
+  },
+  "hydrant": {
+    "name": "Гидрант/Fire hydrant",
+    "description": "Красный уличный пожарный гидрант./Red street fire hydrant.",
+    "assetId": "HYDRANT",
+    "scale": 0.4,
+    "blocking": true
+  },
+  "planter": {
+    "name": "Кашпо для растений/Planter pot",
+    "description": "Бетонная клумба с декоративным растением./Concrete planter pot with an ornamental plant.",
+    "assetId": "PLANTER",
+    "scale": 0.6,
+    "blocking": true
+  },
+  "plastic_chair": {
+    "name": "Пластиковый стул/Plastic chair",
+    "description": "Обычный белый пластиковый стул./Ordinary white plastic chair.",
+    "assetId": "PLASTIC_CHAIR",
+    "scale": 0.55,
+    "blocking": true
+  },
+  "wooden_chair": {
+    "name": "Деревянный стул/Wooden chair",
+    "description": "Старый устойчивый деревянный стул./Old stable wooden chair.",
+    "assetId": "WOODEN_CHAIR",
+    "scale": 0.55,
+    "blocking": true
+  },
+  "table": {
+    "name": "Стол/Table",
+    "description": "Деревянный обеденный или рабочий стол./Wooden dining or working table.",
+    "assetId": "TABLE",
+    "scale": 0.7,
+    "blocking": true
+  },
+  "rules": {
+    "name": "Свод правил (X)/Rules board (X)",
+    "description": "Информационный стенд с правилами./Information board showing rules of conduct.",
+    "assetId": "RULES",
+    "scale": 0.65,
+    "blocking": true,
+    "renderMode": "mesh",
+    "meshAxis": "NS",
+    "meshOffset": 1,
+    "canBeInspected": false
+  },
+  "rules_y": {
+    "name": "Свод правил (Y)/Rules board (Y)",
+    "description": "Информационный стенд с правилами./Information board showing rules of conduct.",
+    "assetId": "RULES",
+    "scale": 0.65,
+    "blocking": true,
+    "renderMode": "mesh",
+    "meshAxis": "WE",
+    "meshOffset": 0.5,
+    "canBeInspected": false
+  },
+  "sand_pile": {
+    "name": "Насыпь песка/Sand pile",
+    "description": "Куча речного песка./Pile of river sand.",
+    "assetId": "SAND_PILE",
+    "scale": 0.7,
+    "blocking": true,
+    "yOffset": 0.3
+  },
+  "target": {
+    "name": "Мишень/Shooting target",
+    "description": "Мишень на деревянной стойке./Practice target on a wooden stand.",
+    "assetId": "TARGET",
+    "scale": 0.75,
+    "blocking": true
+  },
+  "traffic_light": {
+    "name": "Светофор/Traffic light",
+    "description": "Старый дорожный светофор./Old street traffic light.",
+    "assetId": "TRAFFIC_LIGHT",
+    "scale": 1.15,
+    "blocking": true
+  },
+  "trash_can": {
+    "name": "Мусорное ведро/Trash can",
+    "description": "Небольшая металлическая урна./Small metal trash can.",
+    "assetId": "TRASH_CAN",
+    "scale": 0.45,
+    "blocking": true
+  },
+  "water_cooler": {
+    "name": "Кулер для воды/Water cooler",
+    "description": "Офисный автомат с питьевой водой./Office drinking water dispenser.",
+    "assetId": "WATER_COOLER",
+    "scale": 0.7,
+    "blocking": true
+  },
+  "toilet": {
+    "name": "Унитаз/Toilet",
+    "description": "Обычный белый фаянсовый унитаз./An ordinary white ceramic toilet.",
+    "assetId": "TOILET",
+    "scale": 0.55,
+    "blocking": true
+  },
+  "toilet_shit": {
+    "name": "Забитый унитаз/Dirty toilet",
+    "description": "Унитаз, забитый мусором и грязью./A toilet clogged with waste and filth.",
+    "assetId": "TOILET_SHIT",
+    "scale": 0.55,
+    "blocking": true
+  },
+  "snack_rack": {
+    "name": "Стеллаж со снеками/Snack rack",
+    "description": "Полки, заставленные упаковками чипсов, сухариков и сладостей./Shelves stacked with potato chips, crackers, and sweets.",
+    "assetId": "SNACK_RACK",
+    "scale": 0.8,
+    "blocking": true
+  },
+  "world_map": {
+    "name": "Карта мира/World map",
+    "description": "Политическая карта мира, висящая на стене./A political map of the world hanging on the wall.",
+    "assetId": "WORLD_MAP",
+    "scale": 0.8,
+    "blocking": true
+  },
+  "shop_sign": {
+    "name": "Вывеска магазина/Shop sign",
+    "description": "Пластиковая вывеска продуктового магазина./A plastic grocery shop sign.",
+    "assetId": "SHOP_SIGN",
+    "scale": 0.7,
+    "blocking": false,
+    "yOffset": -3.7,
+    "canBeInspected": false,
+    "renderMode": "mesh",
+    "meshAxis": "WE",
+    "meshOffset": 0.05
+  },
+  "metall_table": {
+    "name": "Металлический стол/Metal table",
+    "description": "Прочный металлический стол для работы или кухни./A heavy-duty metal table for work or kitchen use.",
+    "assetId": "METALL_TABLE",
+    "scale": 0.7,
+    "blocking": true
+  },
+  "cash_register": {
+    "name": "Кассовый аппарат/Cash register",
+    "description": "Старая касса для расчёта покупателей./An old cash register for checking out customers.",
+    "assetId": "CASH_REGISTER",
+    "scale": 0.5,
+    "blocking": true
+  },
+  "training_center_sign": {
+    "name": "Вывеска спортзала/Gym sign",
+    "description": "Вывеска спортивного зала тренировочного центра./A gym sign of the training center.",
+    "assetId": "TRAINING_CENTER_SIGN",
+    "scale": 0.7,
+    "blocking": false,
+    "canBeInspected": false,
+    "renderMode": "mesh",
+    "meshAxis": "NS",
+    "meshOffset": 0.05,
+    "yOffset": -3.2
+  },
+  "monkey_bars": {
+    "name": "Турники/Monkey bars",
+    "description": "Металлические спортивные лестницы и брусья./Metal sports ladders and bars.",
+    "assetId": "MONKEY_BARS",
+    "scale": 1,
+    "blocking": true
+  },
+  "playground_slide": {
+    "name": "Детская горка/Playground slide",
+    "description": "Пластиковая детская горка на металлическом каркасе./A plastic children's slide on a metal frame.",
+    "assetId": "PLAYGROUND_SLIDE",
+    "scale": 1.3,
+    "blocking": true,
+    "yOffset": -0.3
+  },
+  "manhole": {
+    "name": "Канализационный люк/Sewer manhole",
+    "description": "Тяжелая чугунная крышка канализационного люка./A heavy cast-iron sewer manhole cover.",
+    "assetId": "MANHOLE",
+    "scale": 0.45,
+    "blocking": false,
+    "renderMode": "mesh",
+    "meshAxis": "Y"
+  },
+  "lamppost": {
+    "name": "Фонарный столб/Lamppost",
+    "description": "Высокий металлический столб уличного освещения./A tall metal street light post.",
+    "assetId": "LAMPPOST",
+    "scale": 1.4,
+    "blocking": true,
+    "yOffset": -0.2
+  },
+  "light_switch": {
+    "name": "Выключатель света/Light switch",
+    "description": "Обычный настенный выключатель./A standard wall light switch.",
+    "assetId": "LIGHT_SWITCH",
+    "scale": 0.35,
+    "blocking": false,
+    "renderMode": "mesh",
+    "meshAxis": "WE",
+    "meshOffset": 0.05,
+    "yOffset": -1.5,
+    "canBeInspected": false
+  },
+  "bus": {
+    "name": "Заброшенный автобус/Abandoned bus",
+    "description": "Старый, ржавый и сломанный городской автобус./An old, rusty, and broken city bus.",
+    "assetId": "BUS",
+    "scale": 1.4,
+    "blocking": true,
+    "yOffset": 0.4
+  },
+  "bar_stool": {
+    "name": "Барный стул/Bar stool",
+    "description": "Высокий барный стул на металлической ножке./A tall bar stool on a metal leg.",
+    "assetId": "BAR_STOOL",
+    "scale": 0.65,
+    "blocking": true
+  },
+  "pool_table": {
+    "name": "Бильярдный стол/Pool table",
+    "description": "Старый бильярдный стол с зеленым сукном./An old pool table with green felt.",
+    "assetId": "POOL_TABLE",
+    "scale": 0.95,
+    "blocking": true
+  },
+  "pool_light": {
+    "name": "Бильярдный светильник/Pool light",
+    "description": "Подвесной светильник над бильярдным столом./A hanging lamp above the pool table.",
+    "assetId": "POOL_LIGHT",
+    "scale": 0.8,
+    "blocking": false,
+    "yOffset": -2.2,
+    "canBeInspected": false
+  },
+  "clock": {
+    "name": "Настенные часы/Wall clock",
+    "description": "Аналоговые настенные часы, показывающие замершее время./Analog wall clock showing frozen time.",
+    "assetId": "CLOCK",
+    "scale": 0.45,
+    "blocking": false,
+    "yOffset": -2.0,
+    "renderMode": "mesh",
+    "meshAxis": "NS",
+    "meshOffset": 0.05
+  },
+  "wine": {
+    "name": "Бутылка вина/Wine bottle",
+    "description": "Бутылка старого вина с выцветшей этикеткой./A bottle of old wine with a faded label.",
+    "assetId": "WINE",
+    "scale": 0.35,
+    "blocking": false,
+    "yOffset": 0.1
+  },
+  "bar_sign": {
+    "name": "Вывеска бара/Bar sign",
+    "description": "Светящаяся неоновая вывеска над входом./A glowing neon sign above the entrance.",
+    "assetId": "BAR_SIGN",
+    "scale": 0.75,
+    "blocking": false,
+    "yOffset": -3.5,
+    "canBeInspected": false,
+    "renderMode": "mesh",
+    "meshAxis": "WE",
+    "meshOffset": 0.05
+  },
+  "chain_fence2": {
+    "name": "Сетчатый забор/Chain Link Fence",
+    "description": "Высокое сетчатое заграждение./A tall chain link fence.",
+    "assetId": "CHAIN_FENCE2",
+    "scale": 0.9,
+    "blocking": true,
+    "renderMode": "mesh",
+    "meshAxis": "NS",
+    "meshOffset": 1
+  }
+}

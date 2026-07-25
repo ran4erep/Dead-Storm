@@ -1,0 +1,132 @@
+{
+  "locationName": "Технический Коридор/Tech Corridor",
+  "locationDescription": "Узкие коридоры, заполненные паром и мигающими лампами аварийного освещения./Narrow corridors filled with steam and flashing emergency lights.",
+  "soundtrack": "AMBIENT",
+  "globalLight": 0.3,
+  "ceilingType": "INDOOR",
+  "ceilingTextureId": "CEILING",
+  "weather": "none",
+  "grids": [
+    [
+      "############",
+      "#..........#",
+      "###.####.#.#",
+      "#........#.#",
+      "#.####.###.#",
+      "#.#......#.#",
+      "#.#.#..###.#",
+      "#...#......#",
+      "############"
+    ],
+    [
+      "############",
+      "#..........#",
+      "###.####.#.#",
+      "#........#.#",
+      "#.########.#",
+      "#.########.#",
+      "#.#.######.#",
+      "#...#......#",
+      "############"
+    ]
+  ],
+  "entities": [
+    [
+      "............",
+      ".P..R.....X.",
+      "............",
+      ".....O......",
+      "............",
+      "......OOW...",
+      "............",
+      "..M.........",
+      "............"
+    ]
+  ],
+  "gridLight": [
+    "............",
+    "............",
+    "............",
+    "............",
+    "............",
+    "............",
+    "............",
+    "............",
+    "............"
+  ],
+  "lightDefinitions": {
+    "W": { "r": 255, "g": 255, "b": 255, "intensity": 0.66, "range": 6, "mode": "STATIC" },
+    "R": { "r": 255, "g": 100, "b": 100, "intensity": 0.77, "range": 7, "mode": "STATIC" },
+    "B": { "r": 100, "g": 100, "b": 255, "intensity": 0.55, "range": 5, "mode": "STATIC" }
+  },
+  "portals": [
+    {
+      "symbol": "P",
+      "destination": "./data/levels/level1/sector1.json",
+      "assetId": "EXIT_ANIM",
+      "portalId": "sec2_to_sec1",
+      "targetPortalId": "sec1_to_sec2",
+      "targetDirection": "W"
+    },
+    {
+      "symbol": "X",
+      "destination": "./data/levels/level1/sector3.json",
+      "assetId": "EXIT_ANIM",
+      "portalId": "sec2_to_sec3",
+      "targetPortalId": "sec3_to_sec2",
+      "targetDirection": "S"
+    }
+  ],
+  "legend": [
+    {
+      "char": "#",
+      "description": "Стена/Wall"
+    },
+    {
+      "char": ".",
+      "description": "Пол/Floor"
+    },
+    {
+      "char": "P",
+      "description": "Переход назад/Transition Back"
+    },
+    {
+      "char": "X",
+      "description": "Переход вперед/Transition Forward"
+    }
+  ],
+  "enemies": [
+    {
+      "symbol": "O",
+      "id": "soldier_guard"
+    }
+  ],
+  "items": [
+    {
+      "symbol": "M",
+      "id": "medkit"
+    },
+    {
+      "symbol": "W",
+      "id": "shotgun"
+    }
+  ],
+  "decorations": [
+    {
+      "symbol": "R",
+      "id": "pipes"
+    }
+  ],
+  "construction": [
+    {
+      "symbol": ".",
+      "assetId": "FLOOR",
+      "footstepSound": "CONCRETE"
+    },
+    {
+      "symbol": "#",
+      "assetId": "WALL",
+      "bottomTextureId": "CEILING"
+    }
+  ]
+}

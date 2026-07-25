@@ -1,0 +1,212 @@
+{
+  "zombie_tech": {
+    "name": "Заражённый техник/Infected technician",
+    "hp": 12,
+    "maxHp": 12,
+    "damageDice": "1d4",
+    "accuracy": 1,
+    "attackRange": 1,
+    "speed": 1,
+    "assets": {
+      "map": {
+        "assetId": "ANIM_ZOMBIE_IDLE",
+        "scale": 0.8
+      },
+      "portrait": {
+        "assetId": "ANIM_ZOMBIE_PORTRAIT",
+        "scale": 1
+      },
+      "attack": {
+        "assetId": "ANIM_ZOMBIE_PORTRAIT_ATTACK",
+        "scale": 1
+      },
+      "dead": {
+        "assetId": "ZOMBIE_DEAD",
+        "scale": 0.32
+      },
+      "gibMask": "ZOMBIE_GIBMASK"
+    },
+    "gibCounts": {
+      "head": 1,
+      "body": 1,
+      "arms": 2,
+      "legs": 2
+    },
+    "sounds": {
+      "attack": "ZOMBIE_ATTACK",
+      "damage": "ZOMBIE_DAMAGE",
+      "death": "ZOMBIE_DIES",
+      "roam": "ROAM_ZOMBIE",
+      "roamPeriodicity": "15000-60000"
+    },
+    "description": "Бывший сотрудник склада, теперь лишь оболочка./Former warehouse employee, now just a shell.",
+    "baseXP": 15,
+    "onHitEffect": {
+      "id": "bleeding",
+      "chance": 30
+    },
+    "movementType": "patroling",
+    "patrolRange": 4
+  },
+  "zombie_swat": {
+    "name": "Заражённый спецназ/Infected SWAT",
+    "hp": 25,
+    "maxHp": 25,
+    "damageDice": "1d7",
+    "accuracy": 1,
+    "attackRange": 1,
+    "speed": 1,
+    "armor": 7,
+    "assets": {
+      "map": {
+        "assetId": "ZOMBIE_SWAT",
+        "scale": 0.8
+      },
+      "portrait": {
+        "assetId": "ZOMBIE_SWAT_PORTRAIT",
+        "scale": 1
+      },
+      "attack": {
+        "assetId": "ZOMBIE_SWAT_PORTRAIT_ATTACK",
+        "scale": 1
+      },
+      "dead": {
+        "assetId": "ZOMBIE_SWAT_DEAD",
+        "scale": 0.32
+      },
+      "gibMask": "ZOMBIE_GIBMASK"
+    },
+    "gibCounts": {
+      "head": 1,
+      "body": 1,
+      "arms": 2,
+      "legs": 2
+    },
+    "sounds": {
+      "attack": "ZOMBIE_ATTACK",
+      "damage": "ZOMBIE_DAMAGE",
+      "death": "ZOMBIE_DIES",
+      "armorHit": "ARMOR_HIT",
+      "roam": "ROAM_ZOMBIE_SWAT",
+      "roamPeriodicity": "15000-60000"
+    },
+    "description": "Бывший боец спецназа. На нём видно бронежилет./Former SWAT soldier. He is wearing a bulletproof vest.",
+    "baseXP": 30,
+    "onHitEffect": {
+      "id": "bleeding",
+      "chance": 30
+    },
+    "movementType": "patroling",
+    "patrolRange": 6
+  },
+  "zombie_dog": {
+    "name": "Заражённая собака/Infected dog",
+    "hp": 10,
+    "maxHp": 10,
+    "damageDice": "2d4",
+    "accuracy": 3,
+    "attackRange": 1,
+    "speed": 2,
+    "assets": {
+      "map": {
+        "assetId": "ANIM_DOG_IDLE",
+        "scale": 0.5
+      },
+      "portrait": {
+        "assetId": "ANIM_DOG_PORTRAIT",
+        "scale": 1
+      },
+      "attack": {
+        "assetId": "ANIM_DOG_ATTACK",
+        "scale": 1
+      },
+      "dead": {
+        "assetId": "DOG_DEAD",
+        "scale": 0.33
+      },
+      "gibMask": "DOG_GIBMASK"
+    },
+    "gibCounts": {
+      "head": 1,
+      "body": 1,
+      "legs": 4
+    },
+    "sounds": {
+      "attack": "DOG_ATTACKS",
+      "damage": "DOG_DAMAGE",
+      "death": "DOG_DIES",
+      "roam": "ROAM_ZOMBIE_DOG",
+      "roamPeriodicity": "15000-60000"
+    },
+    "description": "Раньше эта собака грызла кости, теперь тоже, но человеческие./This dog used to chew bones, and it still does, but human bones.",
+    "baseXP": 20,
+    "onHitEffect": {
+      "id": "bleeding",
+      "chance": 50
+    },
+    "movementType": "patroling",
+    "patrolRange": 3
+  },
+  "soldier_guard": {
+    "name": "Охранник/Security Guard",
+    "hp": 18,
+    "maxHp": 18,
+    "damageDice": "1d6",
+    "accuracy": 5,
+    "attackRange": 5,
+    "speed": 1,
+    "muzzleFlash": true,
+    "casing": {
+      "assetId": "CASING_9MM",
+      "direction": "left",
+      "scale": 1,
+      "groundScaleMultiplier": 0.08
+    },
+    "assets": {
+      "map": {
+        "assetId": "SOLDIER",
+        "scale": 0.8
+      },
+      "portrait": {
+        "assetId": "SOLDIER_PORTRAIT",
+        "scale": 1
+      },
+      "attack": {
+        "assetId": "SOLDIER_ATTACK_PORTRAIT",
+        "scale": 1
+      },
+      "distanceAttack": {
+        "assetId": "SOLDIER_ATTACK_SPRITE",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "SOLDIER_DEAD",
+        "scale": 0.4
+      },
+      "gibMask": "SOLDIER_GIBMASK"
+    },
+    "gibCounts": {
+      "head": 1,
+      "body": 1,
+      "legs": 2
+    },
+    "sounds": {
+      "attack": "PISTOL_SHOT",
+      "damage": "SOLDIER_DAMAGE",
+      "death": "SOLDIER_DIES",
+      "roam": "ROAM_SOLDIER",
+      "casing": "CASING_9MM_SOUND"
+    },
+    "description": "Вооружённый охранник комплекса./Armed complex security guard.",
+    "baseXP": 30,
+    "loot": [
+      {
+        "id": "ammo_9mm",
+        "chanceToDrop": 40,
+        "min": 10,
+        "max": 10
+      }
+    ],
+    "movementType": "roaming"
+  }
+}

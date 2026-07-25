@@ -1,0 +1,142 @@
+В этом файле описана система скриптов и триггеров движка Dead Storm.
+Система позволяет оживить уровни: спавнить врагов, выдавать предметы, менять блоки картов (открывать двери), запускать диалоги по определенным условиям.
+
+ТРИГГЕРЫ (Условия срабатывания):
+---------------------------------
+1. ON_ENTER_TILE
+   Срабатывает, когда игрок наступает на определенную клетку (x, y).
+   Параметры: { x: number, y: number }
+
+2. ON_INTERACT
+   Срабатывает при подходе к указанным координатам. В меню действий появляется кнопка, при нажатии на которую активируется скрипт.
+   Параметры: { x: number, y: number, side?: "ANY" | "N" | "E" | "S" | "W", buttonLabel?: string }
+   - side: сторона, с которой игрок должен смотреть на тайл (по умолчанию "ANY" - с любой стороны).
+   - buttonLabel: текст на кнопке действия (по умолчанию "Использовать"). Для мультиязычности используйте слэш, например "Осмотреть/Inspect".
+
+3. ON_ENEMY_DEFEAT
+   Срабатывает, когда враг повержен.
+   Параметры: { enemyId?: string, x?: number, y?: number } 
+   (Можно отследить смерть конкретного врага по ID или по его начальным (спавн) координатам x, y)
+
+4. ON_MAP_LOAD
+   Срабатывает один раз при старте уровня.
+   Параметры: нет
+
+5. ON_ITEM_PICKUP
+   Срабатывает при поднятии определенного скриптового предмета (или предмета на координатах).
+   Параметры: { itemId?: string, x?: number, y?: number }
+
+6. ON_FLAG_CHANGE
+   Срабатывает при изменении указанного флага (например, с помощью действия SET_FLAG).
+   Параметры: { flag: string, value?: boolean | string }
+   - flag: название отслеживаемого флага.
+   - value: ожидаемое значение флага (необязательно; если не указано, триггер сработает на любое изменение этого флага).
+
+
+ДЕЙСТВИЯ (Что произойдет):
+---------------------------------
+1. SPAWN_ENTITY
+   Спавнит любой ресурс (предмет, врага, NPC, декорацию, звук, свет, эмиттер частиц) на карте.
+   Параметры: { entityType: "ENEMY" | "NPC" | "ITEM" | "DECORATION" | "AMBIENT_SOUND" | "LIGHT" | "PARTICLE_EMITTER", definitionId: string, x: number, y: number, zOffset?: number, emitterId?: string, ... (по необходимости overrides) }
+
+2. REMOVE_ENTITY
+   Удаляет ресурс с карты (с указанного тайла).
+   Параметры: { entityType: "ENEMY" | "NPC" | "ITEM" | "DECORATION" | "AMBIENT_SOUND" | "LIGHT" | "PARTICLE_EMITTER", x: number, y: number, definitionId?: string }
+
+3. (Удалено) SPAWN_ENEMY больше не поддерживается, используйте SPAWN_ENTITY.
+
+4. GIVE_ITEM
+   Выдает предмет прямо в инвентарь (или спавнит под ноги на указанных x,y).
+   Параметры: { itemDefinitionId: string, count?: number, spawnAtX?: number, spawnAtY?: number }
+
+3. SHOW_DIALOGUE
+   Начинает диалог с указанным NPC (или бестелесным голосом).
+   Параметры: { dialogueId: string, voice?: VoiceConfig, isRadio?: boolean }
+
+4. PLAY_SOUND
+   Проигрывает звуковой эффект.
+   Параметры: { soundId: string, volume?: number, x?: number, y?: number } // x, y для позиционного звука
+
+5. CHANGE_TILE
+   Изменяет тайл на карте (превращает стену в пол, открывает удаленную дверь, меняет текстуру).
+   Параметры: { x: number, y: number, newType: 'FLOOR' | 'WALL' | 'DOOR', newAssetId?: string, isLocked?: boolean }
+
+6. ADD_LOG
+   Добавляет текстовое сообщение в лог интерфейса.
+   Параметры: { messageKey: string, toast: boolean } // Ключ для локализации или сам текст. 
+   Поддерживает формат "RU_TEXT/EN_TEXT" (например: "Внимание/Attention").
+
+7. SET_FLAG / CHECK_FLAG (Флаги)
+   Триггеры могут зависеть от флагов, чтобы срабатывать только один раз.
+   Параметры: { flag: string, value: boolean | string }
+
+8. COMPLETE_TASK
+   Помечает задачу выполненной и зачеркивает её в окне сектора.
+   Параметры: { taskId: string }
+
+9. REVEAL_TASK
+   Отображает скрытую задачу в окне сектора.
+   Параметры: { taskId: string }
+
+10. CINEMATIC_CAMERA
+   Позволяет взять контроль над камерой для создания пролёта от начальной до конечной точки. Вы можете задать начальные и конечные координаты, направление, наклон и время анимации. После завершения анимации камера автоматически возвращается игроку.
+   Параметры: { startX: number, startY: number, startDir: "N"|"S"|"E"|"W", targetX: number, targetY: number, targetDir: "N"|"S"|"E"|"W", duration: number, pitch?: number }
+
+11. CINEMATIC_STATIC_CAMERA
+   Позволяет войти в кинематографический режим со шторками аналогично CINEMATIC_CAMERA, но без движения. Из параметров можно управлять положением (x, y), поворотом камеры (dir: "N"|"S"|"E"|"W"|"C"), наклоном камеры (pitch) и зумом (zoom).
+   Параметры / Parameters:
+   - x?: number (Координата X. Пусто: у игрока / Empty: at player)
+   - y?: number (Координата Y. Пусто: у игрока / Empty: at player)
+   - dir?: "N"|"S"|"E"|"W"|"C" (Направление поворота / Direction, где C - текущее / current)
+   - pitch?: number (Наклон камеры / Camera pitch)
+   - zoom?: number (Коэффициент зума / Zoom factor)
+   - duration?: number (Длительность показа в мс, по умолчанию 3000 / Show duration in ms, default 3000)
+
+
+ДЕСЯТЬ. (Новое) SPAWN_EXPLOSION / SPAWN_ENTITY (EXPLOSION)
+    Создает взрыв указанного типа в заданной точке карты с нанесением урона, звуком и визуальными эффектами.
+    Параметры / Parameters:
+    - x: number (Координата X взрыва)
+    - y: number (Координата Y взрыва)
+    - damageDice?: string (Урон кубиками, например: "2d6", по умолчанию "2d6")
+    - range?: number (Радиус поражения взрыва, по умолчанию 2)
+    - assetId?: string (Ассет визуальной анимации взрыва, по умолчанию "ANIM_EXPLOSION")
+    - soundId?: string (Ассет проигрываемого звука, по умолчанию "EXPLOSION")
+    - itemType?: "NORMAL" | "FLASHBANG" (Тип эффекта взрыва, по умолчанию "NORMAL")
+    - itemDuration?: number (Длительность ослепления для "FLASHBANG" в секундах, по умолчанию 4)
+
+12. RESET_SPAWN
+    Мгновенно телепортирует объект (враг, NPC, декорация), находившийся изначально в этой точке (x, y), обратно в его точку спавна. Перемещение происходит без задержек и анимации передвижения.
+    Параметры / Parameters:
+    - x: number (Координата X начальной точки спавна объекта)
+    - y: number (Координата Y начальной точки спавна объекта)
+    - targetX?: number (Необязательно: кастомная точка назначения X)
+    - targetY?: number (Необязательно: кастомная точка назначения Y)
+
+
+СТРУКТУРА JSON ДЛЯ УРОВНЯ (data/levels/level1/X.json):
+---------------------------------
+Триггеры поддерживают общий параметр "requiredItemType": string (например, "RADIO"), при котором триггер срабатывает только если у игрока есть этот предмет.
+
+"triggers": [
+  {
+    "id": "trigger_first_ambush",
+    "type": "ON_ENTER_TILE",
+    "params": { "x": 10, "y": 5 },
+    "runOnce": true,
+    "actions": [
+      {
+        "type": "SPAWN_ENTITY",
+        "params": { "entityType": "ENEMY", "entityId": "ambush_mutant_1", "definitionId": "mutant", "x": 10, "y": 6 }
+      },
+      {
+        "type": "PLAY_SOUND",
+        "params": { "soundId": "alarm_sound" }
+      },
+      {
+        "type": "ADD_LOG",
+        "params": { "messageKey": "Засада! Двери заблокированы!" }
+      }
+    ]
+  }
+]

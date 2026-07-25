@@ -1,0 +1,826 @@
+{
+  "MENU_THEME": {
+    "assetId": "MENU_THEME",
+    "volume": 1,
+    "looped": true,
+    "allowOverlap": false,
+    "streaming": true,
+    "randomizePitch": false
+  },
+  "AMBIENT": {
+    "assetId": "AMBIENT",
+    "volume": 0.9,
+    "looped": true,
+    "allowOverlap": false,
+    "streaming": true,
+    "randomizePitch": false
+  },
+  "BATTLE": {
+    "assetId": "BATTLE",
+    "volume": 1,
+    "looped": true,
+    "allowOverlap": false,
+    "streaming": true,
+    "randomizePitch": false
+  },
+  "GAME_OVER": {
+    "assetId": "GAME_OVER",
+    "volume": 1,
+    "looped": true,
+    "allowOverlap": false,
+    "streaming": true,
+    "randomizePitch": false
+  },
+  "METAL_LULLABY": {
+    "assetId": "METAL_LULLABY",
+    "volume": 1,
+    "looped": true,
+    "allowOverlap": false,
+    "streaming": true,
+    "randomizePitch": false
+  },
+  "GLASS": {
+    "assetId": "GLASS",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "ROAM_SOLDIER": {
+    "assetId": "ROAM_SOLDIER",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "ROAM_ZOMBIE": {
+    "assetId": "ROAM_ZOMBIE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "ROAM_ZOMBIE_DOG": {
+    "assetId": "ROAM_ZOMBIE_DOG",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "ROAM_ZOMBIE_SWAT": {
+    "assetId": "ROAM_ZOMBIE_SWAT",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "CONSOLE_START": {
+    "assetId": "CONSOLE_START",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "CONSOLE_FOOD": {
+    "assetId": "CONSOLE_FOOD",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "CONSOLE_BUTTON": {
+    "assetId": "CONSOLE_BUTTON",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "CASING_9MM_SOUND": {
+    "assetId": "CASING_9MM_SOUND",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "CASING_762_SOUND": {
+    "assetId": "CASING_762_SOUND",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "CASING_12G_SOUND": {
+    "assetId": "CASING_12G_SOUND",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "PISTOL_SHOT": {
+    "assetId": "PISTOL_SHOT",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true,
+    "triggerRange": 3
+  },
+  "AK47_SHOT": {
+    "assetId": "AK47_SHOT",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true,
+    "triggerRange": 5
+  },
+  "REVOLVER_SHOT": {
+    "assetId": "REVOLVER_SHOT",
+    "volume": 2,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true,
+    "triggerRange": 8
+  },
+  "SHOTGUN_SHOT": {
+    "assetId": "SHOTGUN_SHOT",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true,
+    "triggerRange": 5
+  },
+  "PUNCHING": {
+    "assetId": "PUNCHING",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "KNIFE_HIT": {
+    "assetId": "KNIFE_HIT",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "ZOMBIE_ATTACK": {
+    "assetId": "ZOMBIE_ATTACK",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "ZOMBIE_DAMAGE": {
+    "assetId": "ZOMBIE_DAMAGE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "ZOMBIE_DIES": {
+    "assetId": "ZOMBIE_DIES",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "SOLDIER_DAMAGE": {
+    "assetId": "SOLDIER_DAMAGE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "SOLDIER_DIES": {
+    "assetId": "SOLDIER_DIES",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "DAMAGE": {
+    "assetId": "DAMAGE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "BUMP": {
+    "assetId": "BUMP",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "CLICK": {
+    "assetId": "CLICK",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "DOOR_HINGED_OPEN": {
+    "assetId": "DOOR_HINGED_OPEN",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "DOOR_HINGED_CLOSE": {
+    "assetId": "DOOR_HINGED_CLOSE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "DOOR_SLIDE_OPEN": {
+    "assetId": "DOOR_SLIDE_OPEN",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "DOOR_SLIDE_CLOSE": {
+    "assetId": "DOOR_SLIDE_CLOSE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "EXPLOSION": {
+    "assetId": "EXPLOSION",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true,
+    "triggerRange": 10
+  },
+  "HEARTBEAT": {
+    "assetId": "HEARTBEAT",
+    "volume": 1,
+    "looped": true,
+    "allowOverlap": false,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "INVENTORY_OPEN": {
+    "assetId": "INVENTORY_OPEN",
+    "volume": 0.8,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "INVENTORY_CLOSE": {
+    "assetId": "INVENTORY_CLOSE",
+    "volume": 0.8,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "PICKUP": {
+    "assetId": "PICKUP",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true,
+    "reverberationIgnored": true
+  },
+  "PISTOL_RELOAD": {
+    "assetId": "PISTOL_RELOAD",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": false,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "AK47_RELOAD": {
+    "assetId": "AK47_RELOAD",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": false,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "REVOLVER_RELOAD": {
+    "assetId": "REVOLVER_RELOAD",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": false,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "SHOTGUN_RELOAD": {
+    "assetId": "SHOTGUN_RELOAD",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": false,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "THROW": {
+    "assetId": "THROW",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "UNLOCK": {
+    "assetId": "UNLOCK",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "DAMAGE_FEMALE": {
+    "assetId": "DAMAGE_FEMALE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "CONCRETE": {
+    "assetId": "CONCRETE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "GRASS_STEP": {
+    "assetId": "GRASS_STEP",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "LEVELUP": {
+    "assetId": "LEVELUP",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "RAIN": {
+    "assetId": "RAIN",
+    "volume": 0.2,
+    "looped": true,
+    "allowOverlap": true,
+    "streaming": true,
+    "randomizePitch": false
+  },
+  "THUNDER": {
+    "assetId": "THUNDER",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "BANDAGE_USE": {
+    "assetId": "BANDAGE_USE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "EQUIPING": {
+    "assetId": "EQUIPING",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "FLIES": {
+    "assetId": "FLIES",
+    "volume": 0.5,
+    "looped": true,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "GRENADE_USE": {
+    "assetId": "GRENADE_USE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true,
+    "triggerRange": 10
+  },
+  "LOCKED": {
+    "assetId": "LOCKED",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "MAP_USE": {
+    "assetId": "MAP_USE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "MEDKIT_USE": {
+    "assetId": "MEDKIT_USE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "BEEP": {
+    "assetId": "BEEP",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "KEYPAD_BUTTON": {
+    "assetId": "KEYPAD_BUTTON",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "KEYPAD_SUCCESS": {
+    "assetId": "KEYPAD_SUCCESS",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "KEYPAD_FAILED": {
+    "assetId": "KEYPAD_FAILED",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "TRANSACTION": {
+    "assetId": "TRANSACTION",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "C4_PLANTED": {
+    "assetId": "C4_PLANTED",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "DOG_ATTACKS": {
+    "assetId": "DOG_ATTACKS",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "DOG_DAMAGE": {
+    "assetId": "DOG_DAMAGE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "DOG_DIES": {
+    "assetId": "DOG_DIES",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "DEATH": {
+    "assetId": "DEATH",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "DEATH_FEMALE": {
+    "assetId": "DEATH_FEMALE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "BODY_HIT": {
+    "assetId": "BODY_HIT",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "FIRE_BURNING": {
+    "assetId": "FIRE_BURNING",
+    "volume": 0.15,
+    "looped": true,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "FLASHBANG_EXPLOSION": {
+    "assetId": "FLASHBANG_EXPLOSION",
+    "volume": 1.8,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "SPLATTER": {
+    "assetId": "SPLATTER",
+    "volume": 0.5,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "BOTTLE_SHAKE": {
+    "assetId": "BOTTLE_SHAKE",
+    "volume": 0.8,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "CRAFTED": {
+    "assetId": "CRAFTED",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "GUN_CLICK": {
+    "assetId": "GUN_CLICK",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "BOUNCE": {
+    "assetId": "BOUNCE",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "BRICK_HIT": {
+    "assetId": "BRICK_HIT",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "ARMOR_BREAK": {
+    "assetId": "ARMOR_BREAK",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "WEAPON_BREAK": {
+    "assetId": "WEAPON_BREAK",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "TREE_DESTROYED": {
+    "assetId": "TREE_DESTROYED",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "ARMOR_HIT": {
+    "assetId": "ARMOR_HIT",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "BATTERY_USE": {
+    "assetId": "BATTERY_USE",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "SYS_ARMOR_BREAK": {
+    "alias": "ARMOR_BREAK"
+  },
+  "SYS_ARMOR_HIT": {
+    "alias": "ARMOR_HIT"
+  },
+  "SYS_WEAPON_BREAK": {
+    "alias": "WEAPON_BREAK"
+  },
+  "SYS_CRAFTED": {
+    "alias": "CRAFTED"
+  },
+  "SYS_GUN_CLICK": {
+    "alias": "GUN_CLICK"
+  },
+  "SYS_GLASS_SHATTER": {
+    "alias": "GLASS"
+  },
+  "SYS_BRICK_HIT": {
+    "alias": "BRICK_HIT"
+  },
+  "SYS_ERROR_BUMP": {
+    "alias": "BUMP"
+  },
+  "SYS_PICKUP": {
+    "alias": "PICKUP"
+  },
+  "SYS_SPLATTER": {
+    "alias": "SPLATTER"
+  },
+  "SYS_BEEP": {
+    "alias": "BEEP"
+  },
+  "SYS_THROW": {
+    "alias": "THROW"
+  },
+  "SYS_HEARTBEAT": {
+    "alias": "HEARTBEAT"
+  },
+  "SYS_INVENTORY_OPEN": {
+    "alias": "INVENTORY_OPEN"
+  },
+  "SYS_INVENTORY_CLOSE": {
+    "alias": "INVENTORY_CLOSE"
+  },
+  "SYS_CLICK": {
+    "alias": "CLICK"
+  },
+  "SYS_FLIES": {
+    "alias": "FLIES"
+  },
+  "SYS_EQUIP": {
+    "alias": "EQUIPING"
+  },
+  "SYS_RELOAD": {
+    "alias": "PISTOL_RELOAD"
+  },
+  "SYS_LEVELUP": {
+    "alias": "LEVELUP"
+  },
+  "SYS_BODY_HIT": {
+    "alias": "BODY_HIT"
+  },
+  "SYS_TRANSACTION": {
+    "alias": "TRANSACTION"
+  },
+  "SYS_DOOR_OPEN": {
+    "alias": "DOOR_SLIDE_OPEN"
+  },
+  "SYS_UI_TICK": {
+    "alias": "CLICK"
+  },
+  "SYS_UI_BUY": {
+    "alias": "TRANSACTION"
+  },
+  "SYS_LOAD": {
+    "alias": "LOAD"
+  },
+  "SYS_SAVE": {
+    "alias": "SAVE"
+  },
+  "LOAD": {
+    "assetId": "LOAD",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "SAVE": {
+    "assetId": "SAVE",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "RADIO_ON": {
+    "assetId": "RADIO_ON",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "RADIO_OFF": {
+    "assetId": "RADIO_OFF",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "MERCHANT_GASP": {
+    "assetId": "MERCHANT_GASP",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "CASE_OPEN": {
+    "assetId": "CASE_OPEN",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "FOOTSTEP_ASPHALT": {
+    "assetId": "FOOTSTEP_ASPHALT",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "FOOTSTEP_DIRT": {
+    "assetId": "FOOTSTEP_DIRT",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "LANA_GASP": {
+    "assetId": "LANA_GASP",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  }
+}
