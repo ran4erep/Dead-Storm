@@ -14,10 +14,10 @@ import { collectPolyObjectsFromGrid, generatePolyObjectOccluders } from './PolyO
 import { isWebGLActive } from './WebGLState';
 
 // Diagnostics: per-frame CPU wall work counters
-let wallStats = { strips: 0, rows: 0, passthrough: 0 };
+let wallStats = { strips: 0, rows: 0, passthrough: 0, rayMs: 0, ptMs: 0 };
 let fastGlWalls = false;
 export const setFastGlWalls = (v: boolean) => { fastGlWalls = v; };
-export const resetWallStats = () => { wallStats.strips = 0; wallStats.rows = 0; wallStats.passthrough = 0; };
+export const resetWallStats = () => { wallStats.strips = 0; wallStats.rows = 0; wallStats.passthrough = 0; wallStats.rayMs = 0; wallStats.ptMs = 0; };
 export const getWallStats = () => wallStats;
 
 const SIN_LUT_SIZE = 2048;
@@ -240,6 +240,7 @@ export const renderWalls = ({
         );
     }
 
+    const _l0 = performance.now();
     for (let x = 0; x < width; x += resolutionDivisor) {
         // 1. Raycast
         const ray = performRaycast(
@@ -1158,9 +1159,17 @@ export const renderWalls = ({
         }
         }
     }
+    wallStats.rayMs += performance.now() - _l0;
 
     // Render passthrough walls (windows) and doors after occluders are populated
     const invWidth = 1.0 / width;
+    const MAX_PT_PER_COL = 12;
+    for (let x = 0; x < width; x += resolutionDivisor) {
+        if (passThroughWalls[x].length > MAX_PT_PER_COL) {
+            passThroughWalls[x].length = MAX_PT_PER_COL;
+        }
+    }
+    const _l1 = performance.now();
     for (let x = 0; x < width; x += resolutionDivisor) {
         const cameraX = 2 * x * invWidth - 1;
         const rayDirX = dirX + planeX * cameraX;
@@ -1185,6 +1194,7 @@ export const renderWalls = ({
             resolutionDivisor, grids, grid
         );
     }
+    wallStats.ptMs += performance.now() - _l1;
 
     for (let x = 0; x < width; x++) {
         wallStats.passthrough += passThroughWalls[x].length;
