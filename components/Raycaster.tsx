@@ -335,7 +335,8 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     customWallBuffers, customFloorBuffers, onParticleHit, 
     onShardLanded, onParticleBounce, playerReflectionSprite, flashlightActive, flashlightBatteryRatio, 
     resolutionDivisor, isPaused, deathAnimProgress, deathAnimProgressRef, fallAnimProgressRef, scriptedDeathProgressRef, cinematicCameraRef, lookAroundAngleRef, lookAroundPitchRef, renderDistance, onFrameRendered, raycasterCamera, levelParticles, particlesDb, aimingSys, gameState,
-    constructionPalette, doorDefinitions, portalsPalette, forceSoftRenderer, viewportSmoothing, textureFiltering
+    constructionPalette, doorDefinitions, portalsPalette, forceSoftRenderer, viewportSmoothing, textureFiltering,
+    settings
   });
   propsRef.current = {
     strings, grid, grids, lightMap, floorLightMaps, dynamicLights, outdoorMap, player, width, height, fov, 
@@ -348,7 +349,8 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     customWallBuffers, customFloorBuffers, onParticleHit, 
     onShardLanded, onParticleBounce, playerReflectionSprite, flashlightActive, flashlightBatteryRatio, 
     resolutionDivisor, isPaused, deathAnimProgress, deathAnimProgressRef, fallAnimProgressRef, scriptedDeathProgressRef, cinematicCameraRef, lookAroundAngleRef, lookAroundPitchRef, renderDistance, raycasterCamera, onFrameRendered, levelParticles, particlesDb, aimingSys, gameState,
-    constructionPalette, doorDefinitions, portalsPalette, forceSoftRenderer, viewportSmoothing, textureFiltering
+    constructionPalette, doorDefinitions, portalsPalette, forceSoftRenderer, viewportSmoothing, textureFiltering,
+    settings
   };
   
   useImperativeHandle(ref, () => ({
@@ -420,6 +422,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
   const lastFpsUpdateRef = useRef(0);
 
   const stageAccRef = useRef({ bg: 0, walls: 0, gl: 0, ent: 0, part: 0, oth: 0, frames: 0 });
+  const adaptiveDivisorRef = useRef(1);
   const perfHistoryRef = useRef<{ t: number; fps: number; bg: number; walls: number; gl: number; ent: number; part: number; oth: number }[]>([]);
   const perfStatsRef = useRef({ min: Infinity, max: 0, sum: 0, count: 0 });
 
@@ -1699,6 +1702,9 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     // to keep the number of rays cast manageable.
     const maxRays = 400;
     let effectiveResolutionDivisor = p.resolutionDivisor || 1;
+    if (p.settings?.debug?.autoResolution !== false && adaptiveDivisorRef.current > 1) {
+        effectiveResolutionDivisor *= adaptiveDivisorRef.current;
+    }
     if (width / effectiveResolutionDivisor > maxRays) {
         effectiveResolutionDivisor = Math.ceil(width / maxRays);
     }
@@ -2447,7 +2453,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
       lines.push('level: ' + (p.levelPath || 'unknown'));
       lines.push('grid: ' + mapW + 'x' + mapH + ' floors=' + gridsLen);
       lines.push('renderer: ' + (isWebGLActive ? 'WebGL' : 'Soft'));
-      lines.push('viewport: ' + width + 'x' + height + ' divisor=' + (p.resolutionDivisor || 1));
+      lines.push('viewport: ' + width + 'x' + height + ' divisor=' + (p.resolutionDivisor || 1) + ' eff_div=' + ((p.resolutionDivisor || 1) * (p.settings?.debug?.autoResolution !== false ? adaptiveDivisorRef.current : 1)));
       lines.push('player: (' + p.player.pos.x.toFixed(2) + ', ' + p.player.pos.y.toFixed(2) + ')');
       lines.push('current avg ms: bg=' + (_a.bg / _n).toFixed(2) + ' walls=' + (_a.walls / _n).toFixed(2) + ' gl=' + (_a.gl / _n).toFixed(2) + ' ent=' + (_a.ent / _n).toFixed(2) + ' part=' + (_a.part / _n).toFixed(2) + ' oth=' + (_a.oth / _n).toFixed(2));
       lines.push('fps range: ' + (isFinite(stats.min) ? stats.min.toFixed(0) : '-') + '-' + stats.max.toFixed(0) + ' avg=' + (stats.count > 0 ? (stats.sum / stats.count).toFixed(1) : '-'));
@@ -2500,7 +2506,16 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
                   `gl: ${(_a.gl / _n).toFixed(2)}ms\n` +
                   `ent: ${(_a.ent / _n).toFixed(2)}ms\n` +
                   `part: ${(_a.part / _n).toFixed(2)}ms\n` +
-                  `oth: ${(_a.oth / _n).toFixed(2)}ms`;
+                  `oth: ${(_a.oth / _n).toFixed(2)}ms\n` +
+                  `adiv: x${adaptiveDivisorRef.current}`;
+              const autoRes = propsRef.current.settings?.debug?.autoResolution !== false;
+              if (autoRes) {
+                  const wAvg = _a.walls / _n;
+                  let ad = adaptiveDivisorRef.current;
+                  if (wAvg > 7 && ad < 4) ad++;
+                  else if (wAvg < 2.5 && ad > 1) ad--;
+                  adaptiveDivisorRef.current = ad;
+              }
               _a.bg = 0; _a.walls = 0; _a.gl = 0; _a.ent = 0; _a.part = 0; _a.oth = 0; _a.frames = 0;
           }
           frameCountRef.current = 0;

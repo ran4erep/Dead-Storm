@@ -1615,7 +1615,11 @@ export const performRaycast = (
       }
       if (dist > 0.05) {
           const lineHeight = viewHeight / dist;
-          
+
+          // Far cells project to sub-pixel bands (< 1.5px) and cannot occlude
+          // anything meaningful on screen; skip interval carving for them to
+          // avoid O(floors) work per cell on long rays.
+          if (lineHeight >= 1.5) {
           // 1. Bottom-most floor of this cell (occludes below it only if elevated above camera eye level)
           const bottomTile = grid[mapY]?.[mapX];
           const minFloorZ = getFloorLevel(bottomTile);
@@ -1705,6 +1709,7 @@ export const performRaycast = (
 
           if (visibleCount === 0) {
               break;
+          }
           }
       }
     }
