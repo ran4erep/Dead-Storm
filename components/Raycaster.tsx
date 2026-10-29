@@ -419,6 +419,8 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
   const frameCountRef = useRef(0);
   const lastFpsUpdateRef = useRef(0);
 
+  const stageAccRef = useRef({ bg: 0, walls: 0, gl: 0, ent: 0, part: 0, oth: 0, frames: 0 });
+
   const [lightningIntensity, setLightningIntensity] = useState(0);
 
   const animState = useRef({
@@ -919,6 +921,8 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
   const lastWeaponAkimboValRef = useRef<string>('');
   
   const renderFrame = useCallback((currX: number, currY: number, currAngle: number, animProgress: number) => {
+    const _frameStart = performance.now();
+    const _m = { bg: 0, walls: 0, gl: 0, ent: 0, part: 0 };
     waterVisibleRef.current = false;
     const p = propsRef.current;
     const cam = p.cinematicCameraRef?.current || p.raycasterCamera;
@@ -1752,6 +1756,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     }
 
     // 1. RENDER BACKGROUND & FLOOR (Writes to currentScreenData - only needed for CPU software renderer)
+    let _st = performance.now();
     if (!isWebGLActive) {
         renderBackground({
             width: renderWidth, height: renderHeight, fov: currentFov, posX, posY, dirX, dirY, planeX, planeY, horizon, cameraZ,
@@ -1770,12 +1775,18 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
             onWaterVisible: () => { waterVisibleRef.current = true; }
         });
     }
+    {
+      const _d = performance.now() - _st;
+      stageAccRef.current.bg += _d;
+      _m.bg += _d;
+    }
 
     // 2. COLLECT POLYOBJECTS (BEFORE WALLS & MIRRORS)
     const polyObjectsList = collectPolyObjectsFromGrid(grid, posX, posY, shadingDist, currentLightMap, p.highlightedEntityId, p.onParticleBounce);
 
     // 3. RENDER WALLS & MIRRORS (Writes to currentScreenData)
     // Pass reusable buffers
+    _st = performance.now();
     renderWalls({
         width: renderWidth, height: renderHeight, grid, grids, posX, posY, dirX, dirY, planeX, planeY, horizon,
         wallBuffer, doorBuffer, lightMap: currentLightMap, floorLightMaps: currentFloorLightMaps, outdoorMap: p.outdoorMap, lightningMap, lightningIntensity, muzzleFlashIntensity: currentMuzzleFlashIntensity, debugTextures,
@@ -1802,6 +1813,11 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
         reusableHighlightSet: highlightSetRef.current,
         polyObjectsList
     });
+    {
+      const _d = performance.now() - _st;
+      stageAccRef.current.walls += _d;
+      _m.walls += _d;
+    }
 
     // 4. GENERATE REFLECTED POLYOBJECTS (FOR MIRROR INTERIORS)
     const reflectedPolyObjects = generateReflectedPolyObjects(
@@ -1816,6 +1832,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
         ? [...polyObjectsList, ...reflectedPolyObjects]
         : polyObjectsList;
 
+    _st = performance.now();
     if (isWebGLActive && webglRendererRef.current) {
         webglRendererRef.current.render(
             renderWidth,
@@ -1860,6 +1877,11 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
             debugTextures
         );
         ctx.drawImage(webglCanvasRef.current!, 0, 0);
+        {
+          const _d = performance.now() - _st;
+          stageAccRef.current.gl += _d;
+          _m.gl += _d;
+        }
 
         // Render any CPU elements like custom passthrough walls/doors if they exist in this frame
         const hasCpuElements = (wallPassDoorsRef.current && wallPassDoorsRef.current.some(arr => arr.length > 0)) || 
@@ -1909,6 +1931,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     });
 
     // 4. RENDER ENTITIES (Sprites use ctx.drawImage over the buffer)
+    _st = performance.now();
     const { drawnParticles, hasActiveAnimations, statusOverlays } = renderEntities({
         ctx, width: renderWidth, height: renderHeight, grid, posX, posY, dirX, dirY, planeX, planeY, horizon, cameraZ,
         sprites, lightMap: currentLightMap, outdoorMap: p.outdoorMap, lightningMap, zBuffer: wallZBufferRef.current as any,
@@ -1944,6 +1967,11 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
         webglRenderer: webglRendererRef.current,
         settings
     });
+    {
+      const _d = performance.now() - _st;
+      stageAccRef.current.ent += _d;
+      _m.ent += _d;
+    }
 
     hasActiveAnimationsRef.current = !!hasActiveAnimations;
 
@@ -1989,6 +2017,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     }
 
     // 6. RENDER PARTICLES
+    _st = performance.now();
     renderParticles({
         ctx, width: renderWidth, height: renderHeight, posX, posY, dirX, dirY, planeX, planeY, horizon,
         particlesRef, rainRef, zBuffer: wallZBufferRef.current as any, drawnParticles, 
@@ -2011,6 +2040,11 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
         outdoorMap: p.outdoorMap,
         ceilingType: ceilingType
     });
+    {
+      const _d = performance.now() - _st;
+      stageAccRef.current.part += _d;
+      _m.part += _d;
+    }
 
     // FINAL STEP: Upscale if necessary
     let finalCtx = canvas.getContext('2d', { alpha: false });
@@ -2167,7 +2201,14 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     });
 
     if (p.onFrameRendered) p.onFrameRendered();
-    
+
+    {
+      const _total = performance.now() - _frameStart;
+      const _a = stageAccRef.current;
+      _a.oth += _total - (_m.bg + _m.walls + _m.gl + _m.ent + _m.part);
+      _a.frames++;
+    }
+
   }, []);
 
   const isLoopRunning = useRef(false);
@@ -2394,7 +2435,17 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
       if (!showFps) return;
       const interval = setInterval(() => {
           if (fpsRef.current) {
-              fpsRef.current.textContent = `FPS: ${frameCountRef.current}`;
+              const _a = stageAccRef.current;
+              const _n = Math.max(1, _a.frames);
+              fpsRef.current.textContent =
+                  `FPS: ${frameCountRef.current}\n` +
+                  `bg: ${(_a.bg / _n).toFixed(2)}ms\n` +
+                  `walls: ${(_a.walls / _n).toFixed(2)}ms\n` +
+                  `gl: ${(_a.gl / _n).toFixed(2)}ms\n` +
+                  `ent: ${(_a.ent / _n).toFixed(2)}ms\n` +
+                  `part: ${(_a.part / _n).toFixed(2)}ms\n` +
+                  `oth: ${(_a.oth / _n).toFixed(2)}ms`;
+              _a.bg = 0; _a.walls = 0; _a.gl = 0; _a.ent = 0; _a.part = 0; _a.oth = 0; _a.frames = 0;
           }
           frameCountRef.current = 0;
       }, 1000);
@@ -2418,7 +2469,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
         <div ref={overlaysContainerRef} className="absolute inset-x-0 inset-y-0 pointer-events-none z-20 overflow-hidden" />
         {showFps && (
             <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 border border-gray-700/50 rounded-[2px] pointer-events-none z-[100] flex items-center shadow-sm">
-                <span ref={fpsRef} className="text-[10px] font-['Jura'] font-bold text-gray-400 tracking-tight">FPS: 0</span>
+                <span ref={fpsRef} style={{ whiteSpace: 'pre-line' }} className="text-[10px] font-['Jura'] font-bold text-gray-400 tracking-tight">FPS: 0</span>
             </div>
         )}
     </div>
