@@ -764,18 +764,17 @@ export function renderWindowSegment({
                 const cutoutScreenHeight = gScreenBot - gScreenTop;
                 const targetLh = cutoutScreenHeight > 0 ? cutoutScreenHeight : 1;
 
-                const glassSpans = fullSpans;
+                // Glass sits at its own depth (glassDist) inside the frame, so its
+                // occlusion spans must be computed against that depth, not the
+                // wall's. This preserves the window offset parameter behavior.
+                const glassSpans = getUnoccludedSpans(glassDrawStart, glassDrawEnd, passThroughWallsCol, glassDist);
                 for (let s = 0; s < glassSpans.length; s++) {
-                    const a = glassSpans[s].start > glassDrawStart ? glassSpans[s].start : glassDrawStart;
-                    const b = glassSpans[s].end < glassDrawEnd ? glassSpans[s].end : glassDrawEnd;
-                    if (a < b) {
-                        drawWindowPart(
-                            x, a, b, pt, glassBuf, glassTexX,
-                            gScreenTop, 0, targetLh,
-                            rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, alphaMultiplier,
-                            screenBuffer, width, resolutionDivisor
-                        );
-                    }
+                    drawWindowPart(
+                        x, glassSpans[s].start, glassSpans[s].end, pt, glassBuf, glassTexX,
+                        gScreenTop, 0, targetLh,
+                        rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, alphaMultiplier,
+                        screenBuffer, width, resolutionDivisor
+                    );
                 }
             }
         }
