@@ -2,7 +2,7 @@
 import { RaycasterBuffer, adjustLightForClosedDoors } from './RaycasterUtils';
 import { PassThroughDoor, PassThroughWall } from './RaycasterTypes';
 import { getDepthFactor, isFogWeather, getFogColorInt, getOriginalDepthFactor, getFogColorR, getFogColorG, getFogColorB, getCurrentRenderDistance, getFogStart, getInvFogRange, getInvRenderDistance, getMinBrightness } from './DepthEffect';
-import { isWebGLActive, pushQuad, getQuadFromPool, fastGlPt, globalSpriteShadows, globalMagentaShadowsEnabled } from './WebGLState';
+import { isWebGLActive, pushQuad, globalSpriteShadows, globalMagentaShadowsEnabled } from './WebGLState';
 import { renderWindowSegment } from './WindowRenderer';
 import { calculateLighting, LightingResult } from './Lighting';
 
@@ -740,29 +740,8 @@ export const renderPassthroughWalls = (
                 const fogB = (getFogColorB() * fogAmtInt) >> 8;
 
                 const hasFlash = fRInt > 0 || fGInt > 0 || fBInt > 0 || fogAmtInt > 0;
-
-                // GPU path: opaque UPPER-floor passthrough segments become wall
-                // quads (same pipeline as opaque walls) instead of CPU
-                // rasterization. Layer 0 stays on CPU because it can use custom
-                // decal buffers that are not uploaded as GPU textures.
-                if (isWebGLActive && fastGlPt && pt.layer !== undefined && pt.layer > 0) {
-                    const quad = getQuadFromPool();
-                    quad.x0 = x;
-                    quad.x1 = x + resolutionDivisor;
-                    quad.y0 = drawStart;
-                    quad.y1 = drawEnd;
-                    quad.u0 = texX / currentWallBuf.width;
-                    quad.u1 = (texX + 1) / currentWallBuf.width;
-                    quad.v0 = (texPosFixed / 65536.0) / currentWallBuf.height;
-                    quad.v1 = ((texPosFixed + stepFixed * (drawEnd - drawStart)) / 65536.0) / currentWallBuf.height;
-                    quad.r = (rMultInt + fRInt) / 256.0;
-                    quad.g = (gMultInt + fGInt) / 256.0;
-                    quad.b = (bMultInt + fBInt) / 256.0;
-                    quad.fog = fogAmtInt / 256.0;
-                    quad.textureId = (currentWallBuf as any).id || 'wall';
-                    quad.dist = dist;
-                    pushQuad(quad);
-                } else if (hasFlash) {
+                
+                if (hasFlash) {
                     const h = currentWallBuf.height;
                     for (let y = drawStart; y < drawEnd; y++) {
                         let ty = (texPosFixed >> 16) % h;
@@ -840,7 +819,7 @@ export const renderPassthroughWalls = (
 
             const isFloorType = upperTile?.type === 'FLOOR' || pt.isFloorWall;
 
-            if (!pt.isPitWall && levelDrawEnd < horizon && !hasWallBelow && !isFloorType && dist <= zBuffer[x] + 0.05) {
+            if (!pt.isPitWall && levelDrawEnd < horizon && !hasWallBelow && !isFloorType) {
                 const capStart = Math.max(0, drawEnd);
                 const capEnd = Math.min(height, horizon);
                 
@@ -1087,7 +1066,7 @@ export const renderPassthroughWalls = (
                 }
             }
 
-            if (!pt.isPitWall && levelDrawStart > horizon && drawStart > horizon && !hasWallAbove && dist <= zBuffer[x] + 0.05) {
+            if (!pt.isPitWall && levelDrawStart > horizon && drawStart > horizon && !hasWallAbove) {
                 const capStart = Math.max(Math.floor(horizon) + 1, 0);
                 const capEnd = Math.min(height, drawStart);
                 
