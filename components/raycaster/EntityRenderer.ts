@@ -1506,19 +1506,6 @@ export const renderEntities = ({
   const damagedEnemyIdSet = damagedEnemyIds ? new Set(damagedEnemyIds) : null;
   const hiddenEnemyIdSet = hiddenEnemyIds ? new Set(hiddenEnemyIds) : null;
 
-  // When no mirror is on screen, tiles fully behind the camera are never drawn,
-  // so we can skip building sprites for them entirely.
-  let hasAnyMirrorOnScreen = false;
-  if (mirrorReflections) {
-    for (let x = 0; x < width; x += resolutionDivisor) {
-      const refs = mirrorReflections[x];
-      if (refs && refs.length > 0 && refs[0].maskBottom !== -1) {
-        hasAnyMirrorOnScreen = true;
-        break;
-      }
-    }
-  }
-
   // PRE-RESOLVE PASSTHROUGH DOOR PROPERTIES TO DRAMATICALLY IMPROVE PERFORMANCE
   const processedDoorsSet = new Set<any>();
   if (passThroughDoors) {
@@ -1627,16 +1614,6 @@ export const renderEntities = ({
       const distSq = relX * relX + relY * relY;
 
       if (distSq > RENDER_DISTANCE * RENDER_DISTANCE) continue;
-
-      // CULL: with no mirrors on screen, tiles fully behind the camera are skipped
-      // by the draw pass anyway, so don't spend time building sprites for them.
-      if (!hasAnyMirrorOnScreen) {
-        const det = planeX * dirY - dirX * planeY;
-        if (det !== 0) {
-          const invDet = 1.0 / det;
-          if (invDet * (-planeY * relX + planeX * relY) < 0.001) continue;
-        }
-      }
 
       let sprLight = { r: 1.0, g: 1.0, b: 1.0 };
       if (lightMap && lightMap[y] && lightMap[y][x]) {
