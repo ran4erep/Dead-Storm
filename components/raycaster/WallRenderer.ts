@@ -10,6 +10,7 @@ import { drawWallStrip, drawBrokenMirrorStrip } from './WallDrawer';
 import { performMirrorRaycast, precalculateMirrorWalls, resetMirrorPool, getBilinearFloorLight } from './MirrorRenderer';
 import { drawMirrorStrip } from './MirrorStripRenderer';
 import { renderPassthroughWalls, renderPassthroughDoors } from './PassthroughRenderer';
+import { collectPolyObjectsFromGrid, generatePolyObjectOccluders } from './PolyObjectRenderer';
 import { isWebGLActive } from './WebGLState';
 
 const SIN_LUT_SIZE = 2048;
@@ -32,8 +33,8 @@ function fastCos(x: number): number {
     return COS_LUT[((x * SCALE) | 0) & SIN_LUT_MASK];
 }
 
-const rayResultA: RaycastResult = { hit: 0, side: 0, perpWallDist: 0, mapX: 0, mapY: 0, stepX: 0, stepY: 0, rayDirX: 0, rayDirY: 0, isDoor: false, isDoorEdge: false, isDoorFrame: false, doorOffset: 0, isTextureFlipped: false, hitInsideHinge: false, geometryHitSide: 0, hitDepthLimit: false };
-const rayResultB: RaycastResult = { hit: 0, side: 0, perpWallDist: 0, mapX: 0, mapY: 0, stepX: 0, stepY: 0, rayDirX: 0, rayDirY: 0, isDoor: false, isDoorEdge: false, isDoorFrame: false, doorOffset: 0, isTextureFlipped: false, hitInsideHinge: false, geometryHitSide: 0, hitDepthLimit: false };
+const rayResultA: RaycastResult = { hit: 0, side: 0, perpWallDist: 0, mapX: 0, mapY: 0, stepX: 0, stepY: 0, rayDirX: 0, rayDirY: 0, isDoor: false, isDoorEdge: false, isDoorFrame: false, doorOffset: 0, isTextureFlipped: false, hitInsideHinge: false, geometryHitSide: 0, hitDepthLimit: false, visibleLayerMask: 0, visibleCapMask: 0 };
+const rayResultB: RaycastResult = { hit: 0, side: 0, perpWallDist: 0, mapX: 0, mapY: 0, stepX: 0, stepY: 0, rayDirX: 0, rayDirY: 0, isDoor: false, isDoorEdge: false, isDoorFrame: false, doorOffset: 0, isTextureFlipped: false, hitInsideHinge: false, geometryHitSide: 0, hitDepthLimit: false, visibleLayerMask: 0, visibleCapMask: 0 };
 
 // File-scoped persistent cache for Mirror Reflections
 interface CachedMirrorColumn {
@@ -118,7 +119,7 @@ export const renderWalls = ({
     zBuffer, solidWallTopBuffer, passThroughDoors, passThroughWalls, mirrorReflections,
     ceilingType, skyBuffer, floorBuffer, ceilingBuffer, fov, cameraZ, customFloorBuffers, rowDistances,
     resolutionDivisor = 1, flashlightActive = false, flashlightBatteryRatio = 1.0, renderDistance = 15,
-    reusableHighlightSet
+    reusableHighlightSet, polyObjectsList: passedPolyObjectsList
 }: WallRenderProps) => {
     const mapWidth = grid[0]?.length || 0; 
     const mapHeight = grid.length;
@@ -223,6 +224,15 @@ export const renderWalls = ({
         solidWallTopBuffer.fill(height);
     }
 
+    // Generate polyObject depth occluders early so mirrors and windows respect PolyObjects in front of them
+    const polyObjectsList = passedPolyObjectsList || collectPolyObjectsFromGrid(grid, posX, posY, renderDistance, lightMap);
+    if (polyObjectsList && polyObjectsList.length > 0 && passThroughWalls) {
+        generatePolyObjectOccluders(
+            polyObjectsList, posX, posY, cameraZ, dirX, dirY, planeX, planeY, horizon,
+            width, height, passThroughWalls, undefined
+        );
+    }
+
     for (let x = 0; x < width; x += resolutionDivisor) {
         // 1. Raycast
         const ray = performRaycast(
@@ -259,6 +269,10 @@ export const renderWalls = ({
                 for (let idx = 0; idx < renderLayers.length; idx++) {
                     const levelIndex = renderLayers[idx];
                     if (ray.isDoor && levelIndex > 0) continue;
+                    // RaycastCore already did screen-space interval occlusion for
+                    // upper floors. Do not render a layer that never intersected
+                    // the visible interval for this column.
+                    if (levelIndex > 0 && (ray.visibleLayerMask & (1 << levelIndex)) === 0) continue;
                 
                 reusableLayerLightingResult.rMultInt = lightingResult.rMultInt;
                 reusableLayerLightingResult.gMultInt = lightingResult.gMultInt;
@@ -523,8 +537,20 @@ export const renderWalls = ({
                     refFogTable,
                     depthFogTable,
                     floorLightMaps,
-                    flashlightActive
+                    flashlightActive,
+                    passThroughWalls ? passThroughWalls[x] : undefined
                 );
+
+                if (resolutionDivisor > 1 && mirrorReflections[x].length > 0) {
+                    for (let d = 1; d < resolutionDivisor; d++) {
+                        if (x + d < width) {
+                            mirrorReflections[x + d].length = 0;
+                            for (let r = 0; r < mirrorReflections[x].length; r++) {
+                                mirrorReflections[x + d].push(mirrorReflections[x][r]);
+                            }
+                        }
+                    }
+                }
             } else {
                 if (!useMirrorCache) {
                     cachedMirrorCols[x] = { mirrorResult: null, precalc: [] };
@@ -556,7 +582,9 @@ export const renderWalls = ({
             }
 
                 // --- Bottom Cap Logic for Solid Wall ---
-                if (!isWebGLActive) {
+                // Only the raycaster-approved exposed cap(s) reach this expensive
+                // path. In stacked floors this normally leaves one cap, or none.
+                if (!isWebGLActive && (ray.visibleCapMask & (1 << levelIndex)) !== 0) {
                     let hasWallBelow = false;
                     if (levelIndex > 0) {
                         const underTopZ = getWallTopZ(levelIndex - 1, ray.mapX, ray.mapY, activeGrids);
@@ -621,7 +649,7 @@ export const renderWalls = ({
                                         const distFogInt = (getDepthFactor(distToP) * 256) | 0;
                                         let exactR = 256, exactG = 256, exactB = 256;
                                         if (activeLightMap) {
-                                            const l = getBilinearFloorLight(currentFloorX, currentFloorY, activeLightMap, mapWidth, mapHeight);
+                                            const l = getBilinearFloorLight(currentFloorX, currentFloorY, activeLightMap, mapWidth, mapHeight, grid, activeGrids, levelIndex);
                                             const capR = ((l.r * 256 * 153) >> 8) | 0;
                                             const capG = ((l.g * 256 * 153) >> 8) | 0;
                                             const capB = ((l.b * 256 * 153) >> 8) | 0;
@@ -711,7 +739,7 @@ export const renderWalls = ({
 
                                             let nextR = 256, nextG = 256, nextB = 256;
                                             if (activeLightMap) {
-                                                const l = getBilinearFloorLight(nextFloorX, nextFloorY, activeLightMap, mapWidth, mapHeight);
+                                                const l = getBilinearFloorLight(nextFloorX, nextFloorY, activeLightMap, mapWidth, mapHeight, grid, activeGrids, levelIndex);
                                                 const capR = ((l.r * 256 * 153) >> 8) | 0;
                                                 const capG = ((l.g * 256 * 153) >> 8) | 0;
                                                 const capB = ((l.b * 256 * 153) >> 8) | 0;
@@ -893,7 +921,7 @@ export const renderWalls = ({
                                         const distFogInt = (getDepthFactor(distToP) * 256) | 0;
                                         let exactR = 256, exactG = 256, exactB = 256;
                                         if (activeLightMap) {
-                                            const l = getBilinearFloorLight(currentFloorX, currentFloorY, activeLightMap, mapWidth, mapHeight);
+                                            const l = getBilinearFloorLight(currentFloorX, currentFloorY, activeLightMap, mapWidth, mapHeight, grid, activeGrids, levelIndex);
                                             exactR = (l.r * 256 * distFogInt) >> 8;
                                             exactG = (l.g * 256 * distFogInt) >> 8;
                                             exactB = (l.b * 256 * distFogInt) >> 8;
@@ -980,7 +1008,7 @@ export const renderWalls = ({
 
                                             let nextR = 256, nextG = 256, nextB = 256;
                                             if (activeLightMap) {
-                                                const l = getBilinearFloorLight(nextFloorX, nextFloorY, activeLightMap, mapWidth, mapHeight);
+                                                const l = getBilinearFloorLight(nextFloorX, nextFloorY, activeLightMap, mapWidth, mapHeight, grid, activeGrids, levelIndex);
                                                 nextR = (l.r * 256 * nextDistFogInt) >> 8;
                                                 nextG = (l.g * 256 * nextDistFogInt) >> 8;
                                                 nextB = (l.b * 256 * nextDistFogInt) >> 8;
@@ -1118,11 +1146,19 @@ export const renderWalls = ({
             }
         }
         }
-        
+    }
+
+    // Render passthrough walls (windows) and doors after occluders are populated
+    const invWidth = 1.0 / width;
+    for (let x = 0; x < width; x += resolutionDivisor) {
+        const cameraX = 2 * x * invWidth - 1;
+        const rayDirX = dirX + planeX * cameraX;
+        const rayDirY = dirY + planeY * cameraX;
+
         // 4. Passthrough Walls
         renderPassthroughWalls(
             x, passThroughWalls[x], wallBuffer, debugTextures, height, horizon, posY, posX,
-            ray.rayDirX, ray.rayDirY, activeGrids, auxBuffers, lightMap, outdoorMap, lightningMap, mapWidth, mapHeight,
+            rayDirX, rayDirY, activeGrids, auxBuffers, lightMap, outdoorMap, lightningMap, mapWidth, mapHeight,
             lightningIntensity, muzzleFlashIntensity, activeFlashes, muzzleR, muzzleG, muzzleB,
             lightningR, lightningG, lightningB, zBuffer, screenBuffer, width, cameraZ,
             resolutionDivisor, renderDistance, customFloorBuffers, customWallBuffers, reusableHighlightSet,

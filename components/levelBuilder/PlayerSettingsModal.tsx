@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Save, RotateCcw, Activity, Volume2, User, Package as Box, Mic, UserRound, Play } from 'lucide-react';
 import playerData from '../../data/player.json';
 import { PlayerConfig, VoiceConfig, LevelDefinition } from '../../types';
@@ -58,7 +58,7 @@ export const PlayerSettingsModal: React.FC<PlayerSettingsModalProps> = ({
   uiStrings,
   level,
 }) => {
-  const soundOptions = Object.keys(soundsData);
+  const soundOptions = useMemo(() => Object.keys(soundsData).filter(k => !(soundsData as any)[k]?.alias), []);
   const itemOptions = Object.keys(itemsData).map(k => ({ id: k, ...itemsData[k] }));
 
   const [config, setConfig] = useState<PlayerConfig>(playerData as PlayerConfig);

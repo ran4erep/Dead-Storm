@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Plus, Trash2, Save, GripHorizontal, Volume2, ArrowUp, ArrowDown } from 'lucide-react';
 import dialoguesData from '../../data/dialogues.json';
 import soundsData from '../../data/sounds.json';
 import itemsData from '../../data/items.json';
 import { AssetPicker } from './AssetPicker';
+
+const soundOptions = Object.keys(soundsData).filter((k) => !(soundsData as any)[k]?.alias);
 
 // We import these just to use for types if needed, or define locally to save imports
 import { CustomSelect } from './CustomSelect';
@@ -1058,7 +1060,7 @@ const DialogueNodeCanvas = ({
                                     className="bg-gray-800 text-white border border-gray-600 rounded px-2 py-1 text-sm outline-none focus:border-indigo-500"
                                 >
                                     <option value="">{uiStrings?.dialogue_sound_select || "-- Выбрать звук --"}</option>
-                                    {Object.keys(soundsData).map((soundKey) => (
+                                    {soundOptions.map((soundKey) => (
                                         <option key={soundKey} value={soundKey}>
                                             {soundKey}
                                         </option>

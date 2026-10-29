@@ -1,6 +1,59 @@
 import { LevelDefinition } from "../../types";
 import { ASSETS } from "../../assets";
 import animationsData from "../../data/animations.json";
+import enemiesData from "../../data/enemies.json";
+import npcsData from "../../data/npcs.json";
+import itemsData from "../../data/items.json";
+import decorationsData from "../../data/decorations.json";
+
+const entityPreviewCache = new Map<string, string | null>();
+
+export const getEntityPreviewUrl = (
+  entityType: 'enemy' | 'npc' | 'item' | 'decoration' | string,
+  id: string
+): string | null => {
+  if (!id) return null;
+  const cacheKey = `${entityType}:${id}`;
+  if (entityPreviewCache.has(cacheKey)) {
+    return entityPreviewCache.get(cacheKey)!;
+  }
+
+  let assetId: string | undefined = undefined;
+
+  if (entityType === 'enemy' && (enemiesData as any)[id]) {
+    const enemy = (enemiesData as any)[id];
+    assetId = enemy?.assets?.map?.assetId || enemy?.assets?.portrait?.assetId || enemy?.assets?.attack?.assetId || enemy?.assets?.dead?.assetId || enemy?.assetId;
+  } else if (entityType === 'npc' && (npcsData as any)[id]) {
+    const npc = (npcsData as any)[id];
+    assetId = npc?.assets?.map?.assetId || npc?.assets?.portrait?.assetId || npc?.assets?.hands_up?.assetId || npc?.assetId || npc?.asset;
+  } else if (entityType === 'item' && (itemsData as any)[id]) {
+    const item = (itemsData as any)[id];
+    assetId = item?.assetId || item?.icon || item?.dollAssetId || item?.handAsset || item?.asset;
+  } else if (entityType === 'decoration' && (decorationsData as any)[id]) {
+    const dec = (decorationsData as any)[id];
+    assetId = dec?.assetId || dec?.asset;
+  }
+
+  if (!assetId) {
+    if ((enemiesData as any)[id]) {
+      const e = (enemiesData as any)[id];
+      assetId = e?.assets?.map?.assetId || e?.assets?.portrait?.assetId || e?.assetId;
+    } else if ((npcsData as any)[id]) {
+      const n = (npcsData as any)[id];
+      assetId = n?.assets?.map?.assetId || n?.assets?.portrait?.assetId || n?.assetId;
+    } else if ((itemsData as any)[id]) {
+      const i = (itemsData as any)[id];
+      assetId = i?.assetId || i?.icon || i?.dollAssetId || i?.handAsset;
+    } else if ((decorationsData as any)[id]) {
+      const d = (decorationsData as any)[id];
+      assetId = d?.assetId || d?.asset;
+    }
+  }
+
+  const result = getPreviewSrc(assetId || id);
+  entityPreviewCache.set(cacheKey, result);
+  return result;
+};
 
 export const getPreviewSrc = (assetId: string | undefined): string | null => {
   if (!assetId) return null;
@@ -171,3 +224,89 @@ export const resolveSoundBrushSymbol = (brush: any, currentLevel: LevelDefinitio
   const newSym = getAvailableSymbol(currentLevel, "sound");
   return { symbol: newSym, newSoundConfig: { ...brush, symbol: newSym } };
 };
+
+export interface OverrideEntry {
+  suffix: string;
+  data: any;
+}
+
+export const deleteCellOverrides = (
+  entityOverrides: Record<string, any> | undefined,
+  floor: number,
+  y: number,
+  x: number
+): void => {
+  if (!entityOverrides) return;
+  const prefix = `${floor}_${y}_${x}`;
+  const keysToDelete: string[] = [];
+  for (const k in entityOverrides) {
+    if (k === prefix || k.startsWith(`${prefix}_`)) {
+      keysToDelete.push(k);
+    }
+  }
+  for (const k of keysToDelete) {
+    delete entityOverrides[k];
+  }
+};
+
+export const getCellOverrides = (
+  entityOverrides: Record<string, any> | undefined,
+  floor: number,
+  y: number,
+  x: number
+): OverrideEntry[] => {
+  const result: OverrideEntry[] = [];
+  if (!entityOverrides) return result;
+  const prefix = `${floor}_${y}_${x}`;
+  for (const k in entityOverrides) {
+    if (k === prefix || k.startsWith(`${prefix}_`)) {
+      result.push({
+        suffix: k.slice(prefix.length),
+        data: typeof entityOverrides[k] === 'object' && entityOverrides[k] !== null
+          ? JSON.parse(JSON.stringify(entityOverrides[k]))
+          : entityOverrides[k]
+      });
+    }
+  }
+  return result;
+};
+
+export const getAndClearCellOverrides = (
+  entityOverrides: Record<string, any> | undefined,
+  floor: number,
+  y: number,
+  x: number
+): OverrideEntry[] => {
+  const result: OverrideEntry[] = [];
+  if (!entityOverrides) return result;
+  const prefix = `${floor}_${y}_${x}`;
+  const keysToDelete: string[] = [];
+  for (const k in entityOverrides) {
+    if (k === prefix || k.startsWith(`${prefix}_`)) {
+      result.push({
+        suffix: k.slice(prefix.length),
+        data: entityOverrides[k]
+      });
+      keysToDelete.push(k);
+    }
+  }
+  for (const k of keysToDelete) {
+    delete entityOverrides[k];
+  }
+  return result;
+};
+
+export const applyCellOverrides = (
+  entityOverridesTarget: Record<string, any>,
+  floor: number,
+  targetY: number,
+  targetX: number,
+  entries: OverrideEntry[]
+): void => {
+  if (!entries || entries.length === 0) return;
+  const targetPrefix = `${floor}_${targetY}_${targetX}`;
+  for (const entry of entries) {
+    entityOverridesTarget[`${targetPrefix}${entry.suffix}`] = entry.data;
+  }
+};
+

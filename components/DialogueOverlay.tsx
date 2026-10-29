@@ -435,7 +435,11 @@ const DialogueOverlay: React.FC<DialogueOverlayProps> = ({
     };
 
     return (
-        <div className="absolute inset-0 z-[200] flex flex-col justify-between pointer-events-none font-['Jura'] px-[3px] py-[1px]">
+        <div className="absolute inset-0 z-[300] flex flex-col justify-between pointer-events-none font-['Jura'] px-[3px] py-[1px]">
+            {/* 3D Viewport Darkening Layer when trading or keeping items */}
+            {isTradeOrKeep && (
+                <div className="absolute inset-0 bg-black/60 pointer-events-none z-0 transition-opacity duration-300" />
+            )}
             
             {/* NPC SECTION (TOP OR BOTTOM DEPENDING ON TRADE/KEEP) */}
             <div 

@@ -215,6 +215,7 @@ export const useSoundSystem = (
       soundName: string, 
       pos?: {x: number, y: number}, 
       maxDistance?: number,
+      nonPositional?: boolean,
       lastPlayerX?: number,
       lastPlayerY?: number,
       lastNodeX?: number,
@@ -223,7 +224,7 @@ export const useSoundSystem = (
       lastOcclusionMult?: number
   }>>(new Map());
 
-  const queuedSounds = useRef<Array<{ name: string, pos?: { x: number, y: number }, id?: string, delayMs?: number, maxDistance?: number }>>([]);
+  const queuedSounds = useRef<Array<{ name: string, pos?: { x: number, y: number }, id?: string, delayMs?: number, maxDistance?: number, loop?: boolean, nonPositional?: boolean }>>([]);
   const playTokens = useRef<Map<string, number>>(new Map());
   
   // Rate limiter for sound effects to prevent audio overloading during particle explosions and heavy action
@@ -991,7 +992,7 @@ const resolveSoundDef = useCallback((name: string) => {
 
     while (queuedSounds.current.length > 0) {
       const s = queuedSounds.current.shift();
-      if (s) playSound(s.name, s.pos, s.id, s.delayMs, undefined, s.maxDistance);
+      if (s) playSound(s.name, s.pos, s.id, s.delayMs, undefined, s.maxDistance, s.loop, s.nonPositional);
     }
     
     streamCache.current.forEach((track) => {
@@ -1317,7 +1318,7 @@ const resolveSoundDef = useCallback((name: string) => {
   // The Listener (Player) is already updated automatically by the useEffect.
   const updateSoundPosition = useCallback((id: string, pos: { x: number, y: number }, maxDistance: number = 20, immediate: boolean = false) => {
       const nodes = activeNodes.current.get(id);
-      if (!nodes || !nodes.panner) return; 
+      if (!nodes || (!nodes.panner && !nodes.nonPositional)) return; 
       const ctx = audioContextRef.current;
       if (!ctx) return;
       const now = ctx.currentTime;
@@ -1382,8 +1383,9 @@ const resolveSoundDef = useCallback((name: string) => {
           distVolume = ratio * ratio;
       }
 
-      // If it's a true PannerNode (HRTF), we update its world position
-      if (nodes.panner instanceof PannerNode) {
+      if (nodes.nonPositional) {
+          nodes.gain.gain.setTargetAtTime(baseVol * distVolume * occlusionMult, now, 0.1);
+      } else if (nodes.panner instanceof PannerNode) {
           if (immediate) {
               nodes.panner.positionX.setValueAtTime(finalX, now);
               nodes.panner.positionZ.setValueAtTime(finalY, now);
@@ -1416,7 +1418,7 @@ const resolveSoundDef = useCallback((name: string) => {
 
   }, [config]);
 
-  const playSound = useCallback(async (soundName: string, sourcePos?: { x: number, y: number }, uniqueId?: string, delayMs: number = 0, reverbPos?: { x: number, y: number }, maxDistance: number = 20, loopOverride?: boolean) => {
+  const playSound = useCallback(async (soundName: string, sourcePos?: { x: number, y: number }, uniqueId?: string, delayMs: number = 0, reverbPos?: { x: number, y: number }, maxDistance: number = 20, loopOverride?: boolean, nonPositionalOverride?: boolean) => {
     const ctx = audioContextRef.current;
     
     // For checks before we have resolved soundDef, use the plain name/id
@@ -1426,7 +1428,7 @@ const resolveSoundDef = useCallback((name: string) => {
     if (!ctx || ctx.state === 'suspended') {
       const isAlreadyQueued = queuedSounds.current.some(s => (s.id || s.name) === tempTrackId);
       if (!isAlreadyQueued) {
-        queuedSounds.current.push({ name: soundName, pos: sourcePos, id: uniqueId, delayMs, maxDistance });
+        queuedSounds.current.push({ name: soundName, pos: sourcePos, id: uniqueId, delayMs, maxDistance, loop: loopOverride, nonPositional: nonPositionalOverride });
       }
       return;
     }
@@ -1478,7 +1480,7 @@ const resolveSoundDef = useCallback((name: string) => {
         soundRateLimitersRef.current.set(soundName, timestamps);
     }
 
-    if (isLooped && !soundDef.allowOverlap) {
+    if (isLooped) {
         const active = activeSources.current.get(trackId);
         if (active && active.length > 0) return; 
     }
@@ -1560,52 +1562,61 @@ const resolveSoundDef = useCallback((name: string) => {
     let finalSourceNode: AudioNode = individualGainNode;
 
     if (sourcePos) {
-        // --- 3D HRTF PANNING ---
-        // Used for footsteps and world sounds
+        // --- 3D HRTF PANNING / NON-POSITIONAL SPATIAL ---
+        const isNonPositional = !!nonPositionalOverride || !!(soundDef as any)?.nonPositional;
         const filterNode = ctx.createBiquadFilter();
         filterNode.type = 'lowpass';
         const targetCutoff = 800 + 19200 * Math.pow(occlusionMult, 0.5);
         filterNode.frequency.value = Math.min(20000, targetCutoff);
 
-        try {
-            const panner = ctx.createPanner();
-            panner.panningModel = 'HRTF'; // Quality binaural
-            panner.distanceModel = 'linear'; // Disable Web Audio automatic distance falloff to handle it manually on GainNode
-            panner.refDistance = maxDistance; 
-            panner.maxDistance = maxDistance; // configurable max audible
-            panner.rolloffFactor = 0.0; // Handled manually for maximum precision and performance
-            panner.coneInnerAngle = 360; 
-            panner.coneOuterAngle = 0;
-            panner.coneOuterGain = 0;
-
-            const finalX = sourcePos.x % 1 === 0 ? sourcePos.x + 0.5 : sourcePos.x;
-            const finalY = sourcePos.y % 1 === 0 ? sourcePos.y + 0.5 : sourcePos.y;
-
-            // Set Position (Grid Coords -> X, 0, Y)
-            panner.positionX.value = finalX;
-            panner.positionY.value = 0; // Height
-            panner.positionZ.value = finalY; // Depth (Y in grid)
-
+        if (isNonPositional) {
             source.connect(individualGainNode);
             individualGainNode.connect(filterNode);
-            filterNode.connect(panner);
-            panner.connect(targetNode);
+            filterNode.connect(targetNode);
             
-            pannerNode = panner;
-            finalSourceNode = panner;
-        } catch (e) {
-            // Fallback for browsers with limited Panner support
-            console.warn("HRTF Panner failed, falling back to Stereo", e);
-            const panner = ctx.createStereoPanner();
-            source.connect(individualGainNode);
-            individualGainNode.connect(filterNode);
-            filterNode.connect(panner);
-            panner.connect(targetNode);
-            pannerNode = panner;
-            finalSourceNode = panner;
+            activeNodes.current.set(trackId, { filter: filterNode, gain: individualGainNode, soundName: soundName, pos: sourcePos, maxDistance: maxDistance, nonPositional: true });
+            finalSourceNode = filterNode;
+        } else {
+            try {
+                const panner = ctx.createPanner();
+                panner.panningModel = 'HRTF'; // Quality binaural
+                panner.distanceModel = 'linear'; // Disable Web Audio automatic distance falloff to handle it manually on GainNode
+                panner.refDistance = maxDistance; 
+                panner.maxDistance = maxDistance; // configurable max audible
+                panner.rolloffFactor = 0.0; // Handled manually for maximum precision and performance
+                panner.coneInnerAngle = 360; 
+                panner.coneOuterAngle = 0;
+                panner.coneOuterGain = 0;
+
+                const finalX = sourcePos.x % 1 === 0 ? sourcePos.x + 0.5 : sourcePos.x;
+                const finalY = sourcePos.y % 1 === 0 ? sourcePos.y + 0.5 : sourcePos.y;
+
+                // Set Position (Grid Coords -> X, 0, Y)
+                panner.positionX.value = finalX;
+                panner.positionY.value = 0; // Height
+                panner.positionZ.value = finalY; // Depth (Y in grid)
+
+                source.connect(individualGainNode);
+                individualGainNode.connect(filterNode);
+                filterNode.connect(panner);
+                panner.connect(targetNode);
+                
+                pannerNode = panner;
+                finalSourceNode = panner;
+            } catch (e) {
+                // Fallback for browsers with limited Panner support
+                console.warn("HRTF Panner failed, falling back to Stereo", e);
+                const panner = ctx.createStereoPanner();
+                source.connect(individualGainNode);
+                individualGainNode.connect(filterNode);
+                filterNode.connect(panner);
+                panner.connect(targetNode);
+                pannerNode = panner;
+                finalSourceNode = panner;
+            }
+            
+            activeNodes.current.set(trackId, { panner: pannerNode, filter: filterNode, gain: individualGainNode, soundName: soundName, pos: sourcePos, maxDistance: maxDistance });
         }
-        
-        activeNodes.current.set(trackId, { panner: pannerNode, filter: filterNode, gain: individualGainNode, soundName: soundName, pos: sourcePos, maxDistance: maxDistance });
 
     } else if (soundName === 'THUNDER') {
       const panner3d = ctx.createPanner();

@@ -8,12 +8,16 @@ import {
   RoamingEnemyAnim,
   GameState,
   GameStrings,
+  PolyObjectModel,
 } from "../../types";
+import { getPolyModelById } from "../../data/polyModels";
+import { drawPolyObjectSoftware, getDecorationFacingAngle } from "./PolyObjectRenderer";
 import { lerp, RaycasterBuffer } from "./RaycasterUtils";
 import {
   getTintedSprite,
   getDamagedSprite,
   getHighlightedSprite,
+  getMirroredSprite,
 } from "./SpriteCache";
 import {
   createBloodParticles,
@@ -204,49 +208,23 @@ const getLazyPreTintedSprite = (
   spriteTintCache: Map<string, HTMLCanvasElement | HTMLImageElement>
 ): HTMLCanvasElement | HTMLImageElement => {
   const imgAny = img as any;
-  let imgVersion = imgAny.src || imgAny.version || imgAny._spriteId;
-  if (!imgVersion) {
-    if (img instanceof HTMLCanvasElement) {
-      if (!imgAny._spriteId) {
-        imgAny._spriteId = 'canvas_' + Math.random().toString(36).substring(2, 9);
-      }
-      imgVersion = imgAny._spriteId;
-    } else {
-      imgVersion = 'canvas_' + Math.random().toString(36).substring(2, 9);
-    }
+  if (!imgAny._spriteId) {
+    imgAny._spriteId = imgAny.src || ('img_' + Math.random().toString(36).substring(2, 9));
   }
+  const imgVersion = imgAny._spriteId;
 
   // Fast path for emissive (self-illuminating) objects like fire, explosions, plasma, glow, or lasers.
   // These objects do not receive external tinting and should always render at full brightness.
   // This bypasses the expensive real-time tinting canvas generation entirely, removing any rendering stutters.
   if (obj) {
-    const objId = obj.id;
-    const assetId = obj.assetId;
     const isEmissive = 
-      obj.isScorching || 
-      obj.isEmissive || 
-      obj.isGlow ||
-      (typeof objId === 'string' && (
-        objId.includes('fire') || 
-        objId.includes('explosion') || 
-        objId.includes('spark') || 
-        objId.includes('muzzle') || 
-        objId.includes('flash') || 
-        objId.includes('glow') ||
-        objId.includes('molotov') ||
-        objId.includes('laser') ||
-        objId.includes('plasma')
-      )) ||
-      (typeof assetId === 'string' && (
-        assetId.includes('fire') || 
-        assetId.includes('explosion') || 
-        assetId.includes('spark') || 
-        assetId.includes('muzzle') || 
-        assetId.includes('flash') || 
-        assetId.includes('glow') ||
-        assetId.includes('molotov') ||
-        assetId.includes('laser') ||
-        assetId.includes('plasma')
+      !!obj.isScorching || 
+      !!obj.isEmissive || 
+      (typeof obj.id === 'string' && (
+        obj.id.startsWith('EXPLOSION_') ||
+        obj.id.startsWith('FIRE_ANIM_') ||
+        obj.id.startsWith('MUZZLE_FLASH_') ||
+        obj.id.startsWith('SPARK_')
       ));
 
     if (isEmissive) {
@@ -339,6 +317,10 @@ export interface SpriteToRender {
   isEmptyness?: boolean;
   isBox?: boolean;
   noShadow?: boolean;
+  isEmissive?: boolean;
+  isPolyObject?: boolean;
+  polyModel?: PolyObjectModel;
+  polyFacing?: string | number;
 }
 
 interface EntityRenderProps {
@@ -453,9 +435,17 @@ const drawOccludedStrip = (
   auxBuffers?: Map<string, any>,
   spriteDist: number = 0,
   passThroughWalls?: PassThroughWall[],
+  spriteX?: number,
+  spriteY?: number,
 ) => {
   const wallsInFront = passThroughWalls
-    ? passThroughWalls.filter(w => spriteDist > w.dist + 0.02)
+    ? passThroughWalls.filter(w => {
+        if (w.isPolyOccluder && spriteX !== undefined && spriteY !== undefined) {
+          const isSameTile = Math.floor(spriteX) === w.mapX && Math.floor(spriteY) === w.mapY;
+          if (isSameTile) return false;
+        }
+        return spriteDist > w.dist + 0.02;
+      })
     : [];
 
   const hasDoor = !!activeMaskDoor;
@@ -503,8 +493,8 @@ const drawOccludedStrip = (
         const botZ = wall.bottomZ !== undefined ? wall.bottomZ : 0.0;
         const absTopZ = wall.layer + topZ;
         const absBotZ = wall.layer + botZ;
-        const wallTop = Math.floor(horizon + wlh * (cameraZ - absTopZ));
-        const wallBottom = Math.ceil(horizon + wlh * (cameraZ - absBotZ));
+        const wallTop = (wall as any).wallTop !== undefined ? (wall as any).wallTop : Math.floor(horizon + wlh * (cameraZ - absTopZ));
+        const wallBottom = (wall as any).wallBottom !== undefined ? (wall as any).wallBottom : Math.ceil(horizon + wlh * (cameraZ - absBotZ));
 
         let hasCap = false;
         let capStart = 0;
@@ -785,18 +775,13 @@ const drawWallAlignedSprite = (
 
   let drawSource: HTMLImageElement | HTMLCanvasElement;
   const isEmissive = 
-    typeof sprite.id === 'string' && (
+    !!sprite.isEmissive ||
+    (typeof sprite.id === 'string' && (
       sprite.id.startsWith('EXPLOSION_') ||
-      sprite.id.includes('explosion') ||
-      sprite.id.includes('fire') ||
-      sprite.id.includes('spark') ||
-      sprite.id.includes('muzzle') ||
-      sprite.id.includes('flash') ||
-      sprite.id.includes('glow') ||
-      sprite.id.includes('molotov') ||
-      sprite.id.includes('laser') ||
-      sprite.id.includes('plasma')
-    );
+      sprite.id.startsWith('FIRE_ANIM_') ||
+      sprite.id.startsWith('MUZZLE_FLASH_') ||
+      sprite.id.startsWith('SPARK_')
+    ));
 
   if (isEmissive && sprite.img) {
     drawSource = sprite.img;
@@ -1275,6 +1260,8 @@ const drawWallAlignedSprite = (
         auxBuffers,
         currentTransformY,
         passThroughWalls ? passThroughWalls[gridStripX] : undefined,
+        sprite.x,
+        sprite.y,
       );
 
       currentZInv += zStep * spriteResolutionDivisor;
@@ -1573,7 +1560,7 @@ export const renderEntities = ({
          const c = cvs.getContext("2d");
          if(c) {
            const idata = c.createImageData(buf.width, buf.height);
-           new Uint32Array(idata.data.buffer).set(buf.data);
+           new Uint32Array(idata.data.buffer, idata.data.byteOffset, idata.data.byteLength / 4).set(buf.data);
            c.putImageData(idata, 0, 0);
            img = cvs as unknown as HTMLImageElement;
            sprites?.set("TEX_" + frameId, cvs as unknown as HTMLImageElement); // Cache it
@@ -1912,10 +1899,56 @@ export const renderEntities = ({
         decorsToRender.push({ decoration: tile.decoration, isPit: false, decorIndex: 0, totalNonPitDecors: 1 });
       }
 
+      const calculateShouldMirror = (dec: any): boolean => {
+        if (dec.isMirrored) return true;
+        if (dec.autoMirror !== true) return false;
+
+        const spriteFacing = dec.spriteFacing || "right";
+        const spriteOriginallyRight = spriteFacing === "right";
+
+        const decX = dec.x !== undefined ? dec.x : (x + 0.5);
+        const decY = dec.y !== undefined ? dec.y : (y + 0.5);
+
+        const dx = posX - decX;
+        const dy = posY - decY;
+
+        const facingStr = dec.yRotation !== undefined ? getDecorationFacingAngle(dec) : dec.facing;
+        if (facingStr !== undefined && facingStr !== null && facingStr !== "") {
+          let fx = 1;
+          let fy = 0;
+          if (typeof facingStr === "number") {
+            const rad = (facingStr * Math.PI) / 180;
+            fx = Math.cos(rad);
+            fy = Math.sin(rad);
+          } else if (typeof facingStr === "string") {
+            const fUpper = facingStr.toUpperCase();
+            switch (fUpper) {
+              case "E": fx = 1; fy = 0; break;
+              case "W": fx = -1; fy = 0; break;
+              case "S": fx = 0; fy = 1; break;
+              case "N": fx = 0; fy = -1; break;
+              case "NE": fx = 0.7071; fy = -0.7071; break;
+              case "NW": fx = -0.7071; fy = -0.7071; break;
+              case "SE": fx = 0.7071; fy = 0.7071; break;
+              case "SW": fx = -0.7071; fy = 0.7071; break;
+              default: fx = 1; fy = 0; break;
+            }
+          }
+          const dot = dx * fx + dy * fy;
+          const isBehind = dot < 0;
+          return spriteOriginallyRight ? isBehind : !isBehind;
+        }
+
+        const isBehind = (dx + dy) < 0;
+        return spriteOriginallyRight ? isBehind : !isBehind;
+      };
+
       decorsToRender.forEach(({ decoration, isPit, decorIndex, totalNonPitDecors }) => {
         const rawImg = resolveImg(decoration.assetId, 0, seed);
         if (rawImg) {
-          const tintedImg = getLazyPreTintedSprite(rawImg, sprLight, decoration, spriteTintCache);
+          const shouldMirror = calculateShouldMirror(decoration);
+          const srcImg = shouldMirror ? getMirroredSprite(rawImg, spriteTintCache) : rawImg;
+          const tintedImg = getLazyPreTintedSprite(srcImg, sprLight, decoration, spriteTintCache);
           const animConfig = getAnimConfig(decoration.assetId);
           const animScale = animConfig?.scale || 1.0;
           const scale = (decoration.scale || 1.0) * animScale;
@@ -1946,7 +1979,42 @@ export const renderEntities = ({
 
           const decorAny = decoration as any;
 
-          if (decorAny.isBox) {
+          if (decorAny.renderMode === "polyObject" || decorAny.type === "polyObject" || decorAny.polyModelId || decorAny.polyModel) {
+            const modelId = decorAny.polyModelId || "chair";
+            const model = decorAny.polyModel || getPolyModelById(modelId) || getPolyModelById("chair");
+            if (model) {
+              const scale = decorAny.scale !== undefined ? decorAny.scale : 1.0;
+              const currentTile = grid[y]?.[x];
+              const defFH = currentTile ? (((currentTile.type === 'FLOOR' && currentTile.height !== undefined) ? currentTile.height : 0) + (currentTile.elevation || 0)) : 0;
+              const decorDistSq = (posX - baseX) ** 2 + (posY - baseY) ** 2;
+
+              addSprite({
+                id: `DECOR_POLY_${decoration.id}_${x}_${y}_${decorIndex}`,
+                x: baseX,
+                y: baseY,
+                unbiasedX: baseX,
+                unbiasedY: baseY,
+                gridX: x,
+                gridY: y,
+                img: tintedImg || rawImg,
+                originalImg: rawImg,
+                dist: decorDistSq,
+                scale: scale,
+                lightColor: sprLight,
+                transformY: 0,
+                vOffset: 0,
+                yOffset: decorAny.yOffset || 0,
+                isDamaged,
+                isHighlighted,
+                layer: decoration.foreground ? 2.5 : 1,
+                isPolyObject: true,
+                polyModel: model,
+                polyFacing: getDecorationFacingAngle(decorAny),
+                sFloorHeight: defFH,
+                noShadow: !!decoration?.noShadow,
+              });
+            }
+          } else if (decorAny.isBox) {
             const size = decorAny.boxSize !== undefined ? decorAny.boxSize : 1.0;
             const halfSize = size / 2;
             const sides: ("N" | "S" | "E" | "W" | "TOP")[] = ["N", "S", "E", "W", "TOP"];
@@ -2085,7 +2153,14 @@ export const renderEntities = ({
                 finalWallSide = "E";
               }
 
-              if (finalMeshWidth === undefined) {
+              if (decorAny.preserveAspect) {
+                const imgObj = rawImg || tintedImg;
+                if (imgObj && imgObj.width && imgObj.height) {
+                  finalMeshWidth = scale * (imgObj.width / imgObj.height);
+                } else if (finalMeshWidth === undefined) {
+                  finalMeshWidth = (finalAxis === "Y") ? scale : 1.0;
+                }
+              } else if (finalMeshWidth === undefined) {
                 finalMeshWidth = (finalAxis === "Y") ? scale : 1.0;
               }
             }
@@ -2920,18 +2995,13 @@ export const renderEntities = ({
       const effectiveLightningIntensity = lightningIntensity * lightningMult;
 
       const isEmissive = 
-        typeof sprite.id === 'string' && (
+        !!sprite.isEmissive ||
+        (typeof sprite.id === 'string' && (
           sprite.id.startsWith('EXPLOSION_') ||
-          sprite.id.includes('explosion') ||
-          sprite.id.includes('fire') ||
-          sprite.id.includes('spark') ||
-          sprite.id.includes('muzzle') ||
-          sprite.id.includes('flash') ||
-          sprite.id.includes('glow') ||
-          sprite.id.includes('molotov') ||
-          sprite.id.includes('laser') ||
-          sprite.id.includes('plasma')
-        );
+          sprite.id.startsWith('FIRE_ANIM_') ||
+          sprite.id.startsWith('MUZZLE_FLASH_') ||
+          sprite.id.startsWith('SPARK_')
+        ));
 
       if (isEmissive && sprite.img) {
         drawSource = sprite.img;
@@ -3312,6 +3382,39 @@ export const renderEntities = ({
     .sort((a, b) => a.dist - b.dist);
 
   for (const sprite of renderSprites) {
+    if (sprite.isPolyObject && sprite.polyModel) {
+      if (isWebGLActive) {
+        // Rendered via WebGL polyProgram pass
+        continue;
+      }
+      drawPolyObjectSoftware(
+        ctx,
+        {
+          baseX: sprite.x,
+          baseY: sprite.y,
+          sFloorHeight: sprite.sFloorHeight || 0,
+          yOffset: sprite.yOffset || 0,
+          scale: sprite.scale,
+          facing: sprite.polyFacing,
+          model: sprite.polyModel,
+          distSq: sprite.dist,
+          isHighlighted: sprite.isHighlighted,
+        },
+        width,
+        height,
+        posX,
+        posY,
+        dirX,
+        dirY,
+        planeX,
+        planeY,
+        horizon,
+        cameraZ,
+        zBuffer
+      );
+      continue;
+    }
+
     if (!sprite.img || sprite.img.width === 0) continue;
 
     if (sprite.isWallAligned) {
@@ -3771,6 +3874,9 @@ export const renderEntities = ({
                 if (ptWalls && ptWalls.length > 0) {
                   for (let i = 0; i < ptWalls.length; i++) {
                     const wall = ptWalls[i];
+                    if (wall.isPolyOccluder && Math.floor(sprite.x) === wall.mapX && Math.floor(sprite.y) === wall.mapY) {
+                      continue;
+                    }
                     if ((wall.isPitWall || wall.isFloorWall) && wall.topZ > 0 && (transformY - wall.dist) < 0.5) {
                       continue;
                     }
@@ -3927,18 +4033,13 @@ export const renderEntities = ({
     const effectiveLightningIntensity = lightningIntensity * lightningMult;
 
     const isEmissive = 
-      typeof sprite.id === 'string' && (
+      !!sprite.isEmissive ||
+      (typeof sprite.id === 'string' && (
         sprite.id.startsWith('EXPLOSION_') ||
-        sprite.id.includes('explosion') ||
-        sprite.id.includes('fire') ||
-        sprite.id.includes('spark') ||
-        sprite.id.includes('muzzle') ||
-        sprite.id.includes('flash') ||
-        sprite.id.includes('glow') ||
-        sprite.id.includes('molotov') ||
-        sprite.id.includes('laser') ||
-        sprite.id.includes('plasma')
-      );
+        sprite.id.startsWith('FIRE_ANIM_') ||
+        sprite.id.startsWith('MUZZLE_FLASH_') ||
+        sprite.id.startsWith('SPARK_')
+      ));
 
     if (isEmissive && sprite.img) {
       drawSource = sprite.img;
@@ -4051,7 +4152,11 @@ export const renderEntities = ({
           }
           const ptWalls = passThroughWalls && passThroughWalls[gridStripe];
           if (ptWalls && ptWalls.length > 0) {
-            if (ptWalls.some(w => transformY > w.dist && !((isCorpse || sprite.isBox) && (w.isPitWall || w.isFloorWall) && w.topZ > 0 && (transformY - w.dist) < 0.5))) {
+            if (ptWalls.some(w => {
+              const isSameTilePoly = w.isPolyOccluder && Math.floor(sprite.x) === w.mapX && Math.floor(sprite.y) === w.mapY;
+              if (isSameTilePoly) return false;
+              return transformY > w.dist && !((isCorpse || sprite.isBox) && (w.isPitWall || w.isFloorWall) && w.topZ > 0 && (transformY - w.dist) < 0.5);
+            })) {
               isFullyUnobstructed = false;
               break;
             }
@@ -4208,12 +4313,20 @@ export const renderEntities = ({
           cachedOccludersInFront =
             isBehindSolid ||
             doors.some((d) => transformY > d.perpWallDist) ||
-            walls.some((w) => transformY > w.dist && !((isCorpse || sprite.isBox) && (w.isPitWall || w.isFloorWall) && w.topZ > 0 && (transformY - w.dist) < 0.5));
+            walls.some((w) => {
+              const isSameTilePoly = w.isPolyOccluder && Math.floor(sprite.x) === w.mapX && Math.floor(sprite.y) === w.mapY;
+              if (isSameTilePoly) return false;
+              return transformY > w.dist && !((isCorpse || sprite.isBox) && (w.isPitWall || w.isFloorWall) && w.topZ > 0 && (transformY - w.dist) < 0.5);
+            });
 
           if (cachedOccludersInFront) {
             // Precalculate wall bounds
             cachedActiveWalls = walls
-              .filter((w) => transformY > w.dist && !((isCorpse || sprite.isBox) && (w.isPitWall || w.isFloorWall) && w.topZ > 0 && (transformY - w.dist) < 0.5))
+              .filter((w) => {
+                const isSameTilePoly = w.isPolyOccluder && Math.floor(sprite.x) === w.mapX && Math.floor(sprite.y) === w.mapY;
+                if (isSameTilePoly) return false;
+                return transformY > w.dist && !((isCorpse || sprite.isBox) && (w.isPitWall || w.isFloorWall) && w.topZ > 0 && (transformY - w.dist) < 0.5);
+              })
               .map((wall) => {
                 const safeDist = Math.max(0.01, wall.dist);
                 const lh = height / safeDist;
@@ -4227,12 +4340,16 @@ export const renderEntities = ({
                 if (isNaN(rawEnd)) rawEnd = height * 2;
                 if (isNaN(rawStart)) rawStart = -height * 2;
 
-                const levelDrawEnd = Math.ceil(
-                  Math.max(-height * 4, Math.min(height * 4, rawEnd)),
-                );
-                const levelDrawStart = Math.floor(
-                  Math.max(-height * 4, Math.min(height * 4, rawStart)),
-                );
+                const levelDrawEnd = (wall as any).wallBottom !== undefined
+                  ? (wall as any).wallBottom
+                  : Math.ceil(
+                      Math.max(-height * 4, Math.min(height * 4, rawEnd)),
+                    );
+                const levelDrawStart = (wall as any).wallTop !== undefined
+                  ? (wall as any).wallTop
+                  : Math.floor(
+                      Math.max(-height * 4, Math.min(height * 4, rawStart)),
+                    );
 
                 let screenCutoutTop = -1;
                 let screenCutoutBot = -1;

@@ -17,11 +17,15 @@ import {
   Sun,
   Box,
   Settings,
-  HelpCircle
+  HelpCircle,
+  RotateCw
 } from "lucide-react";
 import { ASSETS } from "../../assets";
 import soundsData from "../../data/sounds.json";
 import animationsData from "../../data/animations.json";
+import { REGISTERED_POLY_MODELS } from "../../data/polyModels";
+import { PolyObjectIsometricIcon } from "../../utils/polyObjectIsoRenderer";
+import { PolyObjectEditorModal } from "./PolyObjectEditorModal";
 import { CustomSelect } from "./CustomSelect";
 import { AssetPicker } from "./AssetPicker";
 import { CustomColorPicker } from "./CustomColorPicker";
@@ -67,6 +71,7 @@ export const DecorationConstructor: React.FC<DecorationConstructorProps> = ({
   const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
   const [createError, setCreateError] = useState<string>("");
   const [pickingField, setPickingField] = useState<string | null>(null);
+  const [showPolyEditor, setShowPolyEditor] = useState<boolean>(false);
 
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -297,7 +302,7 @@ export const DecorationConstructor: React.FC<DecorationConstructorProps> = ({
     }
   };
 
-  const soundOptions = useMemo(() => Object.keys(soundsData), []);
+  const soundOptions = useMemo(() => Object.keys(soundsData).filter(key => !(soundsData as any)[key]?.alias), []);
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full min-h-0 text-gray-200 max-w-full overflow-x-hidden">
@@ -394,6 +399,15 @@ export const DecorationConstructor: React.FC<DecorationConstructorProps> = ({
                     : "bg-gray-900/40 border-transparent text-gray-400 hover:bg-gray-900/80 hover:text-gray-200"
                 }`}
               >
+                <div className="w-7 h-7 shrink-0 bg-gray-950 border border-gray-800 rounded flex items-center justify-center overflow-hidden mr-2">
+                  {deco?.renderMode === "polyObject" || deco?.polyModelId || (deco as any)?.polyModel || (deco as any)?.cubes ? (
+                    <PolyObjectIsometricIcon modelId={deco.polyModelId || id} model={(deco as any)?.polyModel || ((deco as any)?.cubes ? { id, name: deco.name || id, cubes: (deco as any).cubes } : undefined)} yRotation={deco?.yRotation} className="w-full h-full object-contain" />
+                  ) : getAssetPreviewUrl(deco?.assetId) ? (
+                    <img src={getAssetPreviewUrl(deco.assetId)} className="max-w-full max-h-full object-contain pixelated" alt="" />
+                  ) : (
+                    <span className="text-[8px] text-gray-600 font-mono">SPR</span>
+                  )}
+                </div>
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="text-xs font-bold truncate">{labelName}</span>
                   <span className="text-[10px] opacity-60 font-mono truncate">{id}</span>
@@ -488,7 +502,9 @@ export const DecorationConstructor: React.FC<DecorationConstructorProps> = ({
                 <div className="bg-gray-900/40 border border-gray-850 p-2.5 rounded-lg flex flex-col gap-2">
                   <div className="flex items-center gap-3">
                     <div className="w-16 h-16 bg-gray-950 rounded border border-gray-800 flex items-center justify-center overflow-hidden shrink-0">
-                      {getAssetPreviewUrl(activeDeco.assetId) ? (
+                      {activeDeco.renderMode === "polyObject" || activeDeco.polyModelId || (activeDeco as any)?.polyModel || (activeDeco as any)?.cubes ? (
+                        <PolyObjectIsometricIcon modelId={activeDeco.polyModelId || activeDeco.id} model={(activeDeco as any)?.polyModel || ((activeDeco as any)?.cubes ? { id: activeDeco.id, name: activeDeco.name || activeDeco.id, cubes: (activeDeco as any).cubes } : undefined)} yRotation={activeDeco?.yRotation} className="w-full h-full object-contain p-1" />
+                      ) : getAssetPreviewUrl(activeDeco.assetId) ? (
                         <img
                           src={getAssetPreviewUrl(activeDeco.assetId)}
                           alt="preview"
@@ -534,6 +550,34 @@ export const DecorationConstructor: React.FC<DecorationConstructorProps> = ({
                         className="bg-gray-900 border border-gray-800 rounded px-2 py-1 text-xs text-white"
                         placeholder="0.0"
                       />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-800/50">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 mb-0.5">Ориентация спрайта (spriteFacing)</span>
+                      <CustomSelect
+                        value={activeDeco.spriteFacing || "right"}
+                        onChange={(e) => updateField("spriteFacing", e.target.value)}
+                        className="text-xs h-7"
+                      >
+                        <option value="right">Вправо (right)</option>
+                        <option value="left">Влево (left)</option>
+                      </CustomSelect>
+                    </div>
+                    <div className="flex flex-col justify-end">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-300 py-1">
+                        <input
+                          type="checkbox"
+                          checked={activeDeco.autoMirror === true}
+                          onChange={(e) => {
+                            if (e.target.checked) updateField("autoMirror", true);
+                            else removeField("autoMirror");
+                          }}
+                          className="w-3.5 h-3.5 accent-indigo-600 rounded bg-gray-900"
+                        />
+                        <span><strong>Авто-отзеркаливание (autoMirror)</strong></span>
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -584,9 +628,26 @@ export const DecorationConstructor: React.FC<DecorationConstructorProps> = ({
                       <span className="block text-[10px] text-gray-500">Отображать поверх существ и игрока</span>
                     </label>
                   </div>
-                </div>
+
+                  <div className="flex items-center gap-2 py-1 border-t border-gray-800/40">
+                    <input
+                      type="checkbox"
+                      id="isMirrored"
+                      checked={activeDeco.isMirrored === true}
+                      onChange={(e) => {
+                        if (e.target.checked) updateField("isMirrored", true);
+                        else removeField("isMirrored");
+                      }}
+                      className="w-4 h-4 accent-indigo-600 rounded bg-gray-900 cursor-pointer"
+                    />
+                    <label htmlFor="isMirrored" className="text-xs text-gray-300 cursor-pointer">
+                      <strong>Принудительно отзеркален (isMirrored)</strong>
+                      <span className="block text-[10px] text-gray-500">Всегда отражать спрайт по горизонтали</span>
+                    </label>
+                  </div>
               </div>
             </div>
+          </div>
 
             {/* Section: Roles */}
             <div>
@@ -815,6 +876,226 @@ export const DecorationConstructor: React.FC<DecorationConstructorProps> = ({
                   )}
                 </div>
 
+                {/* Панель пароля (KEYPAD) */}
+                <div className="bg-gray-900/40 border border-gray-850 p-2 rounded-lg flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="isKeypadType"
+                      checked={activeDeco.type === "KEYPAD"}
+                      onChange={(e) => {
+                        if (e.target.checked) updateField("type", "KEYPAD");
+                        else {
+                          removeField("type");
+                          removeField("targetId");
+                          removeField("password");
+                          removeField("sounds");
+                        }
+                      }}
+                      className="w-3.5 h-3.5 accent-indigo-600 rounded bg-gray-900 cursor-pointer"
+                    />
+                    <label htmlFor="isKeypadType" className="text-xs font-bold text-gray-300 cursor-pointer">Панель пароля (KEYPAD)</label>
+                  </div>
+                  <span className="text-[10px] text-gray-500 mt-1">Активирует ввод электронного пароля для разблокировки двери.</span>
+
+                  {activeDeco.type === "KEYPAD" && (
+                    <div className="flex flex-col mt-2 pt-2 border-t border-gray-800/40 gap-2">
+                      <div>
+                        <label className="text-[10px] text-gray-400 mb-1 block">Ассет панели (panelAsset)</label>
+                        <div className="flex items-center gap-2">
+                          <div className="w-9 h-9 bg-gray-950 rounded border border-gray-800 flex items-center justify-center overflow-hidden shrink-0">
+                            {getAssetPreviewUrl(activeDeco.panelAsset) ? (
+                              <img
+                                src={getAssetPreviewUrl(activeDeco.panelAsset)}
+                                alt="panel preview"
+                                className="max-w-full max-h-full object-contain pixelated"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <span className="text-[8px] text-gray-600">—</span>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            value={activeDeco.panelAsset || ""}
+                            onChange={(e) => {
+                              if (e.target.value) updateField("panelAsset", e.target.value);
+                              else removeField("panelAsset");
+                            }}
+                            placeholder="KEYPAD"
+                            className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setPickingField("panelAsset")}
+                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded shrink-0 uppercase"
+                          >
+                            Выбрать
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-gray-400 mb-1 block">Ассет маски (panelMaskAsset)</label>
+                        <div className="flex items-center gap-2">
+                          <div className="w-9 h-9 bg-gray-950 rounded border border-gray-800 flex items-center justify-center overflow-hidden shrink-0">
+                            {getAssetPreviewUrl(activeDeco.panelMaskAsset) ? (
+                              <img
+                                src={getAssetPreviewUrl(activeDeco.panelMaskAsset)}
+                                alt="mask preview"
+                                className="max-w-full max-h-full object-contain pixelated"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <span className="text-[8px] text-gray-600">—</span>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            value={activeDeco.panelMaskAsset || ""}
+                            onChange={(e) => {
+                              if (e.target.value) updateField("panelMaskAsset", e.target.value);
+                              else removeField("panelMaskAsset");
+                            }}
+                            placeholder="KEYPAD_MASK"
+                            className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setPickingField("panelMaskAsset")}
+                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded shrink-0 uppercase"
+                          >
+                            Выбрать
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-gray-400 mb-1 block">Направление взаимодействия (panelPlacedAt)</label>
+                        <CustomSelect
+                          value={activeDeco.panelPlacedAt || "N"}
+                          onChange={(e) => updateField("panelPlacedAt", e.target.value)}
+                          className="w-full text-xs"
+                        >
+                          <option value="N">Север (N)</option>
+                          <option value="E">Восток (E)</option>
+                          <option value="S">Юг (S)</option>
+                          <option value="W">Запад (W)</option>
+                        </CustomSelect>
+                        <span className="text-[9px] text-gray-500 block mt-0.5">Стороны света: игрок стоит на тайле и смотрит в эту сторону.</span>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-gray-400 mb-1 block">ID целевой двери (targetId)</label>
+                        <input
+                          type="text"
+                          value={activeDeco.targetId || ""}
+                          onChange={(e) => {
+                            if (e.target.value) updateField("targetId", e.target.value);
+                            else removeField("targetId");
+                          }}
+                          placeholder="door_1"
+                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-gray-400 mb-1 block">Пароль доступа (password)</label>
+                        <input
+                          type="text"
+                          value={activeDeco.password || ""}
+                          onChange={(e) => {
+                            if (e.target.value) updateField("password", e.target.value);
+                            else removeField("password");
+                          }}
+                          placeholder="1234"
+                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-gray-400 mb-1 block">Звуки панели (sounds: [кнопка, успех, ошибка])</label>
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] text-gray-400 w-14 shrink-0">Кнопка:</span>
+                            <CustomSelect
+                              value={activeDeco.sounds?.[0] || "KEYPAD_BUTTON"}
+                              onChange={(e) => {
+                                const s0 = e.target.value;
+                                const s1 = activeDeco.sounds?.[1] || "KEYPAD_SUCCESS";
+                                const s2 = activeDeco.sounds?.[2] || "KEYPAD_FAILED";
+                                updateField("sounds", [s0, s1, s2]);
+                              }}
+                              className="flex-1 text-[11px]"
+                            >
+                              {soundOptions.map(id => (
+                                <option key={id} value={id}>{id}</option>
+                              ))}
+                            </CustomSelect>
+                            <button
+                              onClick={() => playSound(activeDeco.sounds?.[0] || "KEYPAD_BUTTON")}
+                              className="p-1 bg-gray-900 border border-gray-700 hover:border-gray-500 rounded text-indigo-400 hover:text-indigo-300"
+                              type="button"
+                            >
+                              <Volume2 size={12} />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] text-gray-400 w-14 shrink-0">Успех:</span>
+                            <CustomSelect
+                              value={activeDeco.sounds?.[1] || "KEYPAD_SUCCESS"}
+                              onChange={(e) => {
+                                const s0 = activeDeco.sounds?.[0] || "KEYPAD_BUTTON";
+                                const s1 = e.target.value;
+                                const s2 = activeDeco.sounds?.[2] || "KEYPAD_FAILED";
+                                updateField("sounds", [s0, s1, s2]);
+                              }}
+                              className="flex-1 text-[11px]"
+                            >
+                              {soundOptions.map(id => (
+                                <option key={id} value={id}>{id}</option>
+                              ))}
+                            </CustomSelect>
+                            <button
+                              onClick={() => playSound(activeDeco.sounds?.[1] || "KEYPAD_SUCCESS")}
+                              className="p-1 bg-gray-900 border border-gray-700 hover:border-gray-500 rounded text-indigo-400 hover:text-indigo-300"
+                              type="button"
+                            >
+                              <Volume2 size={12} />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] text-gray-400 w-14 shrink-0">Ошибка:</span>
+                            <CustomSelect
+                              value={activeDeco.sounds?.[2] || "KEYPAD_FAILED"}
+                              onChange={(e) => {
+                                const s0 = activeDeco.sounds?.[0] || "KEYPAD_BUTTON";
+                                const s1 = activeDeco.sounds?.[1] || "KEYPAD_SUCCESS";
+                                const s2 = e.target.value;
+                                updateField("sounds", [s0, s1, s2]);
+                              }}
+                              className="flex-1 text-[11px]"
+                            >
+                              {soundOptions.map(id => (
+                                <option key={id} value={id}>{id}</option>
+                              ))}
+                            </CustomSelect>
+                            <button
+                              onClick={() => playSound(activeDeco.sounds?.[2] || "KEYPAD_FAILED")}
+                              className="p-1 bg-gray-900 border border-gray-700 hover:border-gray-500 rounded text-indigo-400 hover:text-indigo-300"
+                              type="button"
+                            >
+                              <Volume2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* No Shadow (noShadow) */}
                 <div className="bg-gray-900/40 border border-gray-850 p-2 rounded-lg flex flex-col">
                   <div className="flex items-center gap-2">
@@ -840,28 +1121,74 @@ export const DecorationConstructor: React.FC<DecorationConstructorProps> = ({
               <h3 className="text-xs font-bold text-indigo-400 flex items-center gap-1.5 mb-2 uppercase tracking-wide">
                 <Layers size={14} /> Рендеринг в качестве Плоского Меша
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="flex flex-col">
                   <label className="text-[11px] text-gray-400 mb-1">Режим рендеринга (renderMode)</label>
                   <CustomSelect
                     value={activeDeco.renderMode || ""}
                     onChange={(e) => {
-                      if (e.target.value === "mesh") {
+                      const val = e.target.value;
+                      if (val === "mesh") {
                         updateMultipleFields({
                           renderMode: "mesh",
                           meshAxis: "NS",
                           meshOffset: 0.5
-                        });
+                        }, ["polyModelId"]);
+                      } else if (val === "polyObject") {
+                        updateMultipleFields({
+                          renderMode: "polyObject",
+                          polyModelId: activeDeco.polyModelId || Object.keys(REGISTERED_POLY_MODELS)[0] || "chair"
+                        }, ["meshAxis", "meshOffset", "meshWidth", "preserveAspect"]);
                       } else {
-                        updateMultipleFields({}, ["renderMode", "meshAxis", "meshOffset"]);
+                        updateMultipleFields({}, ["renderMode", "meshAxis", "meshOffset", "meshWidth", "preserveAspect", "polyModelId"]);
                       }
                     }}
                     className="w-full text-xs"
                   >
                     <option value="">Спрайт (Биллборд)</option>
                     <option value="mesh">Плоский Меш Стены (mesh)</option>
+                    <option value="polyObject">3D Полигональный Объект (polyObject)</option>
                   </CustomSelect>
                 </div>
+
+                {activeDeco.renderMode === "polyObject" && (
+                  <>
+                    <div className="flex flex-col">
+                      <label className="text-[11px] text-gray-400 mb-1">Модель 3D (polyModelId)</label>
+                      <div className="flex gap-1.5">
+                        <CustomSelect
+                          value={activeDeco.polyModelId || "chair"}
+                          onChange={(e) => updateField("polyModelId", e.target.value)}
+                          className="flex-1 text-xs"
+                        >
+                          {Object.keys(REGISTERED_POLY_MODELS).map((modelId) => (
+                            <option key={modelId} value={modelId}>
+                              {REGISTERED_POLY_MODELS[modelId]?.name || modelId} ({modelId})
+                            </option>
+                          ))}
+                        </CustomSelect>
+                        <button
+                          type="button"
+                          onClick={() => setShowPolyEditor(true)}
+                          className="bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs px-2.5 py-1 rounded flex items-center gap-1 shrink-0 border border-gray-600 active:scale-95 transition-transform"
+                        >
+                          <Box size={14} /> 3D Редактор
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col">
+                      <label className="text-[11px] text-gray-400 mb-1">Поворот по Y (yRotation)</label>
+                      <input
+                        type="text"
+                        value={activeDeco.yRotation ?? ""}
+                        onChange={(e) => handleNumInput("yRotation", e.target.value, true)}
+                        className="bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-xs text-white"
+                        placeholder="0"
+                      />
+                    </div>
+                  </>
+                )}
 
                 {activeDeco.renderMode === "mesh" && (
                   <>
@@ -888,9 +1215,38 @@ export const DecorationConstructor: React.FC<DecorationConstructorProps> = ({
                         placeholder="0.5"
                       />
                     </div>
+
+                    <div className="flex flex-col">
+                      <label className="text-[11px] text-gray-400 mb-1">Ширина меша (meshWidth)</label>
+                      <input
+                        type="text"
+                        value={activeDeco.meshWidth ?? ""}
+                        onChange={(e) => handleNumInput("meshWidth", e.target.value, true)}
+                        className="bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-xs text-white"
+                        placeholder={activeDeco.preserveAspect ? "Из пропорций" : "1.0"}
+                      />
+                    </div>
                   </>
                 )}
               </div>
+
+              {activeDeco.renderMode === "mesh" && (
+                <div className="mt-3 pt-2.5 border-t border-gray-800/60 flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    id="preserveAspect"
+                    checked={activeDeco.preserveAspect === true}
+                    onChange={(e) => updateField("preserveAspect", e.target.checked)}
+                    className="mt-0.5 rounded bg-gray-900 border-gray-800 text-indigo-600 focus:ring-indigo-500 h-4 w-4 shrink-0"
+                  />
+                  <label htmlFor="preserveAspect" className="text-xs text-gray-300 cursor-pointer select-none">
+                    <span className="font-semibold text-indigo-300">Сохранять пропорции спрайта (preserveAspect)</span>
+                    <span className="block text-[10px] text-gray-400 mt-0.5 leading-snug">
+                      Автоматически рассчитывает ширину меша исходя из реального соотношения сторон текстуры (ширина/высота * scale), вместо принудительного растягивания на всю ширину клетки (1.0).
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
 
             {/* Section: Destructible Property */}
@@ -1407,6 +1763,13 @@ export const DecorationConstructor: React.FC<DecorationConstructorProps> = ({
           </div>
         )}
       </div>
+
+      <PolyObjectEditorModal
+        isOpen={showPolyEditor}
+        onClose={() => setShowPolyEditor(false)}
+        initialModelId={activeDeco?.polyModelId || "chair"}
+        onSelectModel={(mId) => updateField("polyModelId", mId)}
+      />
     </div>
   );
 };

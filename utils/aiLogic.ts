@@ -35,7 +35,7 @@ const isValidTile = (x: number, y: number, grid: Tile[][], width: number, height
     if (tile.type === 'DOOR' && tile.door?.state !== 'OPEN') {
         if (!canOpenDoors || tile.door?.isLocked || tile.door?.closed || tile.door?.keyId) return false;
     }
-    if (tile.decoration && tile.decoration.blocking) return false;
+    if (tile.decorations && tile.decorations.length > 0 ? tile.decorations.some((d: any) => d.blocking) : (tile.decoration && tile.decoration.blocking)) return false;
     if (tile.items && tile.items.some((i: any) => i.blocking)) return false;
     
     // Check other entities: if tile has an enemy, it's blocked.
@@ -104,7 +104,8 @@ export const findPath = (
     const targetTile = grid[endY][endX];
     
     // Strict check for target validity. 
-    if ((targetTile.type === 'WALL' && targetTile.blocking !== false) || targetTile.decoration?.blocking) return [];
+    const isTargetDecoBlocking = targetTile.decorations && targetTile.decorations.length > 0 ? targetTile.decorations.some((d: any) => d.blocking) : !!targetTile.decoration?.blocking;
+    if ((targetTile.type === 'WALL' && targetTile.blocking !== false) || isTargetDecoBlocking) return [];
     // Enemies cannot path to a closed door tile as a destination unless they can open doors
     if (targetTile.type === 'DOOR' && targetTile.door?.state !== 'OPEN') {
         if (!canOpenDoors || targetTile.door?.isLocked || targetTile.door?.closed || targetTile.door?.keyId) return [];
@@ -214,7 +215,7 @@ export const findPath = (
             if (tile.type === 'DOOR' && tile.door?.state !== 'OPEN') {
                 if (!canOpenDoors || tile.door?.isLocked || tile.door?.closed || tile.door?.keyId) continue;
             }
-            if (tile.decoration && tile.decoration.blocking) continue;
+            if (tile.decorations && tile.decorations.length > 0 ? tile.decorations.some((d: any) => d.blocking) : (tile.decoration && tile.decoration.blocking)) continue;
             if (tile.items && tile.items.some((i: any) => i.blocking)) continue;
 
             let penalty = 0;
@@ -225,17 +226,17 @@ export const findPath = (
             // Allow stepping onto the player tile ONLY if it is the final destination (to get adjacent for attack)
             if (isPlayer) {
                 if (nx !== endX || ny !== endY) {
-                    penalty += 10;
+                    penalty += 50; // High penalty so pathfinder actively routes around player
                 }
             }
 
-            // Dynamic obstacle check (other enemies)
+            // Dynamic obstacle check (other enemies / entities)
             // Generate string key only when there's an active entity on the tile to avoid unnecessary allocations
             if (hasEnemy && ignoredCoords && ignoredCoords.size > 0) {
                 if (nx !== endX || ny !== endY) {
                     const key = `${nx},${ny}`;
                     if (ignoredCoords.has(key)) {
-                        penalty += 5; // Pathing through an occupied tile costs 5 extra steps!
+                        penalty += 50; // High penalty so pathfinder actively routes around occupied tiles
                     }
                 }
             }
@@ -286,7 +287,8 @@ export const getPatrolTarget = (
         // Basic validity check
         if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
              const tile = grid[ty][tx];
-             if (tile.type !== 'WALL' && (!tile.decoration || !tile.decoration.blocking) && !(tile.items && tile.items.some((i: any) => i.blocking)) && !(tile.type === 'DOOR' && tile.door?.state !== 'OPEN')) {
+             const isDecoBlocking = tile.decorations && tile.decorations.length > 0 ? tile.decorations.some((d: any) => d.blocking) : !!tile.decoration?.blocking;
+             if (tile.type !== 'WALL' && !isDecoBlocking && !(tile.items && tile.items.some((i: any) => i.blocking)) && !(tile.type === 'DOOR' && tile.door?.state !== 'OPEN')) {
                  return { x: tx, y: ty };
              }
         }
@@ -307,7 +309,8 @@ export const getRoamingTarget = (
         
         if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
              const tile = grid[ty][tx];
-             if (tile.type !== 'WALL' && (!tile.decoration || !tile.decoration.blocking) && !(tile.items && tile.items.some((i: any) => i.blocking)) && !(tile.type === 'DOOR' && tile.door?.state !== 'OPEN')) {
+             const isDecoBlocking = tile.decorations && tile.decorations.length > 0 ? tile.decorations.some((d: any) => d.blocking) : !!tile.decoration?.blocking;
+             if (tile.type !== 'WALL' && !isDecoBlocking && !(tile.items && tile.items.some((i: any) => i.blocking)) && !(tile.type === 'DOOR' && tile.door?.state !== 'OPEN')) {
                  return { x: tx, y: ty };
              }
         }

@@ -9,8 +9,10 @@ interface WeaponHandsProps {
     consoleContainerRef?: React.RefObject<HTMLDivElement | null>;
     mainHandImgRef: React.RefObject<HTMLImageElement | null>;
     mainHandImgShadowRef: React.RefObject<HTMLImageElement | null>;
+    mainMuzzleImgRef?: React.RefObject<HTMLImageElement | null>;
     akimboHandImgRef: React.RefObject<HTMLImageElement | null>;
     akimboHandImgShadowRef: React.RefObject<HTMLImageElement | null>;
+    akimboMuzzleImgRef?: React.RefObject<HTMLImageElement | null>;
     akimboHandSprite: any;
     currentHandSprite: any;
     akimboHandStyleFinal: any;
@@ -38,8 +40,10 @@ const WeaponHands: React.FC<WeaponHandsProps> = ({
     consoleContainerRef,
     mainHandImgRef,
     mainHandImgShadowRef,
+    mainMuzzleImgRef,
     akimboHandImgRef,
     akimboHandImgShadowRef,
+    akimboMuzzleImgRef,
     akimboHandSprite,
     currentHandSprite,
     akimboHandStyleFinal,
@@ -61,6 +65,8 @@ const WeaponHands: React.FC<WeaponHandsProps> = ({
     const mainColorMatrixRef = React.useRef<SVGFEColorMatrixElement | null>(null);
     const akimboColorMatrixRef = React.useRef<SVGFEColorMatrixElement | null>(null);
     const flashIntensityRef = React.useRef<number>(0);
+    const mainHandTintWrapperRef = React.useRef<HTMLDivElement | null>(null);
+    const akimboHandTintWrapperRef = React.useRef<HTMLDivElement | null>(null);
 
     // Warm-up and pre-render cache for attack animation frames in GPU memory
     const preloadedFrameUrls = React.useMemo(() => {
@@ -89,6 +95,16 @@ const WeaponHands: React.FC<WeaponHandsProps> = ({
                     }
                 }
             }
+
+            const muzzleAssetId = weapon.muzzleAsset || (weapon as any).muzzleAssetId;
+            const muzzleFemaleAssetId = weapon.muzzleFemaleAsset || (weapon as any).muzzleFemaleAssetId;
+            const muzzleAssetToUse = (characterId === 'female' && muzzleFemaleAssetId) ? muzzleFemaleAssetId : muzzleAssetId;
+            if (muzzleAssetToUse) {
+                const img = spriteMap.get(muzzleAssetToUse);
+                if (img && img.src) {
+                    urls.add(img.src);
+                }
+            }
         };
 
         processWeapon(displayedWeapon);
@@ -114,10 +130,14 @@ const WeaponHands: React.FC<WeaponHandsProps> = ({
             const filterBase = 'brightness(1) sepia(0) hue-rotate(0deg) saturate(1)';
             const cssFilter = isFlashing ? flashFilter : filterBase;
             
-            if (mainHandContainerRef.current) {
+            if (mainHandTintWrapperRef.current) {
+                mainHandTintWrapperRef.current.style.filter = `${cssFilter} url(#${mainTintId})`;
+                mainHandTintWrapperRef.current.style.transition = isFlashing ? 'none' : 'filter 0.3s ease-out';
+            } else if (mainHandContainerRef.current) {
                 mainHandContainerRef.current.style.filter = `${cssFilter} url(#${mainTintId})`;
                 mainHandContainerRef.current.style.transition = isFlashing ? 'none' : 'filter 0.3s ease-out';
             }
+
             if (mapContainerRef?.current) {
                 mapContainerRef.current.style.filter = `${cssFilter} url(#${mainTintId})`;
                 mapContainerRef.current.style.transition = isFlashing ? 'none' : 'filter 0.3s ease-out';
@@ -126,7 +146,11 @@ const WeaponHands: React.FC<WeaponHandsProps> = ({
                 consoleContainerRef.current.style.filter = `${cssFilter} url(#${mainTintId})`;
                 consoleContainerRef.current.style.transition = isFlashing ? 'none' : 'filter 0.3s ease-out';
             }
-            if (akimboHandContainerRef.current) {
+
+            if (akimboHandTintWrapperRef.current) {
+                akimboHandTintWrapperRef.current.style.filter = `${cssFilter} url(#${akimboTintId})`;
+                akimboHandTintWrapperRef.current.style.transition = isFlashing ? 'none' : 'filter 0.3s ease-out';
+            } else if (akimboHandContainerRef.current) {
                 akimboHandContainerRef.current.style.filter = `${cssFilter} url(#${akimboTintId})`;
                 akimboHandContainerRef.current.style.transition = isFlashing ? 'none' : 'filter 0.3s ease-out';
             }
@@ -164,16 +188,22 @@ const WeaponHands: React.FC<WeaponHandsProps> = ({
             {showWeaponHand && akimboHandSprite && (
                 <div ref={akimboHandContainerRef} className="absolute bottom-0 left-0 z-[15] pointer-events-none h-[60%] w-auto flex flex-col justify-end items-start" style={akimboHandStyleFinal}>
                     <div className="relative h-full w-auto origin-bottom-left" style={{ transform: akimboBrokenTransform, transition: brokenTransition }}>
-                        <img ref={akimboHandImgShadowRef} src={akimboHandSprite.src} draggable={false} crossOrigin="anonymous" className="absolute h-full w-auto object-contain object-left-bottom opacity-40" alt="" style={{ imageRendering: 'pixelated', filter: 'brightness(0) blur(4px)', transform: 'scaleX(-1) translate(-4%, 4%)' }} />
-                        <img ref={akimboHandImgRef} src={akimboHandSprite.src} draggable={false} crossOrigin="anonymous" className="relative h-full w-auto object-contain object-left-bottom" alt="Akimbo Weapon Hand" style={{ imageRendering: 'pixelated', transform: 'scaleX(-1)' }} />
+                        <div ref={akimboHandTintWrapperRef} className="relative h-full w-auto pointer-events-none">
+                            <img ref={akimboHandImgShadowRef} src={akimboHandSprite.src} draggable={false} crossOrigin="anonymous" className="absolute h-full w-auto object-contain object-left-bottom opacity-40" alt="" style={{ imageRendering: 'pixelated', filter: 'brightness(0) blur(4px)', transform: 'scaleX(-1) translate(-4%, 4%)' }} />
+                            <img ref={akimboHandImgRef} src={akimboHandSprite.src} draggable={false} crossOrigin="anonymous" className="relative h-full w-auto object-contain object-left-bottom" alt="Akimbo Weapon Hand" style={{ imageRendering: 'pixelated', transform: 'scaleX(-1)' }} />
+                        </div>
+                        <img ref={akimboMuzzleImgRef} draggable={false} crossOrigin="anonymous" className="absolute inset-0 h-full w-auto object-contain object-left-bottom pointer-events-none z-[16]" alt="Akimbo Muzzle Flash" style={{ imageRendering: 'pixelated', transform: 'scaleX(-1)', display: 'none' }} />
                     </div>
                 </div>
             )}
             {showWeaponHand && currentHandSprite && (
                 <div ref={mainHandContainerRef} className="absolute bottom-0 right-0 z-[15] pointer-events-none h-[60%] w-auto flex flex-col justify-end items-end" style={handStyleFinal}>
                     <div className="relative h-full w-auto origin-bottom-right" style={{ transform: brokenTransform, transition: brokenTransition }}>
-                        <img ref={mainHandImgShadowRef} src={currentHandSprite.src} draggable={false} crossOrigin="anonymous" className="absolute h-full w-auto object-contain object-right-bottom opacity-40" alt="" style={{ imageRendering: 'pixelated', filter: 'brightness(0) blur(4px)', transform: 'translate(4%, 4%)' }} />
-                        <img ref={mainHandImgRef} src={currentHandSprite.src} draggable={false} crossOrigin="anonymous" className="relative h-full w-auto object-contain object-right-bottom" alt="Weapon Hand" style={{ imageRendering: 'pixelated' }} />
+                        <div ref={mainHandTintWrapperRef} className="relative h-full w-auto pointer-events-none">
+                            <img ref={mainHandImgShadowRef} src={currentHandSprite.src} draggable={false} crossOrigin="anonymous" className="absolute h-full w-auto object-contain object-right-bottom opacity-40" alt="" style={{ imageRendering: 'pixelated', filter: 'brightness(0) blur(4px)', transform: 'translate(4%, 4%)' }} />
+                            <img ref={mainHandImgRef} src={currentHandSprite.src} draggable={false} crossOrigin="anonymous" className="relative h-full w-auto object-contain object-right-bottom" alt="Weapon Hand" style={{ imageRendering: 'pixelated' }} />
+                        </div>
+                        <img ref={mainMuzzleImgRef} draggable={false} crossOrigin="anonymous" className="absolute inset-0 h-full w-auto object-contain object-right-bottom pointer-events-none z-[16]" alt="Muzzle Flash" style={{ imageRendering: 'pixelated', display: 'none' }} />
                     </div>
                 </div>
             )}

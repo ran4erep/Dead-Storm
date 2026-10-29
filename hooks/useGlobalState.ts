@@ -42,7 +42,55 @@ export function useGlobalState() {
     const [showDebug, setShowDebug] = useState(false); 
     const [showVolume, setShowVolume] = useState(false);
     const [lootData, setLootData] = useState<{ items: Item[], x: number, y: number, isContainer?: boolean, containerItem?: Item } | null>(null);
-    const [enemies, setEnemies] = useState<Map<string, Enemy>>(new Map());
+    const runtimeEnemiesRef = useRef<Map<string, Enemy>>(new Map());
+    const [enemiesSnapshot, setEnemiesSnapshot] = useState<Map<string, Enemy>>(new Map());
+
+    const syncEnemiesSnapshot = useCallback(() => {
+        setEnemiesSnapshot(new Map(runtimeEnemiesRef.current));
+    }, []);
+
+    const setEnemies = useCallback((
+        action: Map<string, Enemy> | ((prev: Map<string, Enemy>) => Map<string, Enemy>),
+        updateSnapshot?: boolean
+    ) => {
+        const prev = runtimeEnemiesRef.current;
+        let next: Map<string, Enemy>;
+        if (typeof action === 'function') {
+            next = action(prev);
+        } else {
+            next = action;
+        }
+        runtimeEnemiesRef.current = next;
+
+        let hasPropChange = prev.size !== next.size;
+        if (!hasPropChange) {
+            for (const [id, enemy] of next) {
+                const prevEnemy = prev.get(id);
+                if (
+                    !prevEnemy ||
+                    prevEnemy !== enemy ||
+                    prevEnemy.hp !== enemy.hp ||
+                    prevEnemy.maxHp !== enemy.maxHp ||
+                    prevEnemy.aiState !== enemy.aiState ||
+                    prevEnemy.brokenArmor?.length !== enemy.brokenArmor?.length
+                ) {
+                    hasPropChange = true;
+                    break;
+                }
+            }
+        }
+
+        const shouldUpdate = updateSnapshot || hasPropChange;
+
+        if (shouldUpdate) {
+            setEnemiesSnapshot(new Map(next));
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('raycaster-look'));
+        }
+    }, []);
+
     const enemyFlashesRef = useRef<{x: number, y: number, startTime: number, id: number, intensity?: number, duration?: number, isFlashbang?: boolean}[]>([]);
     const [playerDamageSource, setPlayerDamageSource] = useState<{x: number, y: number, id: string} | null>(null);
     const explosionsRef = useRef<{id: string, x: number, y: number, assetId: string, startTime: number}[]>([]);
@@ -56,10 +104,47 @@ export function useGlobalState() {
     const inventorySysRef = useRef<any>(null);
     const raycasterRef = useRef<any>(null);
     const activeExplosionsRef = useRef<number>(0);
-    const [roamingAnims, setRoamingAnims] = useState<RoamingEnemyAnim[]>([]);
-    const [boxMoveAnims, setBoxMoveAnims] = useState<{id: string, startX: number, startY: number, endX: number, endY: number, startTime: number}[]>([]);
+    const roamingAnimsRef = useRef<RoamingEnemyAnim[]>([]);
+    const setRoamingAnims = useCallback((anims: RoamingEnemyAnim[] | ((prev: RoamingEnemyAnim[]) => RoamingEnemyAnim[])) => {
+        roamingAnimsRef.current = typeof anims === 'function' ? anims(roamingAnimsRef.current) : anims;
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('raycaster-look'));
+    }, []);
+
+    const boxMoveAnimsRef = useRef<{id: string, startX: number, startY: number, endX: number, endY: number, startTime: number}[]>([]);
+    const setBoxMoveAnims = useCallback((anims: any[] | ((prev: any[]) => any[])) => {
+        boxMoveAnimsRef.current = typeof anims === 'function' ? anims(boxMoveAnimsRef.current) : anims;
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('raycaster-look'));
+    }, []);
+
+    const pickupAnimRef = useRef<{ item: Item, startTime: number, x: number, y: number, reverse?: boolean } | null>(null);
+    const setPickupAnim = useCallback((anim: any | ((prev: any) => any)) => {
+        pickupAnimRef.current = typeof anim === 'function' ? anim(pickupAnimRef.current) : anim;
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('raycaster-look'));
+    }, []);
+
+    const throwAnimRef = useRef<{ item: Item, startTime: number, x: number, y: number } | null>(null);
+    const setThrowAnim = useCallback((anim: any | ((prev: any) => any)) => {
+        throwAnimRef.current = typeof anim === 'function' ? anim(throwAnimRef.current) : anim;
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('raycaster-look'));
+    }, []);
+
     const [cinematicMode, setCinematicMode] = useState<boolean>(false);
-    const [cinematicCamera, setCinematicCamera] = useState<{ x: number, y: number, dir: number, pitch?: number, zoom?: number, floor?: number } | null>(null);
+    const cinematicCameraRef = useRef<{ x: number, y: number, dir: number, pitch?: number, zoom?: number, floor?: number } | null>(null);
+    const [cinematicCameraState, setCinematicCameraState] = useState<{ x: number, y: number, dir: number, pitch?: number, zoom?: number, floor?: number } | null>(null);
+
+    const setCinematicCamera = useCallback((
+        cam: { x: number, y: number, dir: number, pitch?: number, zoom?: number, floor?: number } | null | ((prev: any) => any),
+        updateUIState?: boolean
+    ) => {
+        const next = typeof cam === 'function' ? cam(cinematicCameraRef.current) : cam;
+        cinematicCameraRef.current = next;
+        if (updateUIState || next === null || (cinematicCameraState === null && next !== null)) {
+            setCinematicCameraState(next);
+        }
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('raycaster-look'));
+        }
+    }, [cinematicCameraState]);
 
     const { raycasterWidth, raycasterHeight, resolutionDivisor } = useMemo(() => {
         if (gameState === GameState.MAP_VIEW) {
@@ -108,9 +193,7 @@ export function useGlobalState() {
     const weaponRef = useRef<Item | null>(null);
     const akimboWeaponRef = useRef<Item | null>(null);
 
-    // Animation states
-    const [pickupAnim, setPickupAnim] = useState<{ item: Item, startTime: number, x: number, y: number, reverse?: boolean } | null>(null);
-    const [throwAnim, setThrowAnim] = useState<{ item: Item, startTime: number, x: number, y: number } | null>(null);
+    // Animation states (stored in persistent runtime refs to eliminate React re-renders)
     const lookAroundAngleRef = useRef(0);
     const lookAroundPitchRef = useRef(0);
     
@@ -166,7 +249,13 @@ export function useGlobalState() {
         showDebug, setShowDebug,
         showVolume, setShowVolume,
         lootData, setLootData,
-        enemies, setEnemies,
+        enemiesRef: runtimeEnemiesRef,
+        runtimeEnemiesRef,
+        get runtimeEnemies() { return runtimeEnemiesRef.current; },
+        enemies: enemiesSnapshot,
+        enemiesSnapshot,
+        syncEnemiesSnapshot,
+        setEnemies,
         enemyFlashesRef,
         playerDamageSource, setPlayerDamageSource,
         explosionsRef,
@@ -182,17 +271,27 @@ export function useGlobalState() {
         activeExplosionsRef,
         sectorStatesRef,
         globalScriptFlagsRef,
-        roamingAnims, setRoamingAnims,
-        boxMoveAnims, setBoxMoveAnims,
+        roamingAnimsRef,
+        setRoamingAnims,
+        get roamingAnims() { return roamingAnimsRef.current; },
+        boxMoveAnimsRef,
+        setBoxMoveAnims,
+        get boxMoveAnims() { return boxMoveAnimsRef.current; },
         cinematicMode, setCinematicMode,
-        cinematicCamera, setCinematicCamera,
+        cinematicCameraRef,
+        get cinematicCamera() { return cinematicCameraRef.current || cinematicCameraState; },
+        setCinematicCamera,
         raycasterWidth,
         raycasterHeight,
         resolutionDivisor,
         weaponRef,
         akimboWeaponRef,
-        pickupAnim, setPickupAnim,
-        throwAnim, setThrowAnim,
+        pickupAnimRef,
+        setPickupAnim,
+        get pickupAnim() { return pickupAnimRef.current; },
+        throwAnimRef,
+        setThrowAnim,
+        get throwAnim() { return throwAnimRef.current; },
         get lookAroundAngle() { return lookAroundAngleRef.current; }, 
         setLookAroundAngle,
         get lookAroundPitch() { return lookAroundPitchRef.current; }, 

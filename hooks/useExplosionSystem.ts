@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { rollDice } from '../utils/dice';
 import { getMaskBuffer, createBrickParticles, createShardParticles, createGibParticles, createExplodingDecorationParticles } from '../utils/particleSystem';
+import { spawnPolyObjectDebris, isPolyObjectDecoration } from '../utils/polyDebrisSystem';
 import { findEnemiesWithLineOfSight, hasLineOfSight } from '../utils/combatLogic';
 import { Tile, Enemy, Player, GameState } from '../types';
 import animations from '../data/animations.json';
@@ -10,7 +11,8 @@ interface UseExplosionSystemProps {
     setPlayer: React.Dispatch<React.SetStateAction<Player>>;
     levelData: any;
     setLevelData: React.Dispatch<React.SetStateAction<any>>;
-    enemies: Map<string, Enemy>;
+    enemies?: Map<string, Enemy>;
+    enemiesRef?: React.MutableRefObject<Map<string, Enemy>>;
     setEnemies: React.Dispatch<React.SetStateAction<Map<string, Enemy>>>;
     spriteMap: Map<string, HTMLImageElement>;
     raycasterRef: React.RefObject<any>;
@@ -38,6 +40,7 @@ export function useExplosionSystem({
     levelData,
     setLevelData,
     enemies,
+    enemiesRef: propEnemiesRef,
     setEnemies,
     spriteMap,
     raycasterRef,
@@ -59,16 +62,15 @@ export function useExplosionSystem({
     forceUpdate
 }: UseExplosionSystemProps) {
     const levelDataRef = React.useRef(levelData);
+    levelDataRef.current = levelData;
     const playerRef = React.useRef(player);
-    const enemiesRef = React.useRef(enemies);
+    playerRef.current = player;
     const gameStateRef = React.useRef(gameState);
+    gameStateRef.current = gameState;
     
-    React.useEffect(() => {
-        levelDataRef.current = levelData;
-        playerRef.current = player;
-        enemiesRef.current = enemies;
-        gameStateRef.current = gameState;
-    }, [levelData, player, enemies, gameState]);
+    const fallbackEnemiesRef = React.useRef(enemies || new Map());
+    if (enemies) fallbackEnemiesRef.current = enemies;
+    const enemiesRef = propEnemiesRef || fallbackEnemiesRef;
 
     const handleExplosionRef = React.useRef<any>(null);
     const queueRef = React.useRef<{
@@ -639,23 +641,32 @@ export function useExplosionSystem({
                         if (decor && decor.destructionSoundId) {
                             playSound(decor.destructionSoundId, { x: d.x + 0.5, y: d.y + 0.5 });
                         }
-                        if (decor && decor.explode && raycasterRef.current) {
-                            let actualAssetId = decor.assetId;
-                            if (actualAssetId in animations) {
-                                actualAssetId = (animations as any)[actualAssetId].frames[0];
+                        if (decor && decor.explode) {
+                            if (isPolyObjectDecoration(decor)) {
+                                const tileFH = (tile.type === 'FLOOR' && tile.height !== undefined ? tile.height : 0) + (tile.elevation || 0);
+                                const debrisSound = decor.explodeSound || decor.destructionSoundId || 'SYS_DEBRIS_FALL';
+                                spawnPolyObjectDebris(decor, d.x, d.y, tileFH, undefined, debrisSound);
+                                if (decor.explodeSound && playSound) {
+                                    playSound(decor.explodeSound, { x: d.x + 0.5, y: d.y + 0.5 });
+                                }
+                            } else if (raycasterRef.current) {
+                                let actualAssetId = decor.assetId;
+                                if (actualAssetId in animations) {
+                                    actualAssetId = (animations as any)[actualAssetId].frames[0];
+                                }
+                                const isBox = decor.isBox;
+                                const sizeFactor = isBox ? (decor.boxSize || 1.0) : (decor.scale || 1.0);
+                                const multiplier = isBox ? 25 : 12.5;
+                                const particleCount = Math.max(3, Math.min(25, Math.floor(multiplier * sizeFactor)));
+                                const explodeParticles = createExplodingDecorationParticles(
+                                    d.x + 0.5, d.y + 0.5, 0.5,
+                                    actualAssetId,
+                                    particleCount,
+                                    decor.explodeSound,
+                                    decor.scale || 1.0
+                                );
+                                raycasterRef.current.spawnParticles(explodeParticles);
                             }
-                            const isBox = decor.isBox;
-                            const sizeFactor = isBox ? (decor.boxSize || 1.0) : (decor.scale || 1.0);
-                            const multiplier = isBox ? 25 : 12.5;
-                            const particleCount = Math.max(3, Math.min(25, Math.floor(multiplier * sizeFactor)));
-                            const explodeParticles = createExplodingDecorationParticles(
-                                d.x + 0.5, d.y + 0.5, 0.5,
-                                actualAssetId,
-                                particleCount,
-                                decor.explodeSound,
-                                decor.scale || 1.0
-                            );
-                            raycasterRef.current.spawnParticles(explodeParticles);
                         }
                     });
                     decorationsToUpdate.forEach(d => {
@@ -743,23 +754,32 @@ export function useExplosionSystem({
                             if (decor && decor.destructionSoundId) {
                                 playSound(decor.destructionSoundId, { x: d.x + 0.5, y: d.y + 0.5 });
                             }
-                            if (decor && decor.explode && raycasterRef.current) {
-                                let actualAssetId = decor.assetId;
-                                if (actualAssetId in animations) {
-                                    actualAssetId = (animations as any)[actualAssetId].frames[0];
+                            if (decor && decor.explode) {
+                                if (isPolyObjectDecoration(decor)) {
+                                    const tileFH = (t.type === 'FLOOR' && t.height !== undefined ? t.height : 0) + (t.elevation || 0);
+                                    const debrisSound = decor.explodeSound || decor.destructionSoundId || 'SYS_DEBRIS_FALL';
+                                    spawnPolyObjectDebris(decor, d.x, d.y, tileFH, undefined, debrisSound);
+                                    if (decor.explodeSound && playSound) {
+                                        playSound(decor.explodeSound, { x: d.x + 0.5, y: d.y + 0.5 });
+                                    }
+                                } else if (raycasterRef.current) {
+                                    let actualAssetId = decor.assetId;
+                                    if (actualAssetId in animations) {
+                                        actualAssetId = (animations as any)[actualAssetId].frames[0];
+                                    }
+                                    const isBox = decor.isBox;
+                                    const sizeFactor = isBox ? (decor.boxSize || 1.0) : (decor.scale || 1.0);
+                                    const multiplier = isBox ? 25 : 12.5;
+                                    const particleCount = Math.max(3, Math.min(25, Math.floor(multiplier * sizeFactor)));
+                                    const explodeParticles = createExplodingDecorationParticles(
+                                        d.x + 0.5, d.y + 0.5, 0.5,
+                                        actualAssetId,
+                                        particleCount,
+                                        decor.explodeSound,
+                                        decor.scale || 1.0
+                                    );
+                                    raycasterRef.current.spawnParticles(explodeParticles);
                                 }
-                                const isBox = decor.isBox;
-                                const sizeFactor = isBox ? (decor.boxSize || 1.0) : (decor.scale || 1.0);
-                                const multiplier = isBox ? 25 : 12.5;
-                                const particleCount = Math.max(3, Math.min(25, Math.floor(multiplier * sizeFactor)));
-                                const explodeParticles = createExplodingDecorationParticles(
-                                    d.x + 0.5, d.y + 0.5, 0.5,
-                                    actualAssetId,
-                                    particleCount,
-                                    decor.explodeSound,
-                                    decor.scale || 1.0
-                                );
-                                raycasterRef.current.spawnParticles(explodeParticles);
                             }
                             newGrid[d.y][d.x] = newTile;
                         });
@@ -878,18 +898,16 @@ export function useExplosionSystem({
             }
 
             if (queueRef.current.length > 0) {
-                setTimeout(processNext, 150);
+                setTimeout(processNext, 350);
             } else {
                 isProcessingRef.current = false;
             }
         };
 
         processNext();
-    }, [levelData, player.pos, playSound, triggerScreenShake, triggerExplosionFlash, addLog, setPlayer, setEnemies, setLevelData, triggerDamageEffect, enemies, strings, handleEnemiesKilled, spriteMap, joinCombat, explosionsRef, raycasterRef, animations, forceUpdate, activeExplosionsRef]);
+    }, [levelData, player.pos, playSound, triggerScreenShake, triggerExplosionFlash, addLog, setPlayer, setEnemies, setLevelData, triggerDamageEffect, strings, handleEnemiesKilled, spriteMap, joinCombat, explosionsRef, raycasterRef, animations, forceUpdate, activeExplosionsRef]);
 
-    React.useEffect(() => {
-        handleExplosionRef.current = handleExplosion;
-    }, [handleExplosion]);
+    handleExplosionRef.current = handleExplosion;
 
     return { handleExplosion };
 }

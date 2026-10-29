@@ -374,3 +374,51 @@ export const getDamagedSprite = (
     safeCacheSet(cache, key, canvas);
     return canvas;
 };
+
+export const getMirroredSprite = (
+    img: HTMLImageElement | HTMLCanvasElement,
+    cache?: Map<string, HTMLCanvasElement | HTMLImageElement>
+): HTMLCanvasElement | HTMLImageElement => {
+    cache = cache || globalSpriteTintCache;
+    const imgAny = img as any;
+    if (imgAny._mirroredCanvas) {
+        return imgAny._mirroredCanvas;
+    }
+
+    let imgSource = imgAny.src || imgAny.version || imgAny._spriteId || imgAny._webglTexId;
+    if (!imgSource) {
+        if (img instanceof HTMLCanvasElement) {
+            if (!imgAny._spriteId) {
+                imgAny._spriteId = 'canvas_' + Math.random().toString(36).substring(2, 9);
+            }
+            imgSource = imgAny._spriteId;
+        } else {
+            imgSource = 'canvas_' + Math.random().toString(36).substring(2, 9);
+        }
+    }
+
+    const key = `${imgSource}_MIRRORED`;
+    if (cache.has(key)) {
+        const cached = cache.get(key)!;
+        imgAny._mirroredCanvas = cached;
+        return cached;
+    }
+
+    const canvas = acquireCanvas(img.width, img.height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return img;
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, img.width, img.height);
+    ctx.save();
+    ctx.translate(img.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, 0, 0);
+    ctx.restore();
+
+    (canvas as any)._webglTexId = key;
+    (canvas as any)._spriteId = key;
+    safeCacheSet(cache, key, canvas);
+    imgAny._mirroredCanvas = canvas;
+    return canvas;
+};

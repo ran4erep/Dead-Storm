@@ -1,17 +1,82 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { HexColorPicker, HexAlphaColorPicker } from 'react-colorful';
 
-interface CustomColorPickerProps {
+export interface CustomColorPickerProps {
     color: string;
     onChange: (color: string) => void;
     label?: string;
     className?: string;
     supportAlpha?: boolean;
+    popoverPosition?: 'top' | 'bottom';
 }
 
-export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({ color, onChange, label, className = '', supportAlpha = false }) => {
+const parseToHex = (str: string, supportAlpha: boolean): string => {
+    if (!str) return supportAlpha ? "#ffffffff" : "#ffffff";
+    const trimmed = str.trim();
+    if (trimmed.startsWith("#")) {
+        return trimmed;
+    }
+    if (trimmed.startsWith("rgba") || trimmed.startsWith("rgb")) {
+        const matches = trimmed.match(/[\d.]+/g);
+        if (matches && matches.length >= 3) {
+            const r = Math.max(0, Math.min(255, parseInt(matches[0], 10) || 0));
+            const g = Math.max(0, Math.min(255, parseInt(matches[1], 10) || 0));
+            const b = Math.max(0, Math.min(255, parseInt(matches[2], 10) || 0));
+            const a = matches[3] !== undefined ? Math.max(0, Math.min(1, parseFloat(matches[3]))) : 1;
+            
+            const toHex = (n: number) => n.toString(16).padStart(2, "0");
+            if (supportAlpha) {
+                const aHex = Math.round(a * 255).toString(16).padStart(2, "0");
+                return `#${toHex(r)}${toHex(g)}${toHex(b)}${aHex}`;
+            }
+            return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        }
+    }
+    return supportAlpha ? "#ffffffff" : "#ffffff";
+};
+
+const hexToRgbaStr = (hex: string): string => {
+    let clean = hex.replace('#', '');
+    if (clean.length === 3 || clean.length === 4) {
+        clean = clean.split('').map(c => c + c).join('');
+    }
+    const num = parseInt(clean, 16) || 0;
+    if (clean.length === 8) {
+        const r = (num >> 24) & 255;
+        const g = (num >> 16) & 255;
+        const b = (num >> 8) & 255;
+        const a = Math.round(((num & 255) / 255) * 100) / 100;
+        return `rgba(${r}, ${g}, ${b}, ${a})`;
+    } else {
+        const r = (num >> 16) & 255;
+        const g = (num >> 8) & 255;
+        const b = num & 255;
+        return `rgba(${r}, ${g}, ${b}, 1)`;
+    }
+};
+
+export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({ 
+    color, 
+    onChange, 
+    label, 
+    className = '', 
+    supportAlpha = false,
+    popoverPosition = 'bottom'
+}) => {
     const [isOpen, setIsOpen] = useState(false);
     const popoverRef = useRef<HTMLDivElement>(null);
+
+    const displayColor = parseToHex(color, supportAlpha);
+    const cleanHexFromProp = displayColor.replace('#', '');
+
+    const [localHex, setLocalHex] = useState(cleanHexFromProp);
+    const [isInputFocused, setIsInputFocused] = useState(false);
+
+    useEffect(() => {
+        if (!isInputFocused) {
+            setLocalHex(displayColor.replace('#', ''));
+        }
+    }, [color, displayColor, isInputFocused]);
 
     useEffect(() => {
         const handleOutsideClick = (e: MouseEvent) => {
@@ -29,11 +94,53 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({ color, onC
         };
     }, [isOpen]);
 
-    let displayColor = color || '#000000';
-    if (!displayColor.startsWith('#')) {
-        // Fallback for unexpected colors
-        displayColor = '#ffffff';
-    }
+    const notifyParent = (hexVal: string) => {
+        const fullHex = '#' + hexVal;
+        if (supportAlpha && color && color.trim().startsWith('rgba')) {
+            onChange(hexToRgbaStr(fullHex));
+        } else {
+            onChange(fullHex);
+        }
+    };
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const rawVal = e.target.value.replace(/[^0-9a-fA-F]/g, '');
+        const maxLen = supportAlpha ? 8 : 6;
+        const truncated = rawVal.slice(0, maxLen);
+        setLocalHex(truncated);
+
+        if (truncated.length === maxLen) {
+            notifyParent(truncated);
+        } else if (truncated.length === 3 && !supportAlpha) {
+            const expanded = truncated.split('').map(c => c + c).join('');
+            notifyParent(expanded);
+        } else if (truncated.length === 4 && supportAlpha) {
+            const expanded = truncated.split('').map(c => c + c).join('');
+            notifyParent(expanded);
+        }
+    };
+
+    const handleInputBlur = () => {
+        setIsInputFocused(false);
+        const maxLen = supportAlpha ? 8 : 6;
+        if (localHex.length === maxLen) {
+            notifyParent(localHex);
+        } else if (localHex.length === 3 && !supportAlpha) {
+            const expanded = localHex.split('').map(c => c + c).join('');
+            setLocalHex(expanded);
+            notifyParent(expanded);
+        } else if (localHex.length === 4 && supportAlpha) {
+            const expanded = localHex.split('').map(c => c + c).join('');
+            setLocalHex(expanded);
+            notifyParent(expanded);
+        } else if (localHex.length > 0 && localHex.length < maxLen) {
+            const padded = localHex.padEnd(maxLen, '0');
+            setLocalHex(padded);
+            notifyParent(padded);
+        } else {
+            setLocalHex(displayColor.replace('#', ''));
+        }
+    };
 
     return (
         <div className={`relative ${className}`}>
@@ -52,22 +159,14 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({ color, onC
                     <span className="text-gray-500 mr-1 text-sm font-mono leading-none">#</span>
                     <input
                         type="text"
-                        value={displayColor.replace('#', '')}
-                        onChange={(e) => {
-                            let newColor = e.target.value;
-                            if (newColor.length <= (supportAlpha ? 8 : 6)) {
-                                onChange('#' + newColor);
+                        value={localHex}
+                        onFocus={() => setIsInputFocused(true)}
+                        onChange={handleInputChange}
+                        onBlur={handleInputBlur}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
                             }
-                        }}
-                        onBlur={(e) => {
-                           let val = e.target.value;
-                           if (val.length === 3 && !supportAlpha) {
-                               val = val.split('').map(c => c + c).join('');
-                               onChange('#' + val);
-                           } else if (val.length === 4 && supportAlpha) {
-                               val = val.split('').map(c => c + c).join('');
-                               onChange('#' + val);
-                           }
                         }}
                         className="w-full bg-transparent border-0 outline-none text-white font-mono text-sm uppercase tracking-wider"
                         placeholder={supportAlpha ? "FFFFFFFF" : "FFFFFF"}
@@ -79,13 +178,20 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({ color, onC
             {isOpen && (
                 <div 
                     ref={popoverRef} 
-                    className="absolute z-50 mt-2 p-3 bg-gray-800 border border-gray-700 rounded-lg shadow-xl shadow-black/50"
-                    style={{ left: 0 }}
+                    className={`absolute z-[100] p-3 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl shadow-black/80 ${
+                        popoverPosition === 'top' ? 'bottom-full mb-2 left-0' : 'top-full mt-2 left-0'
+                    }`}
                 >
                     {supportAlpha ? (
-                        <HexAlphaColorPicker color={displayColor} onChange={onChange} />
+                        <HexAlphaColorPicker color={displayColor} onChange={(c) => {
+                            setLocalHex(c.replace('#', ''));
+                            notifyParent(c.replace('#', ''));
+                        }} />
                     ) : (
-                        <HexColorPicker color={displayColor.substring(0, 7)} onChange={onChange} />
+                        <HexColorPicker color={displayColor.substring(0, 7)} onChange={(c) => {
+                            setLocalHex(c.replace('#', ''));
+                            notifyParent(c.replace('#', ''));
+                        }} />
                     )}
                     <div className="mt-3 flex justify-between items-center text-xs text-gray-400">
                         <span>Current Selection</span>

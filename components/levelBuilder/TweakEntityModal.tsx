@@ -38,7 +38,7 @@ export const TweakEntityModal: React.FC<TweakEntityModalProps> = ({
   }, [normalizedListName]);
 
   const formattedListName = useMemo(() => {
-    if (listName === 'NPCs') return 'NPC';
+    if (normalizedListName === 'npcs') return 'NPC';
     if (normalizedListName === 'enemies') return 'Враг';
     if (normalizedListName === 'items') return 'Предмет';
     if (normalizedListName === 'decorations') return 'Декорация';

@@ -296,13 +296,34 @@ export const AssetEditorModal: React.FC<AssetEditorModalProps> = ({
                   </div>
                 </div>
              ) : mode === 'particles' ? (
-                <div className="flex flex-col lg:flex-row w-full gap-4 px-1">
-                   <div className="flex-[2] min-w-0 flex flex-col gap-2">
-                       <div className="flex gap-2">
+                <div className="flex flex-col lg:flex-row w-full gap-5 items-start px-1 relative">
+                   {/* Simulator Preview Sticky Column - Always in View */}
+                   <div className="order-1 lg:order-2 w-full lg:w-[420px] xl:w-[460px] shrink-0 sticky top-0 z-30 bg-gray-950/95 backdrop-blur-md pb-3 lg:pb-0 border-b border-gray-800 lg:border-none">
+                       <div className="flex flex-col gap-2">
+                           <div className="flex items-center justify-between">
+                               <h3 className="text-fuchsia-400 font-bold uppercase tracking-widest text-xs sm:text-sm flex gap-2 items-center">
+                                  <Sparkles size={16} /> {uiStrings.simulator || 'Симулятор частицы'}
+                               </h3>
+                               <button 
+                                   onClick={() => setRestartNonce(n => n + 1)} 
+                                   className="text-xs bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-gray-200 px-2.5 py-1 rounded border border-gray-700 transition-colors flex items-center gap-1 font-mono"
+                               >
+                                   Перезапустить
+                               </button>
+                           </div>
+                           <div className="h-56 sm:h-72 lg:h-[380px] w-full shrink-0 rounded-xl overflow-hidden border border-gray-800 shadow-2xl bg-black/80 relative">
+                              <ParticleSimulator particleDef={data && previewParticleKey ? data[previewParticleKey] : null} uiStrings={uiStrings} restartNonce={restartNonce} />
+                           </div>
+                       </div>
+                   </div>
+
+                   {/* Form Controls Column */}
+                   <div className="order-2 lg:order-1 flex-1 min-w-0 flex flex-col gap-3 w-full">
+                       <div className="flex gap-2 items-center bg-gray-900 p-2.5 rounded-xl border border-gray-800 shadow-lg">
                            <CustomSelect 
                               value={previewParticleKey}
                               onChange={(e) => setPreviewParticleKey(e.target.value)}
-                              className="bg-gray-800 text-white border border-gray-700 p-2 rounded text-sm w-full outline-none focus:border-fuchsia-500 flex-1"
+                              className="bg-gray-800 text-white border border-gray-700 p-2 rounded text-sm w-full outline-none focus:border-fuchsia-500 flex-1 font-mono"
                            >
                               <option value="">-- Выберите частицу --</option>
                               {data && Object.keys(data).map(k => (
@@ -317,23 +338,29 @@ export const AssetEditorModal: React.FC<AssetEditorModalProps> = ({
                                    setData({ ...data, [newId]: { 
                                        id: newId, 
                                        name: 'New Emitter', 
-                                       type: 'fire', 
                                        colors: ["rgba(255, 150, 0, 0.9)", "rgba(255, 200, 50, 0.9)", "rgba(255, 50, 0, 0.8)"], 
                                        spawnRate: 15,
                                        startSize: 1.0,
-                                       sizeGrowth: 1.03,
+                                       sizeGrowth: 1.015,
                                        life: 1.0,
                                        maxLife: 1.5,
-                                       speed: 0.015,
-                                       gravity: 0.01,
-                                       spread: 6.28,
+                                       speedXMin: -0.015,
+                                       speedXMax: 0.015,
+                                       speedYMin: -0.015,
+                                       speedYMax: 0.015,
+                                       speedZMin: 0.01,
+                                       speedZMax: 0.03,
+                                       gravity: 0.0008,
+                                       friction: 0.98,
                                        zOffset: 0.0
                                    } });
                                    setPreviewParticleKey(newId);
                                }}
-                               className="bg-blue-600 hover:bg-blue-500 text-white px-3 rounded flex items-center justify-center pt-1" title="Новый эмиттер"
+                               className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg flex items-center justify-center font-bold text-xs gap-1 transition-colors shrink-0" 
+                               title="Новый эмиттер"
                            >
-                               <Plus size={20} />
+                               <Plus size={18} />
+                               <span className="hidden sm:inline">Новый</span>
                            </button>
                            {previewParticleKey && (
                                <button 
@@ -343,25 +370,15 @@ export const AssetEditorModal: React.FC<AssetEditorModalProps> = ({
                                        setData(newData);
                                        setPreviewParticleKey('');
                                    }}
-                                   className="bg-red-600 hover:bg-red-500 text-white px-3 rounded flex items-center justify-center pt-1" title="Удалить"
+                                   className="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-lg flex items-center justify-center font-bold text-xs gap-1 transition-colors shrink-0" 
+                                   title="Удалить"
                                >
-                                   <Trash2 size={20} />
+                                   <Trash2 size={18} />
                                </button>
                            )}
                        </div>
                        
                        <ParticleEditorForm data={data} onChange={setData} currentKey={previewParticleKey} onKeyChange={setPreviewParticleKey} uiStrings={uiStrings} />
-                   </div>
-                   <div className="flex-1 lg:max-w-md w-full flex flex-col gap-2">
-                       <h3 className="text-fuchsia-400 font-bold uppercase tracking-widest text-sm flex gap-2 items-center">
-                          Симулятор
-                       </h3>
-                       <div className="h-64 sm:h-80 w-full shrink-0">
-                          <ParticleSimulator particleDef={data && previewParticleKey ? data[previewParticleKey] : null} uiStrings={uiStrings} restartNonce={restartNonce} />
-                       </div>
-                       <button onClick={() => setRestartNonce(n => n + 1)} className="w-full text-xs bg-gray-800 hover:bg-gray-700 text-white p-2 rounded">
-                           Перезапустить (Re-run)
-                       </button>
                    </div>
                 </div>
              ) : (

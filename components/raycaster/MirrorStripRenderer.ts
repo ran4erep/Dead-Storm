@@ -1,9 +1,10 @@
 
 import { RaycasterBuffer, adjustLightForClosedDoors } from './RaycasterUtils';
-import { MirrorReflection } from './RaycasterTypes';
+import { MirrorReflection, PassThroughWall } from './RaycasterTypes';
 import { getBilinearFloorLight } from './MirrorRenderer';
 import { getDepthFactor, getFogColorR, getFogColorG, getFogColorB } from './DepthEffect';
 import { isWebGLActive, pushQuad, getQuadFromPool } from './WebGLState';
+import { getUnoccludedSpans } from './WindowRenderer';
 
 export const drawMirrorStrip = (
     x: number,
@@ -68,7 +69,8 @@ export const drawMirrorStrip = (
     refFogTable?: Int32Array,
     depthFogTable?: Int32Array,
     floorLightMaps?: { r: number; g: number; b: number }[][][],
-    flashlightActive?: boolean
+    flashlightActive?: boolean,
+    passThroughWallsCol?: PassThroughWall[]
 ) => {
     const texW = buf.width;
     const texData = buf.data;
@@ -159,80 +161,93 @@ export const drawMirrorStrip = (
             return ((texPosFixed + stepFixed * (y - drawStart)) / 65536.0) / buf.height;
         };
 
-                if (topDrawEnd > drawStart) {
-            const quad = getQuadFromPool();
-            quad.x0 = x;
-            quad.x1 = x + resolutionDivisor;
-            quad.y0 = drawStart;
-            quad.y1 = topDrawEnd;
-            quad.u0 = texX / buf.width;
-            quad.u1 = (texX + 1) / buf.width;
-            quad.v0 = vAtY(drawStart);
-            quad.v1 = vAtY(topDrawEnd);
-            quad.r = (rMultInt + fRInt) / 256.0;
-            quad.g = (gMultInt + fGInt) / 256.0;
-            quad.b = (bMultInt + fBInt) / 256.0;
-            quad.fog = fogAmtInt / 256.0;
-            quad.textureId = (buf as any).id || 'wall';
-            quad.dist = perpWallDist;
-            pushQuad(quad);
+        if (topDrawEnd > drawStart) {
+            const spans = getUnoccludedSpans(drawStart, topDrawEnd, passThroughWallsCol, perpWallDist, true);
+            for (let s = 0; s < spans.length; s++) {
+                const quad = getQuadFromPool();
+                quad.x0 = x;
+                quad.x1 = x + resolutionDivisor;
+                quad.y0 = spans[s].start;
+                quad.y1 = spans[s].end;
+                quad.u0 = texX / buf.width;
+                quad.u1 = (texX + 1) / buf.width;
+                quad.v0 = vAtY(spans[s].start);
+                quad.v1 = vAtY(spans[s].end);
+                quad.r = (rMultInt + fRInt) / 256.0;
+                quad.g = (gMultInt + fGInt) / 256.0;
+                quad.b = (bMultInt + fBInt) / 256.0;
+                quad.fog = fogAmtInt / 256.0;
+                quad.textureId = (buf as any).id || 'wall';
+                quad.dist = perpWallDist;
+                pushQuad(quad);
+            }
         }
 
         if (drawEnd > bottomDrawStart) {
-            const quad = getQuadFromPool();
-            quad.x0 = x;
-            quad.x1 = x + resolutionDivisor;
-            quad.y0 = bottomDrawStart;
-            quad.y1 = drawEnd;
-            quad.u0 = texX / buf.width;
-            quad.u1 = (texX + 1) / buf.width;
-            quad.v0 = vAtY(bottomDrawStart);
-            quad.v1 = vAtY(drawEnd);
-            quad.r = (rMultInt + fRInt) / 256.0;
-            quad.g = (gMultInt + fGInt) / 256.0;
-            quad.b = (bMultInt + fBInt) / 256.0;
-            quad.fog = fogAmtInt / 256.0;
-            quad.textureId = (buf as any).id || 'wall';
-            quad.dist = perpWallDist;
-            pushQuad(quad);
+            const spans = getUnoccludedSpans(bottomDrawStart, drawEnd, passThroughWallsCol, perpWallDist, true);
+            for (let s = 0; s < spans.length; s++) {
+                const quad = getQuadFromPool();
+                quad.x0 = x;
+                quad.x1 = x + resolutionDivisor;
+                quad.y0 = spans[s].start;
+                quad.y1 = spans[s].end;
+                quad.u0 = texX / buf.width;
+                quad.u1 = (texX + 1) / buf.width;
+                quad.v0 = vAtY(spans[s].start);
+                quad.v1 = vAtY(spans[s].end);
+                quad.r = (rMultInt + fRInt) / 256.0;
+                quad.g = (gMultInt + fGInt) / 256.0;
+                quad.b = (bMultInt + fBInt) / 256.0;
+                quad.fog = fogAmtInt / 256.0;
+                quad.textureId = (buf as any).id || 'wall';
+                quad.dist = perpWallDist;
+                pushQuad(quad);
+            }
         }
 
         // --- Push the Reflected Wall Geometry inside the Mirror Glass area ---
         if (mirrorRefBuf && colRef && colRef.maskTop <= colRef.maskBottom) {
-            const refStart = Math.max(colRef.maskTop, refLevelDrawStart);
-            const refEnd = Math.min(colRef.maskBottom + 1, refLevelDrawEnd);
-            if (refEnd > refStart) {
-                const quad = getQuadFromPool();
-                quad.x0 = x;
-                quad.x1 = x + resolutionDivisor;
-                quad.y0 = refStart;
-                quad.y1 = refEnd;
-                quad.u0 = refTexX / mirrorRefBuf.width;
-                quad.u1 = (refTexX + 1) / mirrorRefBuf.width;
-                
-                const vAtRefY = (y: number) => {
-                    const t = (y - refLevelDrawStart) / (refLevelDrawEnd - refLevelDrawStart);
-                    const z = refAbsTopZ + (refAbsBotZ - refAbsTopZ) * t;
-                    return 1.0 - z;
-                };
-                
-                quad.v0 = vAtRefY(refStart);
-                quad.v1 = vAtRefY(refEnd);
-                
-                quad.r = ((mRRInt + fRInt) / 256.0) * ((glassRMultInt + fRInt) / 256.0);
-                quad.g = ((mRGInt + fGInt) / 256.0) * ((glassGMultInt + fGInt) / 256.0);
-                quad.b = ((mRBInt + fBInt) / 256.0) * ((glassBMultInt + fBInt) / 256.0);
-                
-                const distToP = totalRefDist;
-                const refFogInt = refFogTable ? refFogTable[refStart] : ((Math.min(1.0, 1.0 / (1 + (distToP * distToP) * 0.005)) * 256) | 0);
-                quad.fog = (256 - refFogInt) / 256.0;
-                quad.textureId = (mirrorRefBuf as any).id || 'wall';
-                
-                // Mask the wall quad horizontally and vertically inside the mirror glass pane
-                quad.maskTop = colRef.maskTop;
-                quad.maskBottom = colRef.maskBottom;
-                quad.dist = totalRefDist;
-                pushQuad(quad);
+            const rawRefStart = Math.max(colRef.maskTop, refLevelDrawStart);
+            const rawRefEnd = Math.min(colRef.maskBottom + 1, refLevelDrawEnd);
+            if (rawRefEnd > rawRefStart) {
+                const spans = getUnoccludedSpans(rawRefStart, rawRefEnd, passThroughWallsCol, perpWallDist, true);
+                for (let s = 0; s < spans.length; s++) {
+                    const refStart = spans[s].start;
+                    const refEnd = spans[s].end;
+                    if (refEnd > refStart) {
+                        const quad = getQuadFromPool();
+                        quad.x0 = x;
+                        quad.x1 = x + resolutionDivisor;
+                        quad.y0 = refStart;
+                        quad.y1 = refEnd;
+                        quad.u0 = refTexX / mirrorRefBuf.width;
+                        quad.u1 = (refTexX + 1) / mirrorRefBuf.width;
+                        
+                        const vAtRefY = (y: number) => {
+                            const t = (y - refLevelDrawStart) / (refLevelDrawEnd - refLevelDrawStart);
+                            const z = refAbsTopZ + (refAbsBotZ - refAbsTopZ) * t;
+                            return 1.0 - z;
+                        };
+                        
+                        quad.v0 = vAtRefY(refStart);
+                        quad.v1 = vAtRefY(refEnd);
+                        
+                        quad.r = ((mRRInt + fRInt) / 256.0) * ((glassRMultInt + fRInt) / 256.0);
+                        quad.g = ((mRGInt + fGInt) / 256.0) * ((glassGMultInt + fGInt) / 256.0);
+                        quad.b = ((mRBInt + fBInt) / 256.0) * ((glassBMultInt + fBInt) / 256.0);
+                        
+                        const distToP = totalRefDist;
+                        const refFogInt = refFogTable ? refFogTable[refStart] : ((Math.min(1.0, 1.0 / (1 + (distToP * distToP) * 0.005)) * 256) | 0);
+                        quad.fog = (256 - refFogInt) / 256.0;
+                        quad.textureId = (mirrorRefBuf as any).id || 'wall';
+                        
+                        // Mask the wall quad horizontally and vertically inside the mirror glass pane
+                        quad.maskTop = colRef.maskTop;
+                        quad.maskBottom = colRef.maskBottom;
+                        quad.dist = totalRefDist;
+                        pushQuad(quad);
+                    }
+                }
             }
         }
 
@@ -428,7 +443,7 @@ export const drawMirrorStrip = (
                         let g0Val = pm.bottomCapGMultIntBase / 256.0;
                         let b0Val = pm.bottomCapBMultIntBase / 256.0;
                         if (activeLightMap) {
-                            const l0 = getBilinearFloorLight(floorX0, floorY0, activeLightMap, mapWidth, mapHeight);
+                            const l0 = getBilinearFloorLight(floorX0, floorY0, activeLightMap, mapWidth, mapHeight, grid, activeGrids, pm.mpLayer ?? 0);
                             r0Val = l0.r * 0.6;
                             g0Val = l0.g * 0.6;
                             b0Val = l0.b * 0.6;
@@ -438,7 +453,7 @@ export const drawMirrorStrip = (
                         let g1Val = pm.bottomCapGMultIntBase / 256.0;
                         let b1Val = pm.bottomCapBMultIntBase / 256.0;
                         if (activeLightMap) {
-                            const l1 = getBilinearFloorLight(floorX1, floorY1, activeLightMap, mapWidth, mapHeight);
+                            const l1 = getBilinearFloorLight(floorX1, floorY1, activeLightMap, mapWidth, mapHeight, grid, activeGrids, pm.mpLayer ?? 0);
                             r1Val = l1.r * 0.6;
                             g1Val = l1.g * 0.6;
                             b1Val = l1.b * 0.6;
@@ -480,6 +495,21 @@ export const drawMirrorStrip = (
     for (let y = drawStart; y < drawEnd; y++) {
         const ty = (currentTexPosFixed >> 16) % buf.height; 
         currentTexPosFixed += stepFixed;
+
+        // Check if occluded by PolyObject in front of mirror
+        if (passThroughWallsCol && passThroughWallsCol.length > 0) {
+            let isPolyOccluded = false;
+            for (let i = 0; i < passThroughWallsCol.length; i++) {
+                const w = passThroughWallsCol[i];
+                if (w.isOccluderOnly && !w.isPolyOccluder && w.dist < perpWallDist - 0.001 && w.wallTop !== undefined && w.wallBottom !== undefined) {
+                    if (y >= w.wallTop && y <= w.wallBottom) {
+                        isPolyOccluded = true;
+                        break;
+                    }
+                }
+            }
+            if (isPolyOccluded) continue;
+        }
         
         // Check Mask for Mirror
         let isMirrorPixel = false;
@@ -627,7 +657,7 @@ export const drawMirrorStrip = (
 
                         let rMultInt = 256, gMultInt = 256, bMultInt = 256;
                         if (lightMap) {
-                            const l = getBilinearFloorLight(refFloorX, refFloorY, lightMap, mapWidth, mapHeight);
+                            const l = getBilinearFloorLight(refFloorX, refFloorY, lightMap, mapWidth, mapHeight, grid, activeGrids, 0);
                             rMultInt = (l.r * 256) | 0; 
                             gMultInt = (l.g * 256) | 0; 
                             bMultInt = (l.b * 256) | 0;
@@ -857,7 +887,7 @@ export const drawMirrorStrip = (
                         let bMultInt = 256;
                         const activeLightMap = (floorLightMaps && pm.mpLayer !== undefined && floorLightMaps[pm.mpLayer]) ? floorLightMaps[pm.mpLayer] : lightMap;
                         if (activeLightMap) {
-                            const l = getBilinearFloorLight(currentFloorX, currentFloorY, activeLightMap, mapWidth, mapHeight);
+                            const l = getBilinearFloorLight(currentFloorX, currentFloorY, activeLightMap, mapWidth, mapHeight, grid, activeGrids, pm.mpLayer ?? 0);
                             const capR = ((l.r * 256 * 153) >> 8) | 0;
                             const capG = ((l.g * 256 * 153) >> 8) | 0;
                             const capB = ((l.b * 256 * 153) >> 8) | 0;

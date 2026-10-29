@@ -120,6 +120,8 @@
     "assetId": "MOLOTOV",
     "throwId": "MOLOTOV_ARMED_ANIM",
     "fireObjectId": "fire",
+    "spreadsLeft": 3,
+    "spreadChance": 0.5,
     "glassTextureId": "BOTTLE_GLASS",
     "explosionSoundId": "GLASS",
     "scale": 0.22,
@@ -132,6 +134,31 @@
     "vibrationPattern": 1000,
     "maxStack": 5,
     "price": 50
+  },
+  "flare": {
+    "name": "Сигнальный фаер/Signal Flare",
+    "description": "Сигнальный факел. Бросается как граната, ярко освещает область вокруг красным светом и дымит при полёте и на земле./Signal flare stick. Thrown like a grenade, illuminates surrounding area with bright red flickering light and emits smoke in flight and on the ground.",
+    "type": "FLARE",
+    "equip": "NONE",
+    "assetId": "FLASHBANG",
+    "throwId": "FLASHBANG",
+    "burntAssetId": "FLASHBANG_ARMED",
+    "flareColor": { "r": 255, "g": 60, "b": 30 },
+    "flareDuration": 15,
+    "initialFlareDuration": 15,
+    "flareRadius": 5,
+    "flareBrightness": 2.2,
+    "smokeColor": "rgba(255, 80, 40, 0.7)",
+    "scale": 0.2,
+    "throwDamage": "1d1",
+    "timer": 0,
+    "sounds": {
+      "prime": "GRENADE_USE",
+      "bounce": "BOUNCE"
+    },
+    "vibrationPattern": 200,
+    "maxStack": 5,
+    "price": 35
   },
   "flashbang": {
     "name": "Светошумовая граната/Flashbang grenade",
@@ -308,10 +335,96 @@
       "y": 52
     },
     "casingDirection": "left",
+    "muzzleAsset": "SHOTGUN_MUZZLE",
+    "muzzleFemaleAsset": "SHOTGUN_MUZZLE_FEMALE",
+    "muzzleFrame": 2,
     "handAsset": "HAND_SHOTGUN",
     "handFemaleAsset": "HAND_SHOTGUN_FEMALE",
     "attackAsset": "SHOTGUN_SHOT",
     "attackAssetFemale": "SHOTGUN_SHOT_FEMALE",
+    "handScale": 1.7,
+    "handOffset": {
+      "x": 14,
+      "y": 43
+    },
+    "attackAnimation": [
+      {
+        "duration": 90,
+        "x": 18,
+        "y": -55,
+        "scale": 1.12
+      },
+      {
+        "duration": 130,
+        "x": 12,
+        "y": -40,
+        "scale": 1.09
+      },
+      {
+        "duration": 180,
+        "x": 6,
+        "y": -22,
+        "scale": 1.05
+      },
+      {
+        "duration": 220,
+        "x": 2,
+        "y": -8,
+        "scale": 1.02
+      },
+      {
+        "duration": 380,
+        "x": 0,
+        "y": 0,
+        "scale": 1
+      }
+    ],
+    "sounds": {
+      "attack": "SHOTGUN_SHOT",
+      "reload": "SHOTGUN_RELOAD",
+      "casing": "CASING_12G_SOUND"
+    },
+    "shootType": "shotgun",
+    "muzzleFlash": true,
+    "vibrationPattern": [
+      80,
+      20,
+      60
+    ],
+    "knockbackChance": 60,
+    "loseAmmoOnReload": false,
+    "price": 300
+  },
+  "rifle": {
+    "name": "Охотничья винтовка/Hunter rifle",
+    "type": "WEAPON",
+    "equip": "WEAPON",
+    "assetId": "RIFLE",
+    "dollAssetId": "RIFLE_DOLL",
+    "description": "Лучший друг охотника, самое то против медведя./A hunter's best friend. Just the thing for taking on a bear.",
+    "scale": 0.18,
+    "weight": 2,
+    "damageDice": "6d3",
+    "throwDamage": "1d1",
+    "accuracy": 1.5,
+    "range": 8,
+    "zIndex": 5,
+    "magazineMax": 1,
+    "currentAmmo": 1,
+    "ammoType": "762",
+    "maxDurability": 70,
+    "casingAsset": "CASING_762",
+    "casingScale": 1,
+    "casingGroundScaleMultiplier": 0.1,
+    "casingSpawnPoint": {
+      "x": 58,
+      "y": 52
+    },
+    "casingDirection": "left",
+    "handAsset": "HAND_RIFLE",
+    "handFemaleAsset": "HAND_RIFLE_FEMALE",
+    "attackAsset": "RIFLE_SHOT",
+    "attackAssetFemale": "RIFLE_SHOT_FEMALE",
     "handScale": 1.5,
     "handOffset": {
       "x": 40,
@@ -338,19 +451,19 @@
       }
     ],
     "sounds": {
-      "attack": "SHOTGUN_SHOT",
-      "reload": "SHOTGUN_RELOAD",
+      "attack": "RIFLE_SHOT",
+      "reload": "RIFLE_RELOAD",
       "casing": "CASING_12G_SOUND"
     },
-    "shootType": "shotgun",
+    "shootType": "rifle",
     "muzzleFlash": true,
     "vibrationPattern": [
       80,
       20,
       60
     ],
-    "knockbackChance": 60,
     "loseAmmoOnReload": false,
+    "ejectAllOnReload": true,
     "price": 300
   },
   "medkit": {
@@ -948,10 +1061,18 @@
     "scale": 0.25
   },
   "bottle_of_water": {
+    "type": "CONSUMABLE",
+    "equip": "NONE",
     "name": "Бутилированная газированная вода/Bottled sparkling water",
     "description": "Отлично утоляет жажду в жаркие дни./It's great for quenching your thirst on hot days.",
     "assetId": "BOTTLED_WATER",
-    "scale": 0.25
+    "scale": 0.25,
+    "healDice": "1d4",
+    "sounds": {
+      "use": "BANDAGE_USE"
+    },
+    "maxStack": 5,
+    "price": 15
   },
   "test_container": {
     "type": "CONTAINER",

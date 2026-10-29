@@ -1,17 +1,29 @@
-import { Item, Player } from '../types';
+import { Item } from '../types';
 
-export function getWeaponSprite(
-    weapon: Item | null, 
+export interface WeaponSpriteResult {
+    sprite: HTMLImageElement | null;
+    muzzleSprite: HTMLImageElement | null;
+    isMuzzleFrame: boolean;
+}
+
+export function getWeaponSpriteWithMuzzle(
+    weapon: Item | null,
     spriteElapsed: number | undefined,
     characterId: string,
     animations: any,
     spriteMap: Map<string, HTMLImageElement>
-) {
-    if (!weapon) return null;
+): WeaponSpriteResult {
+    if (!weapon) return { sprite: null, muzzleSprite: null, isMuzzleFrame: false };
     const handAssetId = weapon.handAssetId || (weapon as any).handAsset;
     const handFemaleAssetId = weapon.handFemaleAssetId || (weapon as any).handFemaleAsset;
     const attackAssetId = weapon.attackAssetId || (weapon as any).attackAsset;
     const attackFemaleAssetId = weapon.attackFemaleAssetId || (weapon as any).attackAssetFemale;
+
+    const muzzleAssetId = weapon.muzzleAsset || (weapon as any).muzzleAssetId;
+    const muzzleFemaleAssetId = weapon.muzzleFemaleAsset || (weapon as any).muzzleFemaleAssetId;
+
+    let muzzleSprite: HTMLImageElement | null = null;
+    let isMuzzleFrame = false;
 
     if (spriteElapsed !== undefined) {
         const attackAssetToUse = (characterId === 'female' && attackFemaleAssetId) ? attackFemaleAssetId : attackAssetId;
@@ -26,20 +38,73 @@ export function getWeaponSprite(
                     } else {
                         // Animation finished, revert to idle
                         const handAssetToUse = (characterId === 'female' && handFemaleAssetId) ? handFemaleAssetId : handAssetId;
-                        return handAssetToUse ? spriteMap.get(handAssetToUse) : null;
+                        return {
+                            sprite: handAssetToUse ? (spriteMap.get(handAssetToUse) || null) : null,
+                            muzzleSprite: null,
+                            isMuzzleFrame: false
+                        };
                     }
                 }
+
+                // Check muzzle frame (1-based index)
+                const currentFrameNumber = frameIndex + 1;
+                const targetMuzzleFrame = weapon.muzzleFrame || 1;
+                if (weapon.muzzleFlash === true && currentFrameNumber === targetMuzzleFrame) {
+                    isMuzzleFrame = true;
+                    const muzzleToUse = (characterId === 'female' && muzzleFemaleAssetId) ? muzzleFemaleAssetId : muzzleAssetId;
+                    if (muzzleToUse) {
+                        muzzleSprite = spriteMap.get(muzzleToUse) || null;
+                    }
+                }
+
                 const frameId = animDef.frames[frameIndex];
-                return spriteMap.get(frameId) || null;
+                return {
+                    sprite: spriteMap.get(frameId) || null,
+                    muzzleSprite,
+                    isMuzzleFrame
+                };
             } else {
                 if (spriteElapsed > 300) {
                     const handAssetToUse = (characterId === 'female' && handFemaleAssetId) ? handFemaleAssetId : handAssetId;
-                    return handAssetToUse ? spriteMap.get(handAssetToUse) : null;
+                    return {
+                        sprite: handAssetToUse ? (spriteMap.get(handAssetToUse) || null) : null,
+                        muzzleSprite: null,
+                        isMuzzleFrame: false
+                    };
                 }
-                return spriteMap.get(attackAssetToUse) || null;
+
+                const targetMuzzleFrame = weapon.muzzleFrame || 1;
+                if (weapon.muzzleFlash === true && targetMuzzleFrame === 1) {
+                    isMuzzleFrame = true;
+                    const muzzleToUse = (characterId === 'female' && muzzleFemaleAssetId) ? muzzleFemaleAssetId : muzzleAssetId;
+                    if (muzzleToUse) {
+                        muzzleSprite = spriteMap.get(muzzleToUse) || null;
+                    }
+                }
+
+                return {
+                    sprite: spriteMap.get(attackAssetToUse) || null,
+                    muzzleSprite,
+                    isMuzzleFrame
+                };
             }
         }
     }
+
     const handAssetToUse = (characterId === 'female' && handFemaleAssetId) ? handFemaleAssetId : handAssetId;
-    return handAssetToUse ? spriteMap.get(handAssetToUse) : null;
+    return {
+        sprite: handAssetToUse ? (spriteMap.get(handAssetToUse) || null) : null,
+        muzzleSprite: null,
+        isMuzzleFrame: false
+    };
+}
+
+export function getWeaponSprite(
+    weapon: Item | null, 
+    spriteElapsed: number | undefined,
+    characterId: string,
+    animations: any,
+    spriteMap: Map<string, HTMLImageElement>
+) {
+    return getWeaponSpriteWithMuzzle(weapon, spriteElapsed, characterId, animations, spriteMap).sprite;
 }

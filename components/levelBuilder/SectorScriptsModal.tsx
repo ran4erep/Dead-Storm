@@ -6,7 +6,7 @@ import {
   ScriptTriggerType,
   ScriptActionType,
 } from "../../types";
-import { X, Plus, Trash2, MapPin, ChevronDown, ChevronUp, ChevronRight, Copy, Play, Square, Power } from "lucide-react";
+import { X, Plus, Trash2, MapPin, ChevronDown, ChevronUp, ChevronRight, Copy, Play, Square, Power, Sliders, Repeat } from "lucide-react";
 import soundsData from "../../data/sounds.json";
 import enemiesData from "../../data/enemies.json";
 import itemsData from "../../data/items.json";
@@ -16,8 +16,9 @@ import decorationsData from "../../data/decorations.json";
 import particlesData from "../../data/particles.json";
 import achievementsData from "../../data/achievements.json";
 import { AssetPicker } from "./AssetPicker";
+import { TweakEntityModal } from "./TweakEntityModal";
 import { CustomSelect } from './CustomSelect';
-import { getPreviewSrc } from "./levelBuilderUtils";
+import { getPreviewSrc, getEntityPreviewUrl } from "./levelBuilderUtils";
 import { CustomColorPicker } from './CustomColorPicker';
 import { ASSETS } from "../../assets";
 
@@ -105,6 +106,62 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
   }, [level.triggers]);
 
   const scripts = localScripts;
+
+  const placedNPCs = React.useMemo(() => {
+    const list: {
+      key: string;
+      label: string;
+      npcId: string;
+      x: number;
+      y: number;
+      floor: number;
+      name: string;
+      symbol: string;
+    }[] = [];
+
+    const paletteMap = new Map<string, any>();
+    if (level.NPCs) {
+      level.NPCs.forEach((n: any) => paletteMap.set(n.symbol, n));
+    }
+    if (level.enemies) {
+      level.enemies.forEach((e: any) => paletteMap.set(e.symbol, e));
+    }
+    Object.entries(npcsData).forEach(([id, def]: [string, any]) => {
+      if (def.symbol && !paletteMap.has(def.symbol)) {
+        paletteMap.set(def.symbol, { ...def, id });
+      }
+    });
+
+    const entitiesFloors = level.entities || [];
+    entitiesFloors.forEach((floorGrid, f) => {
+      if (!floorGrid) return;
+      floorGrid.forEach((row, y) => {
+        if (!row) return;
+        for (let x = 0; x < row.length; x++) {
+          const char = row[x];
+          if (char && char !== '.' && char !== ' ') {
+            if (paletteMap.has(char)) {
+              const def = paletteMap.get(char);
+              const rawName = def.name || def.id || char;
+              const name = rawName.split('/')[0].trim();
+              list.push({
+                key: `${f}_${x}_${y}_${char}`,
+                label: `${name} [${char}] (X: ${x}, Y: ${y}${entitiesFloors.length > 1 ? `, F: ${f}` : ''})`,
+                npcId: def.id || char,
+                x,
+                y,
+                floor: f,
+                name,
+                symbol: char,
+              });
+            }
+          }
+        }
+      });
+    });
+
+    return list;
+  }, [level]);
   const [expandedScripts, setExpandedScripts] = useState<Record<string, boolean>>({});
 
   const toggleExpand = (id: string) => {
@@ -114,6 +171,147 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
     }));
   };
   const [pickingAssetFor, setPickingAssetFor] = useState<{sIdx: number, aIdx: number, type: 'portrait' | 'tutorial_asset' | 'screamer_image' | 'skybox', pIdx?: number} | null>(null);
+
+  const [tweakModalState, setTweakModalState] = useState<{
+    isOpen: boolean;
+    sIdx: number;
+    aIdx: number;
+    initialConfig: any;
+    baseTemplate: any;
+    listName: string;
+    coordKey: string;
+  } | null>(null);
+
+  const openVisualConstructorForAction = (sIdx: number, aIdx: number, act: ScriptAction) => {
+    const entityType = act.params?.entityType || 'ENEMY';
+    const defId = act.params?.definitionId || '';
+    const normDefId = defId ? String(defId).trim().toLowerCase() : '';
+
+    let baseTemplate: any = {};
+    let listName = 'enemies';
+
+    if (entityType === 'ENEMY') {
+      listName = 'enemies';
+      const paletteItem = level.enemiesPalette?.find((e: any) =>
+        (e.id && String(e.id).toLowerCase() === normDefId) ||
+        (e.symbol && String(e.symbol).toLowerCase() === normDefId)
+      );
+      const dbKey = normDefId ? Object.keys(enemiesData).find(k => k.toLowerCase() === normDefId) : undefined;
+      const dbItem = dbKey ? (enemiesData as any)[dbKey] : undefined;
+      const fallback = Object.values(enemiesData)[0] || {
+        id: "zombie_tech",
+        name: "Заражённый техник/Infected technician",
+        hp: 12,
+        maxHp: 12,
+        damageDice: "1d4",
+        accuracy: 1,
+        attackRange: 1,
+        speed: 1,
+        baseXP: 10,
+        assets: { map: { assetId: "ANIM_ZOMBIE_IDLE", scale: 0.8 }, portrait: { assetId: "ANIM_ZOMBIE_PORTRAIT", scale: 1 } },
+        sounds: { attack: "ZOMBIE_ATTACK", damage: "ZOMBIE_DAMAGE", death: "ZOMBIE_DIES" }
+      };
+      const found = dbItem || paletteItem ? { ...dbItem, ...paletteItem } : { ...fallback };
+      baseTemplate = JSON.parse(JSON.stringify(found));
+      if (defId) baseTemplate.id = defId;
+    } else if (entityType === 'NPC') {
+      listName = 'npcs';
+      const paletteItem = level.npcsPalette?.find((n: any) =>
+        (n.id && String(n.id).toLowerCase() === normDefId) ||
+        (n.symbol && String(n.symbol).toLowerCase() === normDefId)
+      );
+      const dbKey = normDefId ? Object.keys(npcsData).find(k => k.toLowerCase() === normDefId) : undefined;
+      const dbItem = dbKey ? (npcsData as any)[dbKey] : undefined;
+      const fallback = Object.values(npcsData)[0] || {
+        id: "lana",
+        name: "Лана/Lana",
+        description: "Журналистка/Journalist",
+        hp: 1,
+        canBeKilled: true,
+        talkRange: 1,
+        assets: { map: { assetId: "LANA", scale: 0.8 }, portrait: { assetId: "LANA_PORTRAIT" } }
+      };
+      const found = dbItem || paletteItem ? { ...dbItem, ...paletteItem } : { ...fallback };
+      baseTemplate = JSON.parse(JSON.stringify(found));
+      if (defId) baseTemplate.id = defId;
+    } else if (entityType === 'ITEM') {
+      listName = 'items';
+      const paletteItem = level.itemsPalette?.find((i: any) =>
+        (i.id && String(i.id).toLowerCase() === normDefId) ||
+        (i.symbol && String(i.symbol).toLowerCase() === normDefId)
+      );
+      const dbKey = normDefId ? Object.keys(itemsData).find(k => k.toLowerCase() === normDefId) : undefined;
+      const dbItem = dbKey ? (itemsData as any)[dbKey] : undefined;
+      const fallback = Object.values(itemsData)[0] || {
+        id: "item",
+        name: "Предмет/Item",
+        type: "MISC"
+      };
+      const found = dbItem || paletteItem ? { ...dbItem, ...paletteItem } : { ...fallback };
+      baseTemplate = JSON.parse(JSON.stringify(found));
+      if (defId) baseTemplate.id = defId;
+    } else if (entityType === 'DECORATION') {
+      listName = 'decorations';
+      const paletteItem = level.decorationsPalette?.find((d: any) =>
+        (d.id && String(d.id).toLowerCase() === normDefId) ||
+        (d.symbol && String(d.symbol).toLowerCase() === normDefId)
+      );
+      const dbKey = normDefId ? Object.keys(decorationsData).find(k => k.toLowerCase() === normDefId) : undefined;
+      const dbItem = dbKey ? (decorationsData as any)[dbKey] : undefined;
+      const fallback = Object.values(decorationsData)[0] || {
+        id: "barrel",
+        name: "Бочка с маслом/Oil barrel",
+        description: "Бочка/Barrel",
+        assetId: "BARREL",
+        scale: 0.7,
+        blocking: true
+      };
+      const found = dbItem || paletteItem ? { ...dbItem, ...paletteItem } : { ...fallback };
+      baseTemplate = JSON.parse(JSON.stringify(found));
+      if (defId) baseTemplate.id = defId;
+    }
+
+    const currentModified = act.params?.modifiedConfig || {};
+    const mergedConfig = {
+      ...baseTemplate,
+      ...currentModified,
+    };
+
+    setTweakModalState({
+      isOpen: true,
+      sIdx,
+      aIdx,
+      initialConfig: mergedConfig,
+      baseTemplate,
+      listName,
+      coordKey: `Скрипт #${sIdx + 1}, Действие #${aIdx + 1} [${entityType}]`,
+    });
+  };
+
+  const handleSaveTweakModal = (savedConfig: any) => {
+    if (!tweakModalState) return;
+    const { sIdx, aIdx, baseTemplate } = tweakModalState;
+
+    const modifiedConfig: Record<string, any> = {};
+    for (const key in savedConfig) {
+      if (key === 'symbol' || key === 'entityType') continue;
+      if (JSON.stringify(savedConfig[key]) !== JSON.stringify(baseTemplate[key])) {
+        modifiedConfig[key] = savedConfig[key];
+      }
+    }
+
+    const finalConfig = Object.keys(modifiedConfig).length > 0 ? modifiedConfig : savedConfig;
+
+    updateAction(sIdx, aIdx, (a) => ({
+      ...a,
+      params: {
+        ...a.params,
+        modifiedConfig: finalConfig,
+      },
+    }));
+
+    setTweakModalState(null);
+  };
 
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
@@ -157,10 +355,14 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
     }
   };
 
+  const soundOptions = React.useMemo(() => {
+    return Object.keys(soundsData).filter(key => !(soundsData as any)[key]?.alias);
+  }, []);
+
   const streamingMusicOptions = React.useMemo(() => {
     return Object.keys(soundsData).filter(key => {
       const snd = (soundsData as any)[key];
-      return snd && snd.streaming === true;
+      return snd && !snd.alias && snd.streaming === true;
     });
   }, []);
 
@@ -497,6 +699,11 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                       if (newType === "ON_FLAG_CHANGE") {
                         newParams.flag = newParams.flag || "";
                       }
+                      if (newType === "ON_COUNTER_VALUE" || newType === "ON_COUNTER_CHANGE") {
+                        newParams.counterId = newParams.counterId || newParams.id || "";
+                        newParams.value = newParams.value !== undefined ? newParams.value : 1;
+                        newParams.operator = newParams.operator || ">=";
+                      }
                       updateScript(sIdx, {
                         ...script,
                         type: newType,
@@ -512,6 +719,7 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                     <option value="ON_DOOR_STATE_CHANGE">ON_DOOR_STATE_CHANGE</option>
                     <option value="ON_TIMER">ON_TIMER</option>
                     <option value="ON_FLAG_CHANGE">ON_FLAG_CHANGE</option>
+                    <option value="ON_COUNTER_VALUE">ON_COUNTER_VALUE</option>
                     <option value="ON_DIALOGUE_NODE">ON_DIALOGUE_NODE</option>
                   </CustomSelect>
                   <div className="flex items-center gap-3 w-full sm:w-auto mt-1 sm:mt-0">
@@ -1173,6 +1381,62 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                     </select>
                   </div>
                 )}
+                {(script.type === "ON_COUNTER_VALUE" || script.type === "ON_COUNTER_CHANGE") && (
+                  <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto p-1.5 bg-gray-800 rounded text-xs">
+                    <span className="text-gray-400 ml-1">{isRu ? "ID счётчика:" : "Counter ID:"}</span>
+                    <input
+                      type="text"
+                      className="bg-gray-950 w-36 px-2 py-0.5 rounded text-white font-mono border border-gray-700"
+                      value={script.params?.counterId ?? script.params?.id ?? ""}
+                      placeholder="counter_id"
+                      onChange={(e) =>
+                        updateScript(sIdx, (s) => ({
+                          ...s,
+                          params: {
+                            ...s.params,
+                            counterId: e.target.value,
+                          },
+                        }))
+                      }
+                    />
+                    <span className="text-gray-400">{isRu ? "Условие:" : "Condition:"}</span>
+                    <select
+                      className="bg-gray-950 px-2 py-0.5 rounded text-white font-mono border border-gray-700"
+                      value={script.params?.operator ?? ">="}
+                      onChange={(e) =>
+                        updateScript(sIdx, (s) => ({
+                          ...s,
+                          params: {
+                            ...s.params,
+                            operator: e.target.value,
+                          },
+                        }))
+                      }
+                    >
+                      <option value=">=">&gt;= ({isRu ? "Достиг или больше" : "Greater or equal"})</option>
+                      <option value="==">== ({isRu ? "Точно равен" : "Equal"})</option>
+                      <option value=">">&gt; ({isRu ? "Больше" : "Greater"})</option>
+                      <option value="<=">&lt;= ({isRu ? "Меньше или равен" : "Less or equal"})</option>
+                      <option value="<">&lt; ({isRu ? "Меньше" : "Less"})</option>
+                      <option value="!=">!= ({isRu ? "Не равен" : "Not equal"})</option>
+                    </select>
+                    <span className="text-gray-400">{isRu ? "Значение:" : "Value:"}</span>
+                    <input
+                      type="number"
+                      className="bg-gray-950 w-20 px-2 py-0.5 rounded text-white font-mono border border-gray-700"
+                      value={script.params?.value ?? script.params?.targetValue ?? 1}
+                      onChange={(e) =>
+                        updateScript(sIdx, (s) => ({
+                          ...s,
+                          params: {
+                            ...s.params,
+                            value: Number(e.target.value),
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                )}
 
               </div>
 
@@ -1230,10 +1494,16 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                           let newP = { ...act.params };
                           if (t === "SPAWN_ENTITY")
                             newP = { entityType: "ENEMY", definitionId: "", x: 0, y: 0 };
+                          else if (t === "SPAWN_EXPLOSION")
+                            newP = { entityType: "EXPLOSION", damageDice: "2d6", range: 2, assetId: "ANIM_EXPLOSION", soundId: "EXPLOSION", itemType: "NORMAL", itemDuration: 4, x: 0, y: 0 };
                           else if (t === "REMOVE_ENTITY")
                             newP = { entityType: "ENEMY", x: 0, y: 0 };
+                          else if (t === "MODIFY_ENTITY")
+                            newP = { entityType: "ENEMY", definitionId: "", modifiedConfig: {} };
                           else if (t === "GIVE_ITEM")
                             newP = { itemDefinitionId: "medkit" };
+                          else if (t === "TAKE_ITEM")
+                            newP = { itemDefinitionId: "medkit", count: 1 };
                           else if (t === "SHOW_DIALOGUE")
                             newP = { dialogueId: "start_convo" };
                           else if (t === "SHOW_TUTORIAL")
@@ -1270,16 +1540,29 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                             newP = { globalLight: 0.1, skyboxTextureId: "", weather: "none", changeMode: "all", fogColor: "#bec8d2", fogDistance: 15 };
                           else if (t === "MOVE_TO")
                             newP = { startX: 0, startY: 0, targetX: 0, targetY: 0 };
+                          else if (t === "NPC_FOLLOW")
+                            newP = { startX: 0, startY: 0, mode: "NPC_FOLLOWS_PLAYER", targetX: 0, targetY: 0, maxDistance: 4 };
                           else if (t === "RESET_SPAWN")
                             newP = { x: 0, y: 0 };
                           else if (t === "UNLOCK_ACHIEVEMENT")
                             newP = { achievementKey: "first_blood" };
+                          else if (t === "END")
+                            newP = { duration: 2000, delay: 500 };
+                          else if (t === "LAUNCH_MINIGAME")
+                            newP = { gameId: "chess" };
+                          else if (t === "REPEAT")
+                            newP = { delay: 0 };
+                          else if (t === "STOP_REPEAT")
+                            newP = { scriptId: "" };
                           updateAction(sIdx, aIdx, { type: t, params: newP });
                         }}
                       >
                         <option value="SPAWN_ENTITY">SPAWN_ENTITY</option>
+                        <option value="SPAWN_EXPLOSION">SPAWN_EXPLOSION</option>
                         <option value="REMOVE_ENTITY">REMOVE_ENTITY</option>
+                        <option value="MODIFY_ENTITY">MODIFY_ENTITY</option>
                         <option value="GIVE_ITEM">GIVE_ITEM</option>
+                        <option value="TAKE_ITEM">TAKE_ITEM</option>
                         <option value="SHOW_DIALOGUE">SHOW_DIALOGUE</option>
                         <option value="SHOW_TUTORIAL">SHOW_TUTORIAL</option>
                         <option value="PLAY_SOUND">PLAY_SOUND</option>
@@ -1287,24 +1570,32 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                         <option value="DOOR_STATE_CHANGE">DOOR_STATE_CHANGE</option>
                         <option value="ADD_LOG">ADD_LOG</option>
                         <option value="SET_FLAG">SET_FLAG</option>
+                        <option value="CREATE_COUNTER">CREATE_COUNTER</option>
+                        <option value="SET_COUNTER">SET_COUNTER</option>
+                        <option value="INCREMENT_COUNTER">INCREMENT_COUNTER</option>
                         <option value="REVEAL_TASK">REVEAL_TASK</option>
                         <option value="COMPLETE_TASK">COMPLETE_TASK</option>
                         <option value="CINEMATIC_CAMERA">CINEMATIC_CAMERA</option>
                         <option value="CINEMATIC_STATIC_CAMERA">CINEMATIC_STATIC_CAMERA</option>
                         <option value="DELAY">DELAY</option>
+                        <option value="REPEAT">REPEAT</option>
+                        <option value="STOP_REPEAT">STOP_REPEAT</option>
                         <option value="PLAYER_FALL">PLAYER_FALL</option>
                         <option value="PLAYER_DEATH">PLAYER_DEATH</option>
                         <option value="GAME_OVER">GAME_OVER</option>
+                        <option value="END">END</option>
                         <option value="SHOW_SCREAMER">SHOW_SCREAMER</option>
                         <option value="SET_SECTOR">SET_SECTOR</option>
                         <option value="MOVE_TO">MOVE_TO</option>
+                        <option value="NPC_FOLLOW">NPC_FOLLOW</option>
                         <option value="RESET_SPAWN">RESET_SPAWN</option>
                         <option value="MUSIC_PLAYER">MUSIC_PLAYER</option>
                         <option value="UNLOCK_ACHIEVEMENT">UNLOCK_ACHIEVEMENT</option>
+                        <option value="LAUNCH_MINIGAME">LAUNCH_MINIGAME</option>
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col sm:flex-row flex-wrap sm:items-center gap-2">
-                      {act.type === "SPAWN_ENTITY" && (
+                      {(act.type === "SPAWN_ENTITY" || act.type === "SPAWN_EXPLOSION") && (
                         <>
                           <CustomSelect
                             className="bg-gray-900 border border-gray-700 w-full sm:w-32 px-2 py-1 rounded"
@@ -1352,10 +1643,54 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                               }
                             >
                               <option value="">{uiStrings?.please_select || (isRu ? "-- Выберите --" : "-- Select --")}</option>
-                              {act.params?.entityType === "ENEMY" && Object.keys(enemiesData).map(k => <option key={k} value={k}>{k}</option>)}
-                              {act.params?.entityType === "NPC" && Object.keys(npcsData).map(k => <option key={k} value={k}>{k}</option>)}
-                              {act.params?.entityType === "ITEM" && Object.keys(itemsData).map(k => <option key={k} value={k}>{k}</option>)}
-                              {act.params?.entityType === "DECORATION" && Object.keys(decorationsData).map(k => <option key={k} value={k}>{k}</option>)}
+                              {act.params?.entityType === "ENEMY" && Object.keys(enemiesData).map(k => {
+                                const previewUrl = getEntityPreviewUrl('enemy', k);
+                                const nameFmt = (enemiesData as any)[k]?.name ? `${(enemiesData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                                return (
+                                  <option key={k} value={k}>
+                                    <span className="inline-flex items-center gap-2">
+                                      {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                      <span>{nameFmt}</span>
+                                    </span>
+                                  </option>
+                                );
+                              })}
+                              {act.params?.entityType === "NPC" && Object.keys(npcsData).map(k => {
+                                const previewUrl = getEntityPreviewUrl('npc', k);
+                                const nameFmt = (npcsData as any)[k]?.name ? `${(npcsData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                                return (
+                                  <option key={k} value={k}>
+                                    <span className="inline-flex items-center gap-2">
+                                      {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                      <span>{nameFmt}</span>
+                                    </span>
+                                  </option>
+                                );
+                              })}
+                              {act.params?.entityType === "ITEM" && Object.keys(itemsData).map(k => {
+                                const previewUrl = getEntityPreviewUrl('item', k);
+                                const nameFmt = (itemsData as any)[k]?.name ? `${(itemsData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                                return (
+                                  <option key={k} value={k}>
+                                    <span className="inline-flex items-center gap-2">
+                                      {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                      <span>{nameFmt}</span>
+                                    </span>
+                                  </option>
+                                );
+                              })}
+                              {act.params?.entityType === "DECORATION" && Object.keys(decorationsData).map(k => {
+                                const previewUrl = getEntityPreviewUrl('decoration', k);
+                                const nameFmt = (decorationsData as any)[k]?.name ? `${(decorationsData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                                return (
+                                  <option key={k} value={k}>
+                                    <span className="inline-flex items-center gap-2">
+                                      {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                      <span>{nameFmt}</span>
+                                    </span>
+                                  </option>
+                                );
+                              })}
                               {act.params?.entityType === "LIGHT" && Object.keys(level.lightDefinitions || {}).map(k => <option key={k} value={k}>{k}</option>)}
                               {act.params?.entityType === "AMBIENT_SOUND" && level.ambientSounds?.filter(s => s.symbol).map(s => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}
                               {act.params?.entityType === "PARTICLE_EMITTER" && Object.keys(particlesData).map(k => <option key={k} value={k}>{k}</option>)}
@@ -1447,6 +1782,19 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                                   />
                                 </>
                               )}
+                              <span className="text-gray-400">{uiStrings?.explosion_delay || (isRu ? "Пауза (мс)" : "Delay (ms)")}:</span>
+                              <input
+                                type="number"
+                                className="bg-gray-800 border border-gray-700 rounded px-1 py-0.5 w-14 text-center text-white"
+                                placeholder="0"
+                                value={act.params?.delay ?? ""}
+                                onChange={(e) =>
+                                  updateAction(sIdx, aIdx, {
+                                    ...act,
+                                    params: { ...act.params, delay: e.target.value === '' ? '' : Number(e.target.value) },
+                                  })
+                                }
+                              />
                             </div>
                           )}
 
@@ -1544,10 +1892,54 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                             }
                           >
                             <option value="">-- Любой --</option>
-                            {act.params?.entityType === "ENEMY" && Object.keys(enemiesData).map(k => <option key={k} value={k}>{k}</option>)}
-                            {act.params?.entityType === "NPC" && Object.keys(npcsData).map(k => <option key={k} value={k}>{k}</option>)}
-                            {act.params?.entityType === "ITEM" && Object.keys(itemsData).map(k => <option key={k} value={k}>{k}</option>)}
-                            {act.params?.entityType === "DECORATION" && Object.keys(decorationsData).map(k => <option key={k} value={k}>{k}</option>)}
+                            {act.params?.entityType === "ENEMY" && Object.keys(enemiesData).map(k => {
+                              const previewUrl = getEntityPreviewUrl('enemy', k);
+                              const nameFmt = (enemiesData as any)[k]?.name ? `${(enemiesData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                              return (
+                                <option key={k} value={k}>
+                                  <span className="inline-flex items-center gap-2">
+                                    {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                    <span>{nameFmt}</span>
+                                  </span>
+                                </option>
+                              );
+                            })}
+                            {act.params?.entityType === "NPC" && Object.keys(npcsData).map(k => {
+                              const previewUrl = getEntityPreviewUrl('npc', k);
+                              const nameFmt = (npcsData as any)[k]?.name ? `${(npcsData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                              return (
+                                <option key={k} value={k}>
+                                  <span className="inline-flex items-center gap-2">
+                                    {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                    <span>{nameFmt}</span>
+                                  </span>
+                                </option>
+                              );
+                            })}
+                            {act.params?.entityType === "ITEM" && Object.keys(itemsData).map(k => {
+                              const previewUrl = getEntityPreviewUrl('item', k);
+                              const nameFmt = (itemsData as any)[k]?.name ? `${(itemsData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                              return (
+                                <option key={k} value={k}>
+                                  <span className="inline-flex items-center gap-2">
+                                    {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                    <span>{nameFmt}</span>
+                                  </span>
+                                </option>
+                              );
+                            })}
+                            {act.params?.entityType === "DECORATION" && Object.keys(decorationsData).map(k => {
+                              const previewUrl = getEntityPreviewUrl('decoration', k);
+                              const nameFmt = (decorationsData as any)[k]?.name ? `${(decorationsData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                              return (
+                                <option key={k} value={k}>
+                                  <span className="inline-flex items-center gap-2">
+                                    {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                    <span>{nameFmt}</span>
+                                  </span>
+                                </option>
+                              );
+                            })}
                             {act.params?.entityType === "LIGHT" && Object.keys(level.lightDefinitions || {}).map(k => <option key={k} value={k}>{k}</option>)}
                             {act.params?.entityType === "AMBIENT_SOUND" && level.ambientSounds?.filter(s => s.symbol).map(s => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}
                             {act.params?.entityType === "PARTICLE_EMITTER" && Object.keys(particlesData).map(k => <option key={k} value={k}>{k}</option>)}
@@ -1595,6 +1987,161 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                               <MapPin size={14} />
                             </button>
                           </div>
+                        </>
+                      )}
+
+                      {act.type === "MODIFY_ENTITY" && (
+                        <>
+                          <CustomSelect
+                            className="bg-gray-900 border border-gray-700 w-full sm:w-32 px-2 py-1 rounded"
+                            value={act.params?.entityType || "ENEMY"}
+                            onChange={(e) =>
+                              updateAction(sIdx, aIdx, {
+                                ...act,
+                                params: { ...act.params, entityType: e.target.value },
+                              })
+                            }
+                          >
+                            <option value="ENEMY">Враг</option>
+                            <option value="NPC">NPC</option>
+                            <option value="ITEM">Предмет</option>
+                            <option value="DECORATION">Декорация</option>
+                          </CustomSelect>
+
+                          <CustomSelect
+                            className="bg-gray-900 border border-gray-700 w-full sm:w-36 px-2 py-1 rounded"
+                            title="Выберите конкретную сущность из библиотеки (или оставьте Любой)"
+                            value={act.params?.definitionId || ""}
+                            onChange={(e) =>
+                              updateAction(sIdx, aIdx, {
+                                ...act,
+                                params: { ...act.params, definitionId: e.target.value },
+                              })
+                            }
+                          >
+                            <option value="">-- Любой --</option>
+                            {act.params?.entityType === "ENEMY" && Object.keys(enemiesData).map(k => {
+                              const previewUrl = getEntityPreviewUrl('enemy', k);
+                              const nameFmt = (enemiesData as any)[k]?.name ? `${(enemiesData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                              return (
+                                <option key={k} value={k}>
+                                  <span className="inline-flex items-center gap-2">
+                                    {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                    <span>{nameFmt}</span>
+                                  </span>
+                                </option>
+                              );
+                            })}
+                            {act.params?.entityType === "NPC" && Object.keys(npcsData).map(k => {
+                              const previewUrl = getEntityPreviewUrl('npc', k);
+                              const nameFmt = (npcsData as any)[k]?.name ? `${(npcsData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                              return (
+                                <option key={k} value={k}>
+                                  <span className="inline-flex items-center gap-2">
+                                    {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                    <span>{nameFmt}</span>
+                                  </span>
+                                </option>
+                              );
+                            })}
+                            {act.params?.entityType === "ITEM" && Object.keys(itemsData).map(k => {
+                              const previewUrl = getEntityPreviewUrl('item', k);
+                              const nameFmt = (itemsData as any)[k]?.name ? `${(itemsData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                              return (
+                                <option key={k} value={k}>
+                                  <span className="inline-flex items-center gap-2">
+                                    {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                    <span>{nameFmt}</span>
+                                  </span>
+                                </option>
+                              );
+                            })}
+                            {act.params?.entityType === "DECORATION" && Object.keys(decorationsData).map(k => {
+                              const previewUrl = getEntityPreviewUrl('decoration', k);
+                              const nameFmt = (decorationsData as any)[k]?.name ? `${(decorationsData as any)[k].name.split('/')[0].trim()} [${k}]` : k;
+                              return (
+                                <option key={k} value={k}>
+                                  <span className="inline-flex items-center gap-2">
+                                    {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                    <span>{nameFmt}</span>
+                                  </span>
+                                </option>
+                              );
+                            })}
+                          </CustomSelect>
+
+                          <div className="flex flex-wrap items-center gap-1 bg-gray-900 rounded px-1 w-full sm:w-auto">
+                            <span className="text-gray-500">X:</span>
+                            <input
+                              type="text"
+                              placeholder="Любой"
+                              className="bg-transparent w-10 text-center"
+                              value={act.params?.x ?? ""}
+                              onChange={(e) =>
+                                updateAction(sIdx, aIdx, {
+                                  ...act,
+                                  params: { ...act.params, x: e.target.value === '' ? undefined : Number(e.target.value) },
+                                })
+                              }
+                            />
+                            <span className="text-gray-500">Y:</span>
+                            <input
+                              type="text"
+                              placeholder="Любой"
+                              className="bg-transparent w-10 text-center"
+                              value={act.params?.y ?? ""}
+                              onChange={(e) =>
+                                updateAction(sIdx, aIdx, {
+                                  ...act,
+                                  params: { ...act.params, y: e.target.value === '' ? undefined : Number(e.target.value) },
+                                })
+                              }
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cx = typeof act.params?.x === 'number' ? act.params.x : undefined;
+                                const cy = typeof act.params?.y === 'number' ? act.params.y : undefined;
+                                onPickCoordinate((x, y) =>
+                                  updateAction(sIdx, aIdx, (a) => ({
+                                    ...a,
+                                    params: { ...a.params, x, y },
+                                  })),
+                                  cx !== undefined && cy !== undefined ? { x: cx, y: cy } : null
+                                );
+                              }}
+                              className="text-indigo-400 hover:text-indigo-300 p-1"
+                              title="Указать координаты"
+                            >
+                              <MapPin size={14} />
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => openVisualConstructorForAction(sIdx, aIdx, act)}
+                            className="bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-600 px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-colors"
+                            title="Открыть конструктор параметров сущности"
+                          >
+                            <Sliders size={13} className="text-indigo-400" />
+                            <span>Настроить параметры</span>
+                            {act.params?.modifiedConfig && Object.keys(act.params.modifiedConfig).length > 0 && (
+                              <span className="bg-indigo-900/80 text-indigo-300 text-[10px] px-1.5 py-0.5 rounded-full font-mono border border-indigo-700/60 ml-0.5">
+                                {Object.keys(act.params.modifiedConfig).length}
+                              </span>
+                            )}
+                          </button>
+
+                          {act.params?.modifiedConfig && Object.keys(act.params.modifiedConfig).length > 0 && (
+                            <div className="w-full flex flex-wrap items-center gap-1.5 text-[11px] pt-1.5 border-t border-gray-900 text-gray-400">
+                              <span className="text-gray-500 font-semibold shrink-0">Изменения:</span>
+                              {Object.entries(act.params.modifiedConfig).map(([key, val]) => (
+                                <span key={key} className="bg-gray-900 border border-gray-800 text-indigo-300/90 px-1.5 py-0.5 rounded font-mono truncate max-w-[200px]" title={`${key}: ${JSON.stringify(val)}`}>
+                                  <span className="text-gray-400 font-sans">{key}:</span> {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </>
                       )}
 
@@ -1813,11 +2360,18 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                           >
                             <option value="">Выберите предмет</option>
                             {Object.entries(itemsData).map(
-                              ([id, item]: [string, any]) => (
-                                <option key={id} value={id}>
-                                  {id}
-                                </option>
-                              ),
+                              ([id, item]: [string, any]) => {
+                                const previewUrl = getEntityPreviewUrl('item', id);
+                                const nameFmt = item?.name ? `${item.name.split('/')[0].trim()} [${id}]` : id;
+                                return (
+                                  <option key={id} value={id}>
+                                    <span className="inline-flex items-center gap-2">
+                                      {previewUrl ? <img src={previewUrl} className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700" style={{ imageRendering: 'pixelated' }} alt="" referrerPolicy="no-referrer" /> : <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />}
+                                      <span>{nameFmt}</span>
+                                    </span>
+                                  </option>
+                                );
+                              },
                             )}
                           </CustomSelect>
                           <input
@@ -1882,26 +2436,112 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                             />
                             <button
                               onClick={() => {
-  const cx = typeof act.params?.spawnAtX === 'number' ? act.params.spawnAtX : undefined;
-  const cy = typeof act.params?.spawnAtY === 'number' ? act.params.spawnAtY : undefined;
-  onPickCoordinate((x, y) =>
-    updateAction(sIdx, aIdx, (a) => ({
-      ...a,
-      params: {
-        ...a.params,
-        spawnAtX: x,
-        spawnAtY: y,
-      },
-    })),
-    cx !== undefined && cy !== undefined ? { x: cx, y: cy } : null
-  );
-}}
+    const cx = typeof act.params?.spawnAtX === 'number' ? act.params.spawnAtX : undefined;
+    const cy = typeof act.params?.spawnAtY === 'number' ? act.params.spawnAtY : undefined;
+    onPickCoordinate((x, y) =>
+      updateAction(sIdx, aIdx, (a) => ({
+        ...a,
+        params: {
+          ...a.params,
+          spawnAtX: x,
+          spawnAtY: y,
+        },
+      })),
+      cx !== undefined && cy !== undefined ? { x: cx, y: cy } : null
+    );
+  }}
                               className="text-indigo-400 hover:text-indigo-300 p-1"
                             >
                               <MapPin size={14} />
                             </button>
                           </div>
                         </>
+                      )}
+                      {act.type === "TAKE_ITEM" && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="inline-flex items-center gap-1 text-xs text-amber-400 cursor-pointer select-none bg-gray-900 px-2 py-1 rounded border border-amber-500/30">
+                            <input
+                              type="checkbox"
+                              checked={!!act.params?.takeAll}
+                              onChange={(e) =>
+                                updateAction(sIdx, aIdx, {
+                                  ...act,
+                                  params: {
+                                    ...act.params,
+                                    takeAll: e.target.checked,
+                                    takeAllScope: act.params?.takeAllScope || "ALL",
+                                  },
+                                })
+                              }
+                              className="rounded text-amber-500 focus:ring-0"
+                            />
+                            <span>Изъять всё</span>
+                          </label>
+
+                          {act.params?.takeAll ? (
+                            <CustomSelect
+                              className="bg-gray-900 border border-amber-500/50 text-amber-300 w-full sm:w-56 px-2 py-1 rounded text-xs"
+                              value={act.params?.takeAllScope || "ALL"}
+                              onChange={(e) =>
+                                updateAction(sIdx, aIdx, {
+                                  ...act,
+                                  params: {
+                                    ...act.params,
+                                    takeAllScope: e.target.value,
+                                  },
+                                })
+                              }
+                            >
+                              <option value="ALL">Вообще всё (Инвентарь + Экипировка)</option>
+                              <option value="INVENTORY">Только в инвентаре</option>
+                              <option value="EQUIPPED">Только экипированные вещи</option>
+                            </CustomSelect>
+                          ) : (
+                            <>
+                              <CustomSelect
+                                className="bg-gray-900 border border-gray-700 w-full sm:w-36 px-2 py-1 rounded text-xs"
+                                value={act.params?.itemDefinitionId || ""}
+                                onChange={(e) =>
+                                  updateAction(sIdx, aIdx, {
+                                    ...act,
+                                    params: {
+                                      ...act.params,
+                                      itemDefinitionId: e.target.value,
+                                    },
+                                  })
+                                }
+                              >
+                                <option value="">Выберите предмет</option>
+                                {Object.entries(itemsData).map(
+                                  ([id, item]: [string, any]) => {
+                                    const nameFmt = item?.name ? `${item.name.split('/')[0].trim()} [${id}]` : id;
+                                    return (
+                                      <option key={id} value={id}>
+                                        {nameFmt}
+                                      </option>
+                                    );
+                                  },
+                                )}
+                              </CustomSelect>
+
+                              <input
+                                type="number"
+                                className="bg-gray-900 border border-gray-700 w-full sm:w-16 px-2 py-1 rounded text-xs"
+                                placeholder="кол-во"
+                                value={act.params?.count || ""}
+                                onChange={(e) =>
+                                  updateAction(sIdx, aIdx, {
+                                    ...act,
+                                    params: {
+                                      ...act.params,
+                                      count: e.target.value === '' ? '' : Number(e.target.value) || undefined,
+                                    },
+                                  })
+                                }
+                              />
+                            </>
+                          )}
+                        </div>
                       )}
                       {act.type === "SHOW_TUTORIAL" && (
                         <div className="flex flex-col gap-3 w-full border-l-2 border-cyan-500/50 pl-2 bg-cyan-950/20 py-1.5 rounded-r">
@@ -2228,7 +2868,7 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                           }
                         >
                           <option value="">Выберите звук</option>
-                          {Object.keys(soundsData).map((id) => (
+                          {soundOptions.map((id) => (
                             <option key={id} value={id}>
                               {id}
                             </option>
@@ -2286,7 +2926,7 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                                 }
                               >
                                 <option value="">-- Выберите звук / Select --</option>
-                                {Object.keys(soundsData).map((id) => (
+                                {soundOptions.map((id) => (
                                   <option key={id} value={id}>
                                     {id}
                                   </option>
@@ -2381,6 +3021,60 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                             <option value="true">true</option>
                             <option value="false">false</option>
                           </CustomSelect>
+                        </>
+                      )}
+                      {(act.type === "CREATE_COUNTER" || act.type === "SET_COUNTER") && (
+                        <>
+                          <input
+                            className="bg-gray-900 border border-gray-700 flex-1 min-w-[120px] px-2 py-1 rounded w-full sm:w-auto text-xs font-mono"
+                            placeholder="counterId (e.g. terminals_counter)"
+                            value={act.params?.counterId || act.params?.id || ""}
+                            onChange={(e) =>
+                              updateAction(sIdx, aIdx, {
+                                ...act,
+                                params: { ...act.params, counterId: e.target.value },
+                              })
+                            }
+                          />
+                          <span className="text-xs text-gray-400">{isRu ? "Значение:" : "Val:"}</span>
+                          <input
+                            type="number"
+                            className="bg-gray-900 border border-gray-700 w-24 px-2 py-1 rounded text-xs text-white font-mono"
+                            value={act.params?.value ?? act.params?.initialValue ?? 0}
+                            onChange={(e) =>
+                              updateAction(sIdx, aIdx, {
+                                ...act,
+                                params: { ...act.params, value: Number(e.target.value) },
+                              })
+                            }
+                          />
+                        </>
+                      )}
+                      {act.type === "INCREMENT_COUNTER" && (
+                        <>
+                          <input
+                            className="bg-gray-900 border border-gray-700 flex-1 min-w-[120px] px-2 py-1 rounded w-full sm:w-auto text-xs font-mono"
+                            placeholder="counterId (e.g. terminals_counter)"
+                            value={act.params?.counterId || act.params?.id || ""}
+                            onChange={(e) =>
+                              updateAction(sIdx, aIdx, {
+                                ...act,
+                                params: { ...act.params, counterId: e.target.value },
+                              })
+                            }
+                          />
+                          <span className="text-xs text-gray-400">{isRu ? "Прибавить (+1):" : "Add (+1):"}</span>
+                          <input
+                            type="number"
+                            className="bg-gray-900 border border-gray-700 w-20 px-2 py-1 rounded text-xs text-white font-mono"
+                            value={act.params?.amount ?? act.params?.value ?? 1}
+                            onChange={(e) =>
+                              updateAction(sIdx, aIdx, {
+                                ...act,
+                                params: { ...act.params, amount: Number(e.target.value) },
+                              })
+                            }
+                          />
                         </>
                       )}
                       {act.type === "SET_SECTOR" && (
@@ -2578,6 +3272,48 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                               })
                             }
                           />
+                        </div>
+                      )}
+                      {act.type === "END" && (
+                        <div className="flex flex-wrap items-center gap-3 bg-gray-900/80 p-2 rounded border border-gray-700/50">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400 text-xs font-semibold">
+                              {isRu ? "Затемнение (мс):" : "Fade Out (ms):"}
+                            </span>
+                            <input
+                              type="number"
+                              className="bg-gray-800 border border-gray-700 px-2 py-1 rounded text-white text-xs w-20 focus:outline-none focus:border-indigo-500"
+                              value={act.params?.duration ?? 2000}
+                              onChange={(e) =>
+                                updateAction(sIdx, aIdx, {
+                                  ...act,
+                                  params: {
+                                    ...act.params,
+                                    duration: e.target.value === '' ? '' : Number(e.target.value),
+                                  },
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400 text-xs font-semibold">
+                              {isRu ? "Задержка меню (мс):" : "Menu Delay (ms):"}
+                            </span>
+                            <input
+                              type="number"
+                              className="bg-gray-800 border border-gray-700 px-2 py-1 rounded text-white text-xs w-20 focus:outline-none focus:border-indigo-500"
+                              value={act.params?.delay ?? 500}
+                              onChange={(e) =>
+                                updateAction(sIdx, aIdx, {
+                                  ...act,
+                                  params: {
+                                    ...act.params,
+                                    delay: e.target.value === '' ? '' : Number(e.target.value),
+                                  },
+                                })
+                              }
+                            />
+                          </div>
                         </div>
                       )}
                       {(act.type === "REVEAL_TASK" ||
@@ -2953,6 +3689,48 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                           />
                         </div>
                       )}
+                      {act.type === "REPEAT" && (
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 bg-gray-800 rounded text-xs w-full">
+                          <span className="text-gray-400 whitespace-nowrap">Пауза между срабатываниями (мс):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="50"
+                            className="bg-gray-950 border border-gray-700 w-full sm:w-32 px-2 py-1 rounded text-white text-xs font-mono"
+                            placeholder="0"
+                            value={act.params?.delay !== undefined ? act.params.delay : (act.params?.time !== undefined ? act.params.time : "")}
+                            onChange={(e) =>
+                              updateAction(sIdx, aIdx, {
+                                ...act,
+                                params: {
+                                  ...act.params,
+                                  delay: e.target.value === '' ? '' : Number(e.target.value),
+                                },
+                              })
+                            }
+                          />
+                        </div>
+                      )}
+                      {act.type === "STOP_REPEAT" && (
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 bg-gray-800 rounded text-xs w-full">
+                          <span className="text-gray-400 whitespace-nowrap">ID скрипта для остановки:</span>
+                          <input
+                            type="text"
+                            className="bg-gray-950 border border-gray-700 w-full sm:w-64 px-2 py-1 rounded text-white text-xs font-mono"
+                            placeholder="ID скрипта..."
+                            value={act.params?.scriptId ?? ""}
+                            onChange={(e) =>
+                              updateAction(sIdx, aIdx, {
+                                ...act,
+                                params: {
+                                  ...act.params,
+                                  scriptId: e.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </div>
+                      )}
                       {act.type === "PLAYER_DEATH" && (
                         <div className="flex flex-col gap-2 p-1.5 bg-gray-900 border border-gray-800 rounded text-xs text-gray-200 w-full">
                           {/* Верхний ряд: X: поле, Y: поле, кнопка */}
@@ -3143,12 +3921,247 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                                   );
                                 }}
                                 className="text-indigo-400 hover:text-indigo-300 p-1 flex items-center justify-center border border-gray-700 bg-gray-900 rounded h-6 w-6 text-xs shrink-0"
-                                title={uiStrings.moveto_pick_target || "Выбрать конечную точку"}
+                                 title={uiStrings.moveto_pick_target || "Выбрать конечную точку"}
                               >
                                 <MapPin size={11} />
                               </button>
                             </div>
                           </div>
+                        </div>
+                      )}
+                      {act.type === "NPC_FOLLOW" && (
+                        <div className="flex flex-col gap-2.5 p-2 bg-gray-900 border border-gray-800 rounded text-xs text-gray-200 w-full md:max-w-md">
+                          {/* MODE SELECTOR */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 bg-gray-950 rounded">
+                            <span className="font-semibold text-cyan-400 text-xs">
+                              {uiStrings.npcfollow_mode || (isRu ? "Режим следования:" : "Follow mode:")}
+                            </span>
+                            <CustomSelect
+                              className="bg-gray-900 border border-gray-700 px-2 py-1 rounded text-white"
+                              value={act.params?.mode || "NPC_FOLLOWS_PLAYER"}
+                              onChange={(e) =>
+                                updateAction(sIdx, aIdx, {
+                                  ...act,
+                                  params: {
+                                    ...act.params,
+                                    mode: e.target.value,
+                                  },
+                                })
+                              }
+                            >
+                              <option value="NPC_FOLLOWS_PLAYER">
+                                {uiStrings.npcfollow_mode_npc_follows_player || (isRu ? "NPC следует за игроком" : "NPC follows player")}
+                              </option>
+                              <option value="PLAYER_FOLLOWS_NPC">
+                                {uiStrings.npcfollow_mode_player_follows_npc || (isRu ? "Игрок следует за NPC в точку" : "Player follows NPC to point")}
+                              </option>
+                              <option value="STOP">
+                                {uiStrings.npcfollow_mode_stop || (isRu ? "Остановить следование" : "Stop following")}
+                              </option>
+                            </CustomSelect>
+                          </div>
+
+                          {/* SELECT NPC FROM LEVEL LIST */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 bg-gray-950 rounded">
+                            <span className="font-semibold text-emerald-400 text-xs shrink-0">
+                              {uiStrings.npcfollow_select_npc || (isRu ? "Выберите NPC:" : "Select NPC:")}
+                            </span>
+                            <CustomSelect
+                              className="bg-gray-900 border border-gray-700 px-2 py-1 rounded text-white text-xs w-full sm:max-w-xs"
+                              value={
+                                placedNPCs.find(
+                                  (n) =>
+                                    (n.npcId === act.params?.npcId || n.symbol === act.params?.npcId) &&
+                                    n.x === (act.params?.startX ?? act.params?.npcX) &&
+                                    n.y === (act.params?.startY ?? act.params?.npcY)
+                                )?.key ||
+                                act.params?.npcId ||
+                                ""
+                              }
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const found = placedNPCs.find((n) => n.key === val || n.npcId === val);
+                                if (found) {
+                                  updateAction(sIdx, aIdx, {
+                                    ...act,
+                                    params: {
+                                      ...act.params,
+                                      startX: found.x,
+                                      startY: found.y,
+                                      npcId: found.npcId,
+                                    },
+                                  });
+                                } else {
+                                  updateAction(sIdx, aIdx, {
+                                    ...act,
+                                    params: {
+                                      ...act.params,
+                                      npcId: val,
+                                    },
+                                  });
+                                }
+                              }}
+                            >
+                              <option value="">
+                                {uiStrings.npcfollow_manual_coords || (isRu ? "-- Указать вручную по X/Y --" : "-- Manual X/Y coordinates --")}
+                              </option>
+                              {placedNPCs.length > 0 && (
+                                <optgroup label={uiStrings.npcfollow_npcs_on_level || (isRu ? "NPC на этом уровне" : "NPCs on this level")}>
+                                  {placedNPCs.map((npc) => (
+                                    <option key={npc.key} value={npc.key}>
+                                      {npc.label}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              <optgroup label={uiStrings.npcfollow_all_npc_presets || (isRu ? "Все типы NPC (из базы)" : "All NPC presets")}>
+                                {Object.entries(npcsData).map(([id, def]: [string, any]) => {
+                                  const name = (def.name || id).split('/')[0].trim();
+                                  return (
+                                    <option key={`npc_${id}`} value={id}>
+                                      {name} ({id})
+                                    </option>
+                                  );
+                                })}
+                              </optgroup>
+                            </CustomSelect>
+                          </div>
+
+                          {/* NPC START COORDINATES */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 bg-gray-950 rounded">
+                            <span className="font-semibold text-teal-400 text-xs">
+                              {uiStrings.npcfollow_npc_pos ? `${uiStrings.npcfollow_npc_pos}` : (isRu ? "Координаты NPC:" : "NPC coordinate:")}
+                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-gray-500">X:</span>
+                              <input
+                                type="number"
+                                className="bg-gray-900 border border-gray-700 w-12 px-1 py-0.5 rounded text-center text-white"
+                                value={act.params?.startX ?? act.params?.npcX ?? 0}
+                                onChange={(e) =>
+                                  updateAction(sIdx, aIdx, {
+                                    ...act,
+                                    params: {
+                                      ...act.params,
+                                      startX: e.target.value === '' ? 0 : Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                              <span className="text-gray-500">Y:</span>
+                              <input
+                                type="number"
+                                className="bg-gray-900 border border-gray-700 w-12 px-1 py-0.5 rounded text-center text-white"
+                                value={act.params?.startY ?? act.params?.npcY ?? 0}
+                                onChange={(e) =>
+                                  updateAction(sIdx, aIdx, {
+                                    ...act,
+                                    params: {
+                                      ...act.params,
+                                      startY: e.target.value === '' ? 0 : Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                              <button
+                                onClick={() => {
+                                  const cx = typeof act.params?.startX === 'number' ? act.params.startX : undefined;
+                                  const cy = typeof act.params?.startY === 'number' ? act.params.startY : undefined;
+                                  onPickCoordinate((x, y) =>
+                                    updateAction(sIdx, aIdx, (a) => ({
+                                      ...a,
+                                      params: { ...a.params, startX: x, startY: y },
+                                    })),
+                                    cx !== undefined && cy !== undefined ? { x: cx, y: cy } : null
+                                  );
+                                }}
+                                className="text-indigo-400 hover:text-indigo-300 p-1 flex items-center justify-center border border-gray-700 bg-gray-900 rounded h-6 w-6 text-xs shrink-0"
+                                title={uiStrings.moveto_pick_start || "Выбрать точку NPC"}
+                              >
+                                <MapPin size={11} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* TARGET COORDINATES & DISTANCE (When mode is PLAYER_FOLLOWS_NPC) */}
+                          {act.params?.mode === "PLAYER_FOLLOWS_NPC" && (
+                            <>
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 bg-gray-950 rounded">
+                                <span className="font-semibold text-emerald-400 text-xs">
+                                  {uiStrings.npcfollow_target_pos ? `${uiStrings.npcfollow_target_pos}` : (isRu ? "Целевая точка:" : "Target coordinate:")}
+                                </span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-gray-500">X:</span>
+                                  <input
+                                    type="number"
+                                    className="bg-gray-900 border border-gray-700 w-12 px-1 py-0.5 rounded text-center text-white"
+                                    value={act.params?.targetX ?? 0}
+                                    onChange={(e) =>
+                                      updateAction(sIdx, aIdx, {
+                                        ...act,
+                                        params: {
+                                          ...act.params,
+                                          targetX: e.target.value === '' ? 0 : Number(e.target.value),
+                                        },
+                                      })
+                                    }
+                                  />
+                                  <span className="text-gray-500">Y:</span>
+                                  <input
+                                    type="number"
+                                    className="bg-gray-900 border border-gray-700 w-12 px-1 py-0.5 rounded text-center text-white"
+                                    value={act.params?.targetY ?? 0}
+                                    onChange={(e) =>
+                                      updateAction(sIdx, aIdx, {
+                                        ...act,
+                                        params: {
+                                          ...act.params,
+                                          targetY: e.target.value === '' ? 0 : Number(e.target.value),
+                                        },
+                                      })
+                                    }
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      const cx = typeof act.params?.targetX === 'number' ? act.params.targetX : undefined;
+                                      const cy = typeof act.params?.targetY === 'number' ? act.params.targetY : undefined;
+                                      onPickCoordinate((x, y) =>
+                                        updateAction(sIdx, aIdx, (a) => ({
+                                          ...a,
+                                          params: { ...a.params, targetX: x, targetY: y },
+                                        })),
+                                        cx !== undefined && cy !== undefined ? { x: cx, y: cy } : null
+                                      );
+                                    }}
+                                    className="text-indigo-400 hover:text-indigo-300 p-1 flex items-center justify-center border border-gray-700 bg-gray-900 rounded h-6 w-6 text-xs shrink-0"
+                                    title={uiStrings.moveto_pick_target || "Выбрать конечную точку"}
+                                  >
+                                    <MapPin size={11} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 bg-gray-950 rounded">
+                                <span className="font-semibold text-amber-400 text-xs">
+                                  {uiStrings.npcfollow_max_dist || (isRu ? "Макс. дистанция ожидания:" : "Max wait distance:")}
+                                </span>
+                                <input
+                                  type="number"
+                                  className="bg-gray-900 border border-gray-700 w-16 px-1 py-0.5 rounded text-center text-white"
+                                  value={act.params?.maxDistance ?? 4}
+                                  onChange={(e) =>
+                                    updateAction(sIdx, aIdx, {
+                                      ...act,
+                                      params: {
+                                        ...act.params,
+                                        maxDistance: e.target.value === '' ? 4 : Number(e.target.value),
+                                      },
+                                    })
+                                  }
+                                />
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
                       {act.type === "RESET_SPAWN" && (
@@ -3327,6 +4340,53 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
                           )}
                         </div>
                       )}
+                      {act.type === "LAUNCH_MINIGAME" && (
+                        <div className="flex flex-col gap-2.5 p-2 bg-gray-900 border border-gray-800 rounded text-xs text-gray-200 w-full md:max-w-md font-['Jura']">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 bg-gray-950 rounded">
+                            <span className="font-semibold text-teal-400 text-xs shrink-0">
+                              {isRu ? "Мини-игра:" : "Minigame:"}
+                            </span>
+                            <CustomSelect
+                              className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white text-xs w-full sm:w-48"
+                              value={act.params?.gameId || "chess"}
+                              onChange={(e) =>
+                                updateAction(sIdx, aIdx, {
+                                  ...act,
+                                  params: {
+                                    ...act.params,
+                                    gameId: e.target.value,
+                                  },
+                                })
+                              }
+                            >
+                              <option value="chess">{isRu ? "Шахматы" : "Chess"}</option>
+                              <option value="custom">{isRu ? "Другая (указать ID)" : "Other (specify ID)"}</option>
+                            </CustomSelect>
+                          </div>
+                          {(act.params?.gameId === "custom" || (act.params?.gameId !== "chess" && act.params?.gameId !== undefined)) && (
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 bg-gray-950 rounded">
+                              <span className="font-semibold text-emerald-400 text-xs">
+                                {isRu ? "Идентификатор игры:" : "Custom Game ID:"}
+                              </span>
+                              <input
+                                type="text"
+                                className="bg-gray-900 border border-gray-700 w-full sm:w-48 px-2 py-1 rounded text-white text-xs"
+                                placeholder="game_id"
+                                value={act.params?.gameId === "custom" ? "" : act.params?.gameId || ""}
+                                onChange={(e) =>
+                                  updateAction(sIdx, aIdx, {
+                                    ...act,
+                                    params: {
+                                      ...act.params,
+                                      gameId: e.target.value,
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -3402,6 +4462,18 @@ export const SectorScriptsModal: React.FC<SectorScriptsModalProps> = ({
               }}
             />
           </div>
+        )}
+
+        {tweakModalState && tweakModalState.isOpen && (
+          <TweakEntityModal
+            isOpen={tweakModalState.isOpen}
+            onClose={() => setTweakModalState(null)}
+            onSave={handleSaveTweakModal}
+            initialConfig={tweakModalState.initialConfig}
+            uiStrings={uiStrings}
+            coordKey={tweakModalState.coordKey}
+            listName={tweakModalState.listName}
+          />
         )}
       </div>
     </div>

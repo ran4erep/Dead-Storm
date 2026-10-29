@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { CSSProperties } from 'react';
 import { Item, AnimationFrame, AnimationDefinition, GameState } from '../types';
-import { getWeaponSprite } from '../utils/getWeaponSprite';
+import { getWeaponSprite, getWeaponSpriteWithMuzzle } from '../utils/getWeaponSprite';
 
 interface WeaponAnimationState {
   x: number;
@@ -24,9 +24,15 @@ export const useWeaponAnimation = (
   spriteMap: Map<string, HTMLImageElement> = new Map(),
   gameState: GameState, // Injecting GameState
   cinematicMode: boolean = false, // Injecting cinematicMode to update hands after scripted scenes
-  activeModal: string | null = null
+  activeModal: string | null = null,
+  onMuzzleFlash?: () => void
 ) => {
   const isSyncBlocked = activeModal === 'equipment' || activeModal === 'inventory';
+
+  const onMuzzleFlashRef = useRef(onMuzzleFlash);
+  useEffect(() => {
+    onMuzzleFlashRef.current = onMuzzleFlash;
+  }, [onMuzzleFlash]);
 
   // Controls which weapon is actually visible (allows showing old weapon during holster anim)
   const [displayedWeapon, setDisplayedWeapon] = useState<Item | null>(equippedWeapon);
@@ -36,8 +42,10 @@ export const useWeaponAnimation = (
   const akimboHandContainerRef = useRef<HTMLDivElement>(null);
   const mainHandImgRef = useRef<HTMLImageElement>(null);
   const mainHandImgShadowRef = useRef<HTMLImageElement>(null);
+  const mainMuzzleImgRef = useRef<HTMLImageElement>(null);
   const akimboHandImgRef = useRef<HTMLImageElement>(null);
   const akimboHandImgShadowRef = useRef<HTMLImageElement>(null);
+  const akimboMuzzleImgRef = useRef<HTMLImageElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const consoleContainerRef = useRef<HTMLDivElement>(null);
 
@@ -82,11 +90,13 @@ export const useWeaponAnimation = (
   const attackStartTimeMainRef = useRef<number | undefined>(undefined);
   const spriteStartTimeMainRef = useRef<number | undefined>(undefined);
   const spriteDurationMainRef = useRef<number>(1000);
+  const muzzleFiredMainRef = useRef<boolean>(false);
   
   const activeSequenceAkimboRef = useRef<AnimationFrame[] | null>(null);
   const attackStartTimeAkimboRef = useRef<number | undefined>(undefined);
   const spriteStartTimeAkimboRef = useRef<number | undefined>(undefined);
   const spriteDurationAkimboRef = useRef<number>(1000);
+  const muzzleFiredAkimboRef = useRef<boolean>(false);
 
   // Sway State
   const swayActiveRef = useRef<boolean>(false);
@@ -98,6 +108,8 @@ export const useWeaponAnimation = (
   const lastAkimboTransformRef = useRef<string>('');
   const lastMainSpriteRef = useRef<HTMLImageElement | null>(null);
   const lastAkimboSpriteRef = useRef<HTMLImageElement | null>(null);
+  const lastMainMuzzleSpriteRef = useRef<HTMLImageElement | null>(null);
+  const lastAkimboMuzzleSpriteRef = useRef<HTMLImageElement | null>(null);
 
   // Sync state instantly during render if we are not in a swap sequence to prevent 1-frame visual lag on scale, offsets and sprites
   if (!isSwappingRef.current && !isSyncBlocked) {
@@ -155,6 +167,12 @@ export const useWeaponAnimation = (
               }
           }
       });
+
+      // Добавляем спрайты вспышки
+      const muzzleAssetId = weapon.muzzleAsset || (weapon as any).muzzleAssetId;
+      const muzzleFemaleAssetId = weapon.muzzleFemaleAsset || (weapon as any).muzzleFemaleAssetId;
+      if (muzzleAssetId) assetsToDecode.add(muzzleAssetId);
+      if (muzzleFemaleAssetId) assetsToDecode.add(muzzleFemaleAssetId);
       
       assetsToDecode.forEach(key => {
           const spriteImg = spriteMapRef.current.get(key);
@@ -372,7 +390,7 @@ export const useWeaponAnimation = (
     const safeSpriteElapsedMain = (spriteStartTimeMainRef.current !== undefined && spriteStartTimeMainRef.current !== -1) ? time - spriteStartTimeMainRef.current : undefined;
     const safeSpriteElapsedAkimbo = (spriteStartTimeAkimboRef.current !== undefined && spriteStartTimeAkimboRef.current !== -1) ? time - spriteStartTimeAkimboRef.current : undefined;
 
-    const mainSprite = getWeaponSprite(displayedWeaponRef.current, safeSpriteElapsedMain, characterIdRef.current, animationsRef.current, spriteMapRef.current);
+    const { sprite: mainSprite, muzzleSprite: mainMuzzleSprite, isMuzzleFrame: isMainMuzzleFrame } = getWeaponSpriteWithMuzzle(displayedWeaponRef.current, safeSpriteElapsedMain, characterIdRef.current, animationsRef.current, spriteMapRef.current);
     if (mainSprite !== lastMainSpriteRef.current) {
         lastMainSpriteRef.current = mainSprite;
         if (mainSprite) {
@@ -380,13 +398,49 @@ export const useWeaponAnimation = (
             if (mainHandImgShadowRef.current) mainHandImgShadowRef.current.src = mainSprite.src;
         }
     }
+    if (mainMuzzleSprite !== lastMainMuzzleSpriteRef.current) {
+        lastMainMuzzleSpriteRef.current = mainMuzzleSprite;
+        if (mainMuzzleImgRef.current) {
+            if (mainMuzzleSprite) {
+                mainMuzzleImgRef.current.src = mainMuzzleSprite.src;
+                mainMuzzleImgRef.current.style.display = 'block';
+            } else {
+                mainMuzzleImgRef.current.style.display = 'none';
+            }
+        }
+    }
 
-    const akimboSprite = getWeaponSprite(displayedAkimboWeaponRef.current, safeSpriteElapsedAkimbo, characterIdRef.current, animationsRef.current, spriteMapRef.current);
+    if (isMainMuzzleFrame && !muzzleFiredMainRef.current) {
+        muzzleFiredMainRef.current = true;
+        if (onMuzzleFlashRef.current) {
+            onMuzzleFlashRef.current();
+        }
+    }
+
+    const { sprite: akimboSprite, muzzleSprite: akimboMuzzleSprite, isMuzzleFrame: isAkimboMuzzleFrame } = getWeaponSpriteWithMuzzle(displayedAkimboWeaponRef.current, safeSpriteElapsedAkimbo, characterIdRef.current, animationsRef.current, spriteMapRef.current);
     if (akimboSprite !== lastAkimboSpriteRef.current) {
         lastAkimboSpriteRef.current = akimboSprite;
         if (akimboSprite) {
             if (akimboHandImgRef.current) akimboHandImgRef.current.src = akimboSprite.src;
             if (akimboHandImgShadowRef.current) akimboHandImgShadowRef.current.src = akimboSprite.src;
+        }
+    }
+    if (akimboMuzzleSprite !== lastAkimboMuzzleSpriteRef.current) {
+        lastAkimboMuzzleSpriteRef.current = akimboMuzzleSprite;
+        if (akimboMuzzleImgRef.current) {
+            if (akimboMuzzleSprite) {
+                akimboMuzzleImgRef.current.src = akimboMuzzleSprite.src;
+                akimboMuzzleImgRef.current.style.display = 'block';
+            } else {
+                akimboMuzzleImgRef.current.style.display = 'none';
+            }
+        }
+    }
+
+    if (isAkimboMuzzleFrame && !muzzleFiredAkimboRef.current) {
+        muzzleFiredAkimboRef.current = true;
+        if (onMuzzleFlashRef.current) {
+            onMuzzleFlashRef.current();
         }
     }
 
@@ -429,6 +483,8 @@ export const useWeaponAnimation = (
           }
           spriteDurationMainRef.current = spriteDuration;
           spriteStartTimeMainRef.current = -1;
+          const mainMuzzleFrame = curWeapon?.muzzleFrame || 1;
+          muzzleFiredMainRef.current = mainMuzzleFrame <= 1;
           started = true;
       }
       
@@ -457,6 +513,8 @@ export const useWeaponAnimation = (
           }
           spriteDurationAkimboRef.current = spriteDuration;
           spriteStartTimeAkimboRef.current = -1;
+          const akimboMuzzleFrame = curAkimbo?.muzzleFrame || 1;
+          muzzleFiredAkimboRef.current = akimboMuzzleFrame <= 1;
           started = true;
       }
       
@@ -746,8 +804,10 @@ export const useWeaponAnimation = (
       consoleContainerRef,
       mainHandImgRef,
       mainHandImgShadowRef,
+      mainMuzzleImgRef,
       akimboHandImgRef,
       akimboHandImgShadowRef,
+      akimboMuzzleImgRef,
       currentHandSprite,
       akimboHandSprite,
       triggerWeaponAnimation, 

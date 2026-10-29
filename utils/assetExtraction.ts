@@ -43,8 +43,17 @@ export const extractRequiredAssets = (
     const addWeaponSprites = (item: any) => {
         if (!item) return;
         if (item.type === 'WEAPON' || item.equip === 'WEAPON') {
-            addWeaponSprite(item.handAsset || item.handAssetId);
-            addWeaponSprite(item.handFemaleAsset || item.handFemaleAssetId);
+            const handAsset = item.handAsset || item.handAssetId;
+            const handFemaleAsset = item.handFemaleAsset || item.handFemaleAssetId;
+            
+            if (player?.characterId === 'female') {
+                if (handFemaleAsset) addWeaponSprite(handFemaleAsset);
+                if (handAsset) addWeaponSprite(handAsset);
+            } else {
+                if (handAsset) addWeaponSprite(handAsset);
+                if (handFemaleAsset) addWeaponSprite(handFemaleAsset);
+            }
+
             const attackAsset = item.attackAsset || item.attackAssetId;
             if (attackAsset) {
                 addWeaponSprite(attackAsset);
@@ -60,6 +69,20 @@ export const extractRequiredAssets = (
                 if (animData && animData.frames) {
                     animData.frames.forEach((f: string) => addWeaponSprite(f));
                 }
+            }
+        }
+        if (item.throwId) {
+            addWeaponSprite(item.throwId);
+            const animData = (animationsData as any)[item.throwId];
+            if (animData && animData.frames) {
+                animData.frames.forEach((f: string) => addWeaponSprite(f));
+            }
+        }
+        if (item.wallAssetId) {
+            addWeaponSprite(item.wallAssetId);
+            const animData = (animationsData as any)[item.wallAssetId];
+            if (animData && animData.frames) {
+                animData.frames.forEach((f: string) => addWeaponSprite(f));
             }
         }
     };
@@ -130,9 +153,21 @@ export const extractRequiredAssets = (
         }
     }
 
-    // Preload fists if no equipped weapon
-    if (itemsDb && (!player || !player.equippedWeapon)) {
-        addWeaponSprites(itemsDb['fists']);
+    // MANDATORY EXCEPTION: Fists weapon assets must ALWAYS be loaded regardless of equipped weapon state
+    const fistsDbItem = itemsDb?.['fists'] || itemsDb?.['FISTS'];
+    if (fistsDbItem) {
+        addWeaponSprites(fistsDbItem);
+        addPowerSourceAssets(fistsDbItem);
+        traverseAndExtract(fistsDbItem);
+    } else {
+        // Fallback explicit fist hand sprites if itemsDb object is not available
+        if (player?.characterId === 'female') {
+            addWeaponSprite('HAND_FISTS_FEMALE');
+            addWeaponSprite('HAND_FISTS');
+        } else {
+            addWeaponSprite('HAND_FISTS');
+            addWeaponSprite('HAND_FISTS_FEMALE');
+        }
     }
 
     // Ground items on level
@@ -321,8 +356,8 @@ export const extractRequiredAssets = (
                         const { type, params } = action;
                         if (!params) return;
 
-                        if (type === 'SPAWN_ENTITY' || type === 'SPAWN_ENEMY' || type === 'SPAWN_ITEM' || type === 'SPAWN_NPC' || type === 'SPAWN_DECORATION') {
-                            const entType = params.entityType || (type === 'SPAWN_ENEMY' ? 'ENEMY' : type === 'SPAWN_ITEM' ? 'ITEM' : type === 'SPAWN_NPC' ? 'NPC' : type === 'SPAWN_DECORATION' ? 'DECORATION' : undefined);
+                        if (type === 'SPAWN_ENTITY' || type === 'SPAWN_EXPLOSION' || type === 'SPAWN_ENEMY' || type === 'SPAWN_ITEM' || type === 'SPAWN_NPC' || type === 'SPAWN_DECORATION') {
+                            const entType = params.entityType || (type === 'SPAWN_ENEMY' ? 'ENEMY' : type === 'SPAWN_ITEM' ? 'ITEM' : type === 'SPAWN_NPC' ? 'NPC' : type === 'SPAWN_DECORATION' ? 'DECORATION' : type === 'SPAWN_EXPLOSION' ? 'EXPLOSION' : undefined);
                             const defId = params.definitionId || params.entityId || params.itemId || params.enemyId || params.npcId || params.decorationId;
 
                             if (entType === 'ENEMY') {
@@ -334,14 +369,16 @@ export const extractRequiredAssets = (
                             } else if (entType === 'DECORATION') {
                                 processDecorationDef(defId);
                             } else if (entType === 'EXPLOSION') {
-                                if (params.assetId) addSprite(params.assetId);
-                                if (params.soundId) addSound(params.soundId);
+                                const assetId = params.assetId || 'ANIM_EXPLOSION';
+                                const soundId = params.soundId || 'EXPLOSION';
+                                addSprite(assetId);
+                                addSound(soundId);
                             }
                         }
 
-                        if (type === 'GIVE_ITEM') {
+                        if (type === 'GIVE_ITEM' || type === 'TAKE_ITEM') {
                             const itemId = params.itemDefinitionId || params.itemId || params.definitionId;
-                            processItemOverride(itemId);
+                            if (itemId) processItemOverride(itemId);
                         }
 
                         if (type === 'CHANGE_TILE') {
@@ -434,8 +471,8 @@ export const loadSmartAssets = async (
     const missingTextures: {id: string, url: string}[] = [];
     
     required.sprites.forEach(s => {
-        let url = (ASSETS.SPRITES as any)[s];
-        if (!url && typeof s === 'string' && s.startsWith('local://')) url = s;
+        let url = (ASSETS.SPRITES as any)[s] || (ASSETS.TEXTURES as any)[s];
+        if (!url && typeof s === 'string' && (s.startsWith('local://') || s.startsWith('data:') || s.startsWith('http://') || s.startsWith('https://') || s.startsWith('/'))) url = s;
         if (url) {
             const img = masterSpriteMap.get(s);
             if (!img || img.width === 0) {
@@ -445,8 +482,8 @@ export const loadSmartAssets = async (
     });
 
     required.textures.forEach(t => {
-        let url = (ASSETS.TEXTURES as any)[t];
-        if (!url && typeof t === 'string' && t.startsWith('local://')) url = t;
+        let url = (ASSETS.TEXTURES as any)[t] || (ASSETS.SPRITES as any)[t];
+        if (!url && typeof t === 'string' && (t.startsWith('local://') || t.startsWith('data:') || t.startsWith('http://') || t.startsWith('https://') || t.startsWith('/'))) url = t;
         if (url) {
             const img = masterSpriteMap.get(`TEX_${t}`);
             if (!img || img.width === 0) {

@@ -166,6 +166,11 @@ export const renderBackground = ({
         reusableHighlightSet.add(highlightedTiles[h].y * 10000 + highlightedTiles[h].x);
     }
 
+    const timePulse = Math.sin(Date.now() / 450) * 0.5 + 0.5;
+    const highlightPulse = 0.25 + 0.75 * timePulse;
+    const highlightRAdd = (60 * highlightPulse) | 0;
+    const highlightGBMult = 1.0 - 0.6 * highlightPulse;
+
     if (isWebGLActive) return;
     
     const horizonInt = horizon | 0;
@@ -835,8 +840,8 @@ export const renderBackground = ({
                         fb += flatFlashBFloor | 0; if (fb > 255) fb = 255;
                     }
                     if (isHighlightedFloor) {
-                        fr += 60; if (fr > 255) fr = 255;
-                        fg = (fg * 0.4) | 0; fb = (fb * 0.4) | 0;
+                        fr += highlightRAdd; if (fr > 255) fr = 255;
+                        fg = (fg * highlightGBMult) | 0; fb = (fb * highlightGBMult) | 0;
                     }
                     if (isAiVisionFloor) {
                         fr += 100; if (fr > 255) fr = 255;

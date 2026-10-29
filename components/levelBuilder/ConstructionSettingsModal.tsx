@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Play } from 'lucide-react';
 import { ASSETS } from '../../assets';
 import { LevelDefinition } from '../../types';
@@ -23,7 +23,7 @@ interface ConstructionSettingsModalProps {
 export const ConstructionSettingsModal: React.FC<ConstructionSettingsModalProps> = ({
     show, onClose, brushConfig, setBrushConfig, level, setLevel, uiStrings, onPickCoordinate
 }) => {
-    const soundOptions = Object.keys(soundsData);
+    const soundOptions = useMemo(() => Object.keys(soundsData).filter(key => !(soundsData as any)[key]?.alias), []);
     const [texturePickerTarget, setTexturePickerTarget] = useState<string | null>(null);
 
     // Initialize cutout coordinates and cutout axis if they are undefined for window types

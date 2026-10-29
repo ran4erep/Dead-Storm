@@ -176,7 +176,8 @@ export const useAimingSystem = ({
                            const currentActiveWeapon = firingHand === 'akimbo' ? akimboWeapon : weapon;
                            const damage = rollDice(currentActiveWeapon?.damageDice || "1d1");
                            
-                           if (triggerMuzzleFlash) {
+                           const isDelayed = currentActiveWeapon?.muzzleFrame && currentActiveWeapon.muzzleFrame > 1;
+                           if (triggerMuzzleFlash && currentActiveWeapon?.muzzleFlash && !isDelayed) {
                                triggerMuzzleFlash();
                            }
                            

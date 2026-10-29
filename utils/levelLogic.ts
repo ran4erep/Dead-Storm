@@ -215,6 +215,199 @@ export interface DynamicLightSpread {
   maxHeight?: number;
 }
 
+function hasFlareLineOfSight(x0: number, y0: number, x1: number, y1: number, grid: Tile[][]): boolean {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 0.01) return true;
+
+  const steps = Math.ceil(dist * 3);
+  const stepX = dx / steps;
+  const stepY = dy / steps;
+
+  const startTileX = Math.floor(x0);
+  const startTileY = Math.floor(y0);
+  const targetTileX = Math.floor(x1);
+  const targetTileY = Math.floor(y1);
+
+  let curX = x0;
+  let curY = y0;
+
+  for (let i = 0; i <= steps; i++) {
+    const gx = Math.floor(curX);
+    const gy = Math.floor(curY);
+
+    if (gx === targetTileX && gy === targetTileY) {
+      return true;
+    }
+
+    if (gx !== startTileX || gy !== startTileY) {
+      const tile = grid[gy]?.[gx];
+      if (tile) {
+        const isSolidWall = tile.type === 'WALL' && !tile.isWindow && tile.blocking !== false;
+        const isClosedDoor = tile.type === 'DOOR' && tile.door && (tile.door.state === 'CLOSED' || tile.door.state === 'CLOSING') && !tile.door.maskId && !tile.door.broken;
+        if (isSolidWall || isClosedDoor) {
+          return false;
+        }
+      }
+    }
+
+    curX += stepX;
+    curY += stepY;
+  }
+
+  return true;
+}
+
+export function getFlareLightSpread(
+  fx: number,
+  fy: number,
+  config?: {
+    color?: { r: number; g: number; b: number } | string;
+    radius?: number;
+    brightness?: number;
+  },
+  grid?: Tile[][]
+): DynamicLightSpread {
+  const radius = config?.radius ?? 5;
+  const brightness = config?.brightness ?? 2.2;
+
+  let r = 255, g = 60, b = 30;
+  if (config?.color) {
+    if (typeof config.color === 'object') {
+      r = config.color.r ?? 255;
+      g = config.color.g ?? 60;
+      b = config.color.b ?? 30;
+    } else if (typeof config.color === 'string' && config.color.startsWith('#')) {
+      const hex = config.color.replace('#', '');
+      r = parseInt(hex.substring(0, 2), 16) || 255;
+      g = parseInt(hex.substring(2, 4), 16) || 60;
+      b = parseInt(hex.substring(4, 6), 16) || 30;
+    }
+  }
+
+  const nr = (r / 255) * brightness;
+  const ng = (g / 255) * brightness;
+  const nb = (b / 255) * brightness;
+
+  const spread: { x: number; y: number; r: number; g: number; b: number }[] = [];
+  const radiusSq = radius * radius;
+
+  if (!grid || grid.length === 0) {
+    const minX = Math.floor(fx - radius);
+    const maxX = Math.ceil(fx + radius);
+    const minY = Math.floor(fy - radius);
+    const maxY = Math.ceil(fy + radius);
+
+    for (let cy = minY; cy <= maxY; cy++) {
+      for (let cx = minX; cx <= maxX; cx++) {
+        const dx = cx + 0.5 - fx;
+        const dy = cy + 0.5 - fy;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= radiusSq) {
+          const dist = Math.sqrt(distSq);
+          const att = Math.max(0, 1 - dist / radius);
+          const smoothAtt = att * att;
+          spread.push({
+            x: cx,
+            y: cy,
+            r: Math.min(1.0, nr * smoothAtt),
+            g: Math.min(1.0, ng * smoothAtt),
+            b: Math.min(1.0, nb * smoothAtt),
+          });
+        }
+      }
+    }
+
+    return {
+      mode: 'FIRE',
+      spread,
+      x: fx,
+      y: fy,
+    };
+  }
+
+  const height = grid.length;
+  const width = grid[0]?.length || 0;
+
+  const startX = Math.floor(fx);
+  const startY = Math.floor(fy);
+
+  if (startX < 0 || startX >= width || startY < 0 || startY >= height) {
+    return { mode: 'FIRE', spread: [], x: fx, y: fy };
+  }
+
+  const maxQueue = (Math.ceil(radius * 2 + 3)) * (Math.ceil(radius * 2 + 3));
+  const qx = new Int32Array(maxQueue);
+  const qy = new Int32Array(maxQueue);
+  let head = 0;
+  let tail = 0;
+
+  const visited = new Set<number>();
+
+  qx[tail] = startX;
+  qy[tail] = startY;
+  tail++;
+  visited.add(startY * width + startX);
+
+  while (head < tail) {
+    const cx = qx[head];
+    const cy = qy[head];
+    head++;
+
+    const dx = cx + 0.5 - fx;
+    const dy = cy + 0.5 - fy;
+    const distSq = dx * dx + dy * dy;
+
+    if (distSq <= radiusSq) {
+      if (hasFlareLineOfSight(fx, fy, cx + 0.5, cy + 0.5, grid)) {
+        const dist = Math.sqrt(distSq);
+        const att = Math.max(0, 1 - dist / radius);
+        const smoothAtt = att * att;
+        spread.push({
+          x: cx,
+          y: cy,
+          r: Math.min(1.0, nr * smoothAtt),
+          g: Math.min(1.0, ng * smoothAtt),
+          b: Math.min(1.0, nb * smoothAtt),
+        });
+      }
+
+      const tile = grid[cy]?.[cx];
+      const isSolidWall = tile && tile.type === 'WALL' && !tile.isWindow && tile.blocking !== false;
+      const isClosedDoor = tile && tile.type === 'DOOR' && tile.door && (tile.door.state === 'CLOSED' || tile.door.state === 'CLOSING') && !tile.door.maskId && !tile.door.broken;
+
+      if (!isSolidWall && !isClosedDoor) {
+        for (let i = 0; i < 4; i++) {
+          const nx = cx + DIRS_4_DX[i];
+          const ny = cy + DIRS_4_DY[i];
+
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+            const key = ny * width + nx;
+            if (!visited.has(key)) {
+              visited.add(key);
+              const ndx = nx + 0.5 - fx;
+              const ndy = ny + 0.5 - fy;
+              if (ndx * ndx + ndy * ndy <= radiusSq) {
+                qx[tail] = nx;
+                qy[tail] = ny;
+                tail++;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    mode: 'FIRE',
+    spread,
+    x: fx,
+    y: fy,
+  };
+}
+
 const DIRS_4_DX = new Int32Array([0, 0, 1, -1]);
 const DIRS_4_DY = new Int32Array([1, -1, 0, 0]);
 
@@ -227,6 +420,10 @@ let sharedQueueY = new Int32Array(2048);
 let sharedQueueR = new Float32Array(2048);
 let sharedQueueG = new Float32Array(2048);
 let sharedQueueB = new Float32Array(2048);
+let sharedQueueMaxFl = new Int32Array(2048);
+let sharedQueueDoorX = new Int16Array(2048);
+let sharedQueueDoorY = new Int16Array(2048);
+let sharedQueueDoorAxis = new Uint8Array(2048);
 let sharedVisited = new Uint8Array(2048);
 
 const ensureBufferSize = (size: number) => {
@@ -236,16 +433,111 @@ const ensureBufferSize = (size: number) => {
         sharedQueueR = new Float32Array(size);
         sharedQueueG = new Float32Array(size);
         sharedQueueB = new Float32Array(size);
+        sharedQueueMaxFl = new Int32Array(size);
+        sharedQueueDoorX = new Int16Array(size);
+        sharedQueueDoorY = new Int16Array(size);
+        sharedQueueDoorAxis = new Uint8Array(size);
         sharedVisited = new Uint8Array(size);
     }
 };
 
+function computeDoorConeFactor(
+    Sx: number, Sy: number,
+    Px: number, Py: number,
+    doorX: number, doorY: number,
+    doorAxis: number
+): number {
+    const FEATHER = 0.45;
 
-export const computeLightingHash = (grid: Tile[][]): number => {
+    if (doorAxis === 1) {
+        const y_door = doorY + 0.5;
+        const x1 = doorX;
+        const x2 = doorX + 1.0;
+
+        if (Math.abs(Sy - y_door) < 0.2) {
+            const offsetX = Math.abs(Px - (doorX + 0.5));
+            const offsetY = Math.abs(Py - y_door);
+            const maxAllowedX = offsetY * 1.25 + 0.5;
+            if (offsetX <= maxAllowedX) return 1.0;
+            const dist = offsetX - maxAllowedX;
+            if (dist < FEATHER) {
+                const f = 1.0 - (dist / FEATHER);
+                return f * f;
+            }
+            return 0.0;
+        }
+
+        const dy = Py - Sy;
+        if (Math.abs(dy) < 1e-4) return 1.0;
+        const t = (y_door - Sy) / dy;
+        const x_int = Sx + t * (Px - Sx);
+
+        if (x_int >= x1 && x_int <= x2) {
+            return 1.0;
+        } else {
+            const distOutside = x_int < x1 ? (x1 - x_int) : (x_int - x2);
+            if (distOutside < FEATHER) {
+                const f = 1.0 - (distOutside / FEATHER);
+                return f * f;
+            }
+            return 0.0;
+        }
+    } else {
+        const x_door = doorX + 0.5;
+        const y1 = doorY;
+        const y2 = doorY + 1.0;
+
+        if (Math.abs(Sx - x_door) < 0.2) {
+            const offsetY = Math.abs(Py - (doorY + 0.5));
+            const offsetX = Math.abs(Px - x_door);
+            const maxAllowedY = offsetX * 1.25 + 0.5;
+            if (offsetY <= maxAllowedY) return 1.0;
+            const dist = offsetY - maxAllowedY;
+            if (dist < FEATHER) {
+                const f = 1.0 - (dist / FEATHER);
+                return f * f;
+            }
+            return 0.0;
+        }
+
+        const dx = Px - Sx;
+        if (Math.abs(dx) < 1e-4) return 1.0;
+        const t = (x_door - Sx) / dx;
+        const y_int = Sy + t * (Py - Sy);
+
+        if (y_int >= y1 && y_int <= y2) {
+            return 1.0;
+        } else {
+            const distOutside = y_int < y1 ? (y1 - y_int) : (y_int - y2);
+            if (distOutside < FEATHER) {
+                const f = 1.0 - (distOutside / FEATHER);
+                return f * f;
+            }
+            return 0.0;
+        }
+    }
+}
+
+
+export const computeLightingHash = (grid: Tile[][], gridLight?: string[]): number => {
     if (!grid) return 0;
     const height = grid.length;
     const width = grid[0]?.length || 0;
     let hash = 2166136261;
+
+    if (gridLight && Array.isArray(gridLight)) {
+        for (let y = 0; y < gridLight.length; y++) {
+            const rowStr = gridLight[y];
+            if (!rowStr) continue;
+            for (let x = 0; x < rowStr.length; x++) {
+                if (rowStr[x] !== '.') {
+                    const val = (x << 16) ^ (y << 8) ^ rowStr.charCodeAt(x) ^ 0x55AA55AA;
+                    hash ^= val;
+                    hash = Math.imul(hash, 16777619);
+                }
+            }
+        }
+    }
 
     for (let y = 0; y < height; y++) {
         const row = grid[y];
@@ -406,7 +698,7 @@ export const calculateLightMap = (
     const width = grid[0].length;
     const size = width * height;
 
-    const hash = computeLightingHash(grid);
+    const hash = computeLightingHash(grid, lightDef);
     const cacheKey = `${hash}_${globalLight}_${height}x${width}_${outdoorMap ? 1 : 0}_${grids ? grids.length : 0}`;
     const cached = lightMapCache.get(cacheKey);
     if (cached) {
@@ -438,8 +730,8 @@ export const calculateLightMap = (
                 if (currentTile.type === 'WALL' && !currentTile.isWindow) {
                     continue;
                 }
-                const isClosedDoor = currentTile.type === 'DOOR' && currentTile.door && (currentTile.door.state === 'CLOSED' || currentTile.door.state === 'CLOSING') && !currentTile.door.broken;
-                if (isClosedDoor && !currentTile.door.maskId) {
+                const isClosedDoor = currentTile.type === 'DOOR' && currentTile.door && (currentTile.door.state === 'CLOSED' || currentTile.door.state === 'CLOSING') && !currentTile.door.maskId && !currentTile.door.broken;
+                if (isClosedDoor) {
                     continue;
                 }
             }
@@ -454,14 +746,10 @@ export const calculateLightMap = (
                     let stepCost = 0.1; // Default decay step inside rooms
                     
                     if (nTile) {
-                        const isNeighborClosedDoor = nTile.type === 'DOOR' && nTile.door && (nTile.door.state === 'CLOSED' || nTile.door.state === 'CLOSING') && !nTile.door.broken && !nTile.door.maskId;
+                        const isNeighborClosedDoor = nTile.type === 'DOOR' && nTile.door && (nTile.door.state === 'CLOSED' || nTile.door.state === 'CLOSING') && !nTile.door.maskId && !nTile.door.broken;
                         
                         if (isNeighborClosedDoor) {
-                            if (nTile.door?.maskId) {
-                                stepCost = 0.2;
-                            } else {
-                                stepCost = 0.1;
-                            }
+                            stepCost = 0.1;
                         } else if (nTile.isWindow) {
                             const hasGlass = nTile.glassAssetId && !nTile.isGlassBroken;
                             stepCost = hasGlass ? 0.2 : 0.1;
@@ -489,7 +777,7 @@ export const calculateLightMap = (
                 let maxIdx = -1;
                 for (let i = 0; i < grids.length; i++) {
                     const tile = grids[i]?.[y]?.[x];
-                    if (tile && (tile.type === 'WALL' || (tile.type === 'DOOR' && tile.door && (tile.door.state === 'CLOSED' || tile.door.state === 'CLOSING') && !tile.door.broken && !tile.door.maskId))) {
+                    if (tile && (tile.type === 'WALL' || (tile.type === 'DOOR' && tile.door && (tile.door.state === 'CLOSED' || tile.door.state === 'CLOSING') && !tile.door.maskId && !tile.door.broken))) {
                         maxIdx = i;
                     }
                 }
@@ -572,7 +860,7 @@ export const calculateLightMap = (
                         const prevTile = pGrid ? pGrid[x] : null;
                         const prevIsSolidWall = prevTile && (
                             (prevTile.type === 'WALL' && !prevTile.isWindow) ||
-                            (prevTile.type === 'DOOR' && prevTile.door && (prevTile.door.state === 'CLOSED' || prevTile.door.state === 'CLOSING') && !prevTile.door.broken && !prevTile.door.maskId)
+                            (prevTile.type === 'DOOR' && prevTile.door && (prevTile.door.state === 'CLOSED' || prevTile.door.state === 'CLOSING') && !prevTile.door.maskId && !prevTile.door.broken)
                         );
                         if (!prevIsSolidWall) {
                             const val = layerDists[prevOffset + rowOffset + x] + 0.1;
@@ -596,7 +884,7 @@ export const calculateLightMap = (
                         const nextTile = nGrid ? nGrid[x] : null;
                         const nextIsSolidWall = nextTile && (
                             (nextTile.type === 'WALL' && !nextTile.isWindow) ||
-                            (nextTile.type === 'DOOR' && nextTile.door && (nextTile.door.state === 'CLOSED' || nextTile.door.state === 'CLOSING') && !nextTile.door.broken && !nextTile.door.maskId)
+                            (nextTile.type === 'DOOR' && nextTile.door && (nextTile.door.state === 'CLOSED' || nextTile.door.state === 'CLOSING') && !nextTile.door.maskId && !nextTile.door.broken)
                         );
                         if (!nextIsSolidWall) {
                             const val = layerDists[nextOffset + rowOffset + x] + 0.1;
@@ -722,13 +1010,21 @@ export const calculateLightMap = (
                     const decFlickerAlwaysOn = def.flickerAlwaysOn;
                     const decMaxHeight = (def as any).maxHeight ?? 0;
                     if (decIntensity > 0) {
-                        sources.push({ x, y, r: decR * decIntensity, g: decG * decIntensity, b: decB * decIntensity, range: decRange, mode: decMode, flickerPeriod: decFlickerPeriod, flickerAlwaysOn: decFlickerAlwaysOn, maxHeight: decMaxHeight });
+                        const maxComp = Math.max(decR, decG, decB);
+                        const normR = maxComp > 0 ? decR / maxComp : 1.0;
+                        const normG = maxComp > 0 ? decG / maxComp : 1.0;
+                        const normB = maxComp > 0 ? decB / maxComp : 1.0;
+                        sources.push({ x, y, r: normR * decIntensity, g: normG * decIntensity, b: normB * decIntensity, range: decRange, mode: decMode, flickerPeriod: decFlickerPeriod, flickerAlwaysOn: decFlickerAlwaysOn, maxHeight: decMaxHeight });
                     }
                 }
             }
 
             if (parsedLight && intensity > 0) {
-                sources.push({ x, y, r: r * intensity, g: g * intensity, b: b * intensity, range, mode, flickerPeriod, flickerAlwaysOn, maxHeight });
+                const maxComp = Math.max(r, g, b);
+                const normR = maxComp > 0 ? r / maxComp : 1.0;
+                const normG = maxComp > 0 ? g / maxComp : 1.0;
+                const normB = maxComp > 0 ? b / maxComp : 1.0;
+                sources.push({ x, y, r: normR * intensity, g: normG * intensity, b: normB * intensity, range, mode, flickerPeriod, flickerAlwaysOn, maxHeight });
             }
         }
     }
@@ -742,6 +1038,10 @@ export const calculateLightMap = (
     const queueR = sharedQueueR;
     const queueG = sharedQueueG;
     const queueB = sharedQueueB;
+    const queueMaxFl = sharedQueueMaxFl;
+    const queueDoorX = sharedQueueDoorX;
+    const queueDoorY = sharedQueueDoorY;
+    const queueDoorAxis = sharedQueueDoorAxis;
     const visited = sharedVisited;
 
     const numSources = sources.length;
@@ -751,11 +1051,18 @@ export const calculateLightMap = (
          let tail = 0;
          visited.fill(0);
          
+         const Sx = source.x + 0.5;
+         const Sy = source.y + 0.5;
+
          queueX[tail] = source.x;
          queueY[tail] = source.y;
          queueR[tail] = source.r;
          queueG[tail] = source.g;
          queueB[tail] = source.b;
+         queueMaxFl[tail] = (source.maxHeight && source.maxHeight > 0) ? Math.min(source.maxHeight, numFloors) : numFloors;
+         queueDoorX[tail] = -1;
+         queueDoorY[tail] = -1;
+         queueDoorAxis[tail] = 0;
          tail++;
          
          visited[source.y * width + source.x] = 1;
@@ -776,6 +1083,10 @@ export const calculateLightMap = (
              const r = queueR[head];
              const g = queueG[head];
              const b = queueB[head];
+             const curMaxFl = queueMaxFl[head];
+             const curDoorX = queueDoorX[head];
+             const curDoorY = queueDoorY[head];
+             const curDoorAxis = queueDoorAxis[head];
              head++;
              
              if (spreadObj) {
@@ -786,8 +1097,16 @@ export const calculateLightMap = (
                  lightMap[y][x].b = Math.min(1.0, lightMap[y][x].b + b);
 
                  if (floorLightMaps) {
-                     const maxFl = Math.min(numFloors, 8);
+                     const maxFl = Math.min(numFloors, curMaxFl);
                      for (let fl = 0; fl < maxFl; fl++) {
+                         const layerTile = grids?.[fl]?.[y]?.[x];
+                         const isSolidUpperWall = layerTile && (
+                             (layerTile.type === 'WALL' && !layerTile.isWindow) ||
+                             (layerTile.type === 'DOOR' && (layerTile.door?.state === 'CLOSED' || layerTile.door?.state === 'CLOSING') && !layerTile.door?.maskId && !layerTile.door?.broken)
+                         );
+                         if (fl > 0 && isSolidUpperWall) {
+                             break;
+                         }
                          if (!source.maxHeight || source.maxHeight === 0 || fl < source.maxHeight) {
                              floorLightMaps[fl][y][x].r = Math.min(1.0, floorLightMaps[fl][y][x].r + r);
                              floorLightMaps[fl][y][x].g = Math.min(1.0, floorLightMaps[fl][y][x].g + g);
@@ -800,11 +1119,59 @@ export const calculateLightMap = (
              const maxBright = Math.max(r, g, b);
              if (maxBright <= 0.05) continue; 
              
-             const currentTile = grid[y][x];
+             const currentTile = grid[y]?.[x];
              if (currentTile) {
                  const isWall = currentTile.type === 'WALL' && !currentTile.isWindow;
                  const isDoorClosed = currentTile.type === 'DOOR' && (currentTile.door?.state === 'CLOSED' || currentTile.door?.state === 'CLOSING') && !currentTile.door?.maskId && !currentTile.door?.broken;
                  if ((isWall || isDoorClosed) && !(x === source.x && y === source.y)) continue;
+             }
+
+             // Check if current tile is a light-passable door acting as an aperture
+             const isPassableDoor = currentTile && currentTile.type === 'DOOR' && (
+                 currentTile.door?.maskId || 
+                 currentTile.door?.state === 'OPEN' || 
+                 currentTile.door?.state === 'OPENING' || 
+                 currentTile.door?.state === 'CLOSING' || 
+                 currentTile.door?.broken
+             );
+
+             let nextDoorX = curDoorX;
+             let nextDoorY = curDoorY;
+             let nextDoorAxis = curDoorAxis;
+
+             if (isPassableDoor && curDoorAxis === 0) {
+                 nextDoorX = x;
+                 nextDoorY = y;
+                 let axis = 1; // 1: Horizontal ('H'), 2: Vertical ('V')
+                 if (currentTile.door?.type === 'HINGE') {
+                     if (currentTile.door.edge === 'TOP' || currentTile.door.edge === 'BOTTOM') axis = 1;
+                     else if (currentTile.door.edge === 'LEFT' || currentTile.door.edge === 'RIGHT') axis = 2;
+                     else {
+                         const leftW = grid[y]?.[x - 1]?.type === 'WALL';
+                         const rightW = grid[y]?.[x + 1]?.type === 'WALL';
+                         axis = (!leftW && !rightW) ? 2 : 1;
+                     }
+                 } else {
+                     const leftW = grid[y]?.[x - 1]?.type === 'WALL';
+                     const rightW = grid[y]?.[x + 1]?.type === 'WALL';
+                     axis = (leftW && rightW) ? 1 : 2;
+                 }
+                 nextDoorAxis = axis;
+             }
+
+             let nextMaxFl = curMaxFl;
+             if (grids && numFloors > 1) {
+                 for (let fl = 1; fl < curMaxFl; fl++) {
+                     const layerTile = grids[fl]?.[y]?.[x];
+                     const isSolidUpper = layerTile && (
+                         (layerTile.type === 'WALL' && !layerTile.isWindow) ||
+                         (layerTile.type === 'DOOR' && (layerTile.door?.state === 'CLOSED' || layerTile.door?.state === 'CLOSING') && !layerTile.door?.maskId && !layerTile.door?.broken)
+                     );
+                     if (isSolidUpper) {
+                         nextMaxFl = fl;
+                         break;
+                     }
+                 }
              }
 
              for (let i = 0; i < 8; i++) {
@@ -813,7 +1180,27 @@ export const calculateLightMap = (
                  const dist = DIRS_8_DIST[i];
                  const nx = x + dx;
                  const ny = y + dy;
+
                  if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                     // Блокируем диагональный шаг, если хотя бы один из смежных прямых углов — глухая стена или закрытая дверь
+                     if (dx !== 0 && dy !== 0) {
+                         const side1 = grid[y]?.[x + dx];
+                         const side2 = grid[y + dy]?.[x];
+
+                         const isSolidSide1 = side1 && (
+                             (side1.type === 'WALL' && !side1.isWindow) ||
+                             (side1.type === 'DOOR' && (side1.door?.state === 'CLOSED' || side1.door?.state === 'CLOSING') && !side1.door?.maskId && !side1.door?.broken)
+                         );
+                         const isSolidSide2 = side2 && (
+                             (side2.type === 'WALL' && !side2.isWindow) ||
+                             (side2.type === 'DOOR' && (side2.door?.state === 'CLOSED' || side2.door?.state === 'CLOSING') && !side2.door?.maskId && !side2.door?.broken)
+                         );
+
+                         if (isSolidSide1 || isSolidSide2) {
+                             continue;
+                         }
+                     }
+
                      const idx = ny * width + nx;
                      if (visited[idx] === 0) {
                          visited[idx] = 1;
@@ -827,15 +1214,37 @@ export const calculateLightMap = (
                              multiplier = hasGlass ? 0.75 : 0.95;
                          }
 
-                         const nextR = Math.max(0, r - decay) * multiplier;
-                         const nextG = Math.max(0, g - decay) * multiplier;
-                         const nextB = Math.max(0, b - decay) * multiplier;
+                         let coneFactor = 1.0;
+                         if (nextDoorAxis > 0) {
+                             const Px = nx + 0.5;
+                             const Py = ny + 0.5;
+                             let isExitSide = false;
+                             if (nextDoorAxis === 1) {
+                                 const y_door = nextDoorY + 0.5;
+                                 isExitSide = (Sy < y_door && Py > y_door) || (Sy > y_door && Py < y_door);
+                             } else {
+                                 const x_door = nextDoorX + 0.5;
+                                 isExitSide = (Sx < x_door && Px > x_door) || (Sx > x_door && Px < x_door);
+                             }
+
+                             if (isExitSide) {
+                                 coneFactor = computeDoorConeFactor(Sx, Sy, Px, Py, nextDoorX, nextDoorY, nextDoorAxis);
+                             }
+                         }
+
+                         const nextR = Math.max(0, r - decay) * multiplier * coneFactor;
+                         const nextG = Math.max(0, g - decay) * multiplier * coneFactor;
+                         const nextB = Math.max(0, b - decay) * multiplier * coneFactor;
                          if (Math.max(nextR, nextG, nextB) > 0) {
                              queueX[tail] = nx;
                              queueY[tail] = ny;
                              queueR[tail] = nextR;
                              queueG[tail] = nextG;
                              queueB[tail] = nextB;
+                             queueMaxFl[tail] = nextMaxFl;
+                             queueDoorX[tail] = nextDoorX;
+                             queueDoorY[tail] = nextDoorY;
+                             queueDoorAxis[tail] = nextDoorAxis;
                              tail++;
                          }
                      }
@@ -928,14 +1337,28 @@ export const parseLevelData = async (
     const itemsPalette = new Map<string, any>();
     const keyMap: {[keyId: string]: string} = {};
 
+    // Register names for all items in database (itemsDb)
+    if (itemsDb) {
+        Object.entries(itemsDb).forEach(([itemId, itemDef]: [string, any]) => {
+            if (itemDef && itemDef.name) {
+                const localizedName = localize(itemDef.name);
+                keyMap[itemId] = localizedName;
+                if (itemDef.keyId) keyMap[itemDef.keyId] = localizedName;
+            }
+        });
+    }
+
     data.items?.forEach(i => {
         let definition = i;
         if (i.id && itemsDb && itemsDb[i.id]) {
             definition = { ...itemsDb[i.id], ...i };
         }
         itemsPalette.set(i.symbol, definition);
-        if (definition.type === 'KEY' && definition.keyId) {
-            keyMap[definition.keyId] = localize(definition.name);
+        if (definition && definition.name) {
+            const localizedName = localize(definition.name);
+            if (definition.id) keyMap[definition.id] = localizedName;
+            if (definition.definitionId) keyMap[definition.definitionId] = localizedName;
+            if (definition.keyId) keyMap[definition.keyId] = localizedName;
         }
     });
 
@@ -1517,7 +1940,7 @@ export const parseLevelData = async (
         Array.from({ length: width }, (_, x) => {
             if (resolvedCeilingType === 'INDOOR') return false;
             const baseTile = parsedGrids[0]?.[y]?.[x];
-            if (baseTile && (baseTile.type === 'WALL' || (baseTile.type === 'DOOR' && (baseTile.door?.state === 'CLOSED' || baseTile.door?.state === 'CLOSING')))) {
+            if (baseTile && (baseTile.type === 'WALL' || (baseTile.type === 'DOOR' && (baseTile.door?.state === 'CLOSED' || baseTile.door?.state === 'CLOSING') && !baseTile.door?.maskId))) {
                 return false;
             }
             for (let i = 1; i < parsedGrids.length; i++) {

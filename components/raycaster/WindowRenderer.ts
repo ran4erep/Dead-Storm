@@ -43,6 +43,61 @@ export interface RenderWindowParams {
     rayDirY: number;
     upperTile: any;
     auxBuffers?: Map<string, RaycasterBuffer>;
+    passThroughWallsCol?: PassThroughWall[];
+}
+
+export interface Span {
+    start: number;
+    end: number;
+}
+
+export function getUnoccludedSpans(
+    startY: number,
+    endY: number,
+    passThroughWallsCol: PassThroughWall[] | undefined,
+    windowDist: number,
+    ignorePolyOccluders: boolean = false
+): Span[] {
+    if (startY >= endY) return [];
+    let spans: Span[] = [{ start: startY, end: endY }];
+    if (!passThroughWallsCol || passThroughWallsCol.length === 0) return spans;
+
+    for (let i = 0; i < passThroughWallsCol.length; i++) {
+        const w = passThroughWallsCol[i];
+        const skip = w.isPolyOccluder && ignorePolyOccluders;
+        if (w.isOccluderOnly && !skip && w.dist < windowDist - 0.001) {
+            let clipStart = w.wallTop !== undefined ? w.wallTop : 0;
+            let clipEnd = w.wallBottom !== undefined ? w.wallBottom : 0;
+            if (clipStart >= clipEnd) continue;
+
+            if (w.isPolyOccluder) {
+                const h = clipEnd - clipStart;
+                if (h > 4) {
+                    const shrink = Math.min(Math.floor(h * 0.04) + 1, 3);
+                    clipStart += shrink;
+                    clipEnd -= shrink;
+                }
+            }
+
+            const nextSpans: Span[] = [];
+            for (let s = 0; s < spans.length; s++) {
+                const sp = spans[s];
+                if (clipEnd <= sp.start || clipStart >= sp.end) {
+                    nextSpans.push(sp);
+                } else {
+                    if (clipStart > sp.start) {
+                        nextSpans.push({ start: sp.start, end: clipStart });
+                    }
+                    if (clipEnd < sp.end) {
+                        nextSpans.push({ start: clipEnd, end: sp.end });
+                    }
+                }
+            }
+            spans = nextSpans;
+            if (spans.length === 0) break;
+        }
+    }
+    return spans;
 }
 
 // Draw an individual part of a window block
@@ -418,7 +473,8 @@ export function renderWindowSegment({
     rayDirX,
     rayDirY,
     upperTile,
-    auxBuffers
+    auxBuffers,
+    passThroughWallsCol
 }: RenderWindowParams) {
     const cutout = upperTile.cutout || { topLeft: { x: 0.25, y: 0.25 }, bottomRight: { x: 0.75, y: 0.75 } };
     const cutoutLeft = cutout.topLeft.x;
@@ -442,12 +498,15 @@ export function renderWindowSegment({
 
     if (!isCutoutCol) {
         if (drawStart < drawEnd && (pt.dist <= zBuffer[x] + 1.5 || (pt.layer !== undefined && pt.layer > 0))) {
-            drawWindowPart(
-                x, drawStart, drawEnd, pt, currentWallBuf, texX,
-                levelDrawStart, texStartShift, lh,
-                rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
-                screenBuffer, width, resolutionDivisor
-            );
+            const spans = getUnoccludedSpans(drawStart, drawEnd, passThroughWallsCol, pt.dist);
+            for (let s = 0; s < spans.length; s++) {
+                drawWindowPart(
+                    x, spans[s].start, spans[s].end, pt, currentWallBuf, texX,
+                    levelDrawStart, texStartShift, lh,
+                    rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
+                    screenBuffer, width, resolutionDivisor
+                );
+            }
         }
         return;
     }
@@ -458,23 +517,29 @@ export function renderWindowSegment({
     // 1. Top Frame (Opaque)
     const topDrawEnd = Math.min(drawEnd, screenCutoutTop);
     if (drawStart < topDrawEnd) {
-        drawWindowPart(
-            x, drawStart, topDrawEnd, pt, currentWallBuf, texX,
-            levelDrawStart, texStartShift, lh,
-            rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
-            screenBuffer, width, resolutionDivisor
-        );
+        const spans = getUnoccludedSpans(drawStart, topDrawEnd, passThroughWallsCol, pt.dist);
+        for (let s = 0; s < spans.length; s++) {
+            drawWindowPart(
+                x, spans[s].start, spans[s].end, pt, currentWallBuf, texX,
+                levelDrawStart, texStartShift, lh,
+                rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
+                screenBuffer, width, resolutionDivisor
+            );
+        }
     }
 
     // 2. Bottom Frame (Opaque)
     const botDrawStart = Math.max(drawStart, screenCutoutBot);
     if (botDrawStart < drawEnd) {
-        drawWindowPart(
-            x, botDrawStart, drawEnd, pt, currentWallBuf, texX,
-            levelDrawStart, texStartShift, lh,
-            rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
-            screenBuffer, width, resolutionDivisor
-        );
+        const spans = getUnoccludedSpans(botDrawStart, drawEnd, passThroughWallsCol, pt.dist);
+        for (let s = 0; s < spans.length; s++) {
+            drawWindowPart(
+                x, spans[s].start, spans[s].end, pt, currentWallBuf, texX,
+                levelDrawStart, texStartShift, lh,
+                rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
+                screenBuffer, width, resolutionDivisor
+            );
+        }
     }
 
     // 2b. Render simple, flat, highly-optimized horizontal inner cheeks (Head and Sill)
@@ -513,56 +578,59 @@ export function renderWindowSegment({
         const headStart = Math.max(drawStart, screenCutoutTop);
         const headEnd = Math.min(drawEnd, screenCutoutTopFar);
         if (headStart < headEnd) {
-            for (let y = headStart; y < headEnd; y++) {
-                const dy = horizon - y;
-                if (dy <= 0) continue;
-                const dist_cheek = numerator_head / dy;
+            const headSpans = getUnoccludedSpans(headStart, headEnd, passThroughWallsCol, pt.dist);
+            for (let s = 0; s < headSpans.length; s++) {
+                for (let y = headSpans[s].start; y < headSpans[s].end; y++) {
+                    const dy = horizon - y;
+                    if (dy <= 0) continue;
+                    const dist_cheek = numerator_head / dy;
 
-                const cx = posX + dist_cheek * rayDirX;
-                const cy = posY + dist_cheek * rayDirY;
+                    const cx = posX + dist_cheek * rayDirX;
+                    const cy = posY + dist_cheek * rayDirY;
 
-                let tx = Math.floor((cx - Math.floor(cx)) * bufW);
-                let ty = Math.floor((cy - Math.floor(cy)) * bufH);
-                if (tx < 0) tx = 0; else if (tx >= bufW) tx = bufW - 1;
-                if (ty < 0) ty = 0; else if (ty >= bufH) ty = bufH - 1;
+                    let tx = Math.floor((cx - Math.floor(cx)) * bufW);
+                    let ty = Math.floor((cy - Math.floor(cy)) * bufH);
+                    if (tx < 0) tx = 0; else if (tx >= bufW) tx = bufW - 1;
+                    if (ty < 0) ty = 0; else if (ty >= bufH) ty = bufH - 1;
 
-                const color = texData[ty * bufW + tx];
-                const a = (color >> 24) & 0xFF;
-                if (a > 0) {
-                    // Apply a beautiful shading (0.7 factor) to simulate inner depth/shadow
-                    let r = ((color & 0xFF) * 180) >> 8;
-                    let g = (((color >> 8) & 0xFF) * 180) >> 8;
-                    let b = (((color >> 16) & 0xFF) * 180) >> 8;
+                    const color = texData[ty * bufW + tx];
+                    const a = (color >> 24) & 0xFF;
+                    if (a > 0) {
+                        // Apply a beautiful shading (0.7 factor) to simulate inner depth/shadow
+                        let r = ((color & 0xFF) * 180) >> 8;
+                        let g = (((color >> 8) & 0xFF) * 180) >> 8;
+                        let b = (((color >> 16) & 0xFF) * 180) >> 8;
 
-                    let finalR = (r * rMultInt) >> 8;
-                    let finalG = (g * gMultInt) >> 8;
-                    let finalB = (b * bMultInt) >> 8;
+                        let finalR = (r * rMultInt) >> 8;
+                        let finalG = (g * gMultInt) >> 8;
+                        let finalB = (b * bMultInt) >> 8;
 
-                    if (hasFlash) {
-                        finalR = (finalR + fRInt) > 255 ? 255 : (finalR + fRInt);
-                        finalG = (finalG + fGInt) > 255 ? 255 : (finalG + fGInt);
-                        finalB = (finalB + fBInt) > 255 ? 255 : (finalB + fBInt);
-                    }
+                        if (hasFlash) {
+                            finalR = (finalR + fRInt) > 255 ? 255 : (finalR + fRInt);
+                            finalG = (finalG + fGInt) > 255 ? 255 : (finalG + fGInt);
+                            finalB = (finalB + fBInt) > 255 ? 255 : (finalB + fBInt);
+                        }
 
-                    if (fogAmtInt > 0) {
-                        r = ((finalR * distFogInt) >> 8) + fogR;
-                        g = ((finalG * distFogInt) >> 8) + fogG;
-                        b = ((finalB * distFogInt) >> 8) + fogB;
-                    } else {
-                        r = finalR;
-                        g = finalG;
-                        b = finalB;
-                    }
+                        if (fogAmtInt > 0) {
+                            r = ((finalR * distFogInt) >> 8) + fogR;
+                            g = ((finalG * distFogInt) >> 8) + fogG;
+                            b = ((finalB * distFogInt) >> 8) + fogB;
+                        } else {
+                            r = finalR;
+                            g = finalG;
+                            b = finalB;
+                        }
 
-                    r = r > 255 ? 255 : r;
-                    g = g > 255 ? 255 : g;
-                    b = b > 255 ? 255 : b;
+                        r = r > 255 ? 255 : r;
+                        g = g > 255 ? 255 : g;
+                        b = b > 255 ? 255 : b;
 
-                    const finalColor = (255 << 24) | (b << 16) | (g << 8) | r;
-                    const screenIdx = y * width + x;
-                    screenBuffer[screenIdx] = finalColor;
-                    for (let d = 1; d < maxD; d++) {
-                        screenBuffer[screenIdx + d] = finalColor;
+                        const finalColor = (255 << 24) | (b << 16) | (g << 8) | r;
+                        const screenIdx = y * width + x;
+                        screenBuffer[screenIdx] = finalColor;
+                        for (let d = 1; d < maxD; d++) {
+                            screenBuffer[screenIdx + d] = finalColor;
+                        }
                     }
                 }
             }
@@ -574,56 +642,59 @@ export function renderWindowSegment({
         const sillStart = Math.max(drawStart, screenCutoutBotFar);
         const sillEnd = Math.min(drawEnd, screenCutoutBot);
         if (sillStart < sillEnd) {
-            for (let y = sillStart; y < sillEnd; y++) {
-                const dy = y - horizon;
-                if (dy <= 0) continue;
-                const dist_cheek = numerator_sill / dy;
+            const sillSpans = getUnoccludedSpans(sillStart, sillEnd, passThroughWallsCol, pt.dist);
+            for (let s = 0; s < sillSpans.length; s++) {
+                for (let y = sillSpans[s].start; y < sillSpans[s].end; y++) {
+                    const dy = y - horizon;
+                    if (dy <= 0) continue;
+                    const dist_cheek = numerator_sill / dy;
 
-                const cx = posX + dist_cheek * rayDirX;
-                const cy = posY + dist_cheek * rayDirY;
+                    const cx = posX + dist_cheek * rayDirX;
+                    const cy = posY + dist_cheek * rayDirY;
 
-                let tx = Math.floor((cx - Math.floor(cx)) * bufW);
-                let ty = Math.floor((cy - Math.floor(cy)) * bufH);
-                if (tx < 0) tx = 0; else if (tx >= bufW) tx = bufW - 1;
-                if (ty < 0) ty = 0; else if (ty >= bufH) ty = bufH - 1;
+                    let tx = Math.floor((cx - Math.floor(cx)) * bufW);
+                    let ty = Math.floor((cy - Math.floor(cy)) * bufH);
+                    if (tx < 0) tx = 0; else if (tx >= bufW) tx = bufW - 1;
+                    if (ty < 0) ty = 0; else if (ty >= bufH) ty = bufH - 1;
 
-                const color = texData[ty * bufW + tx];
-                const a = (color >> 24) & 0xFF;
-                if (a > 0) {
-                    // Apply a beautiful shading (0.7 factor) to simulate inner depth/shadow
-                    let r = ((color & 0xFF) * 180) >> 8;
-                    let g = (((color >> 8) & 0xFF) * 180) >> 8;
-                    let b = (((color >> 16) & 0xFF) * 180) >> 8;
+                    const color = texData[ty * bufW + tx];
+                    const a = (color >> 24) & 0xFF;
+                    if (a > 0) {
+                        // Apply a beautiful shading (0.7 factor) to simulate inner depth/shadow
+                        let r = ((color & 0xFF) * 180) >> 8;
+                        let g = (((color >> 8) & 0xFF) * 180) >> 8;
+                        let b = (((color >> 16) & 0xFF) * 180) >> 8;
 
-                    let finalR = (r * rMultInt) >> 8;
-                    let finalG = (g * gMultInt) >> 8;
-                    let finalB = (b * bMultInt) >> 8;
+                        let finalR = (r * rMultInt) >> 8;
+                        let finalG = (g * gMultInt) >> 8;
+                        let finalB = (b * bMultInt) >> 8;
 
-                    if (hasFlash) {
-                        finalR = (finalR + fRInt) > 255 ? 255 : (finalR + fRInt);
-                        finalG = (finalG + fGInt) > 255 ? 255 : (finalG + fGInt);
-                        finalB = (finalB + fBInt) > 255 ? 255 : (finalB + fBInt);
-                    }
+                        if (hasFlash) {
+                            finalR = (finalR + fRInt) > 255 ? 255 : (finalR + fRInt);
+                            finalG = (finalG + fGInt) > 255 ? 255 : (finalG + fGInt);
+                            finalB = (finalB + fBInt) > 255 ? 255 : (finalB + fBInt);
+                        }
 
-                    if (fogAmtInt > 0) {
-                        r = ((finalR * distFogInt) >> 8) + fogR;
-                        g = ((finalG * distFogInt) >> 8) + fogG;
-                        b = ((finalB * distFogInt) >> 8) + fogB;
-                    } else {
-                        r = finalR;
-                        g = finalG;
-                        b = finalB;
-                    }
+                        if (fogAmtInt > 0) {
+                            r = ((finalR * distFogInt) >> 8) + fogR;
+                            g = ((finalG * distFogInt) >> 8) + fogG;
+                            b = ((finalB * distFogInt) >> 8) + fogB;
+                        } else {
+                            r = finalR;
+                            g = finalG;
+                            b = finalB;
+                        }
 
-                    r = r > 255 ? 255 : r;
-                    g = g > 255 ? 255 : g;
-                    b = b > 255 ? 255 : b;
+                        r = r > 255 ? 255 : r;
+                        g = g > 255 ? 255 : g;
+                        b = b > 255 ? 255 : b;
 
-                    const finalColor = (255 << 24) | (b << 16) | (g << 8) | r;
-                    const screenIdx = y * width + x;
-                    screenBuffer[screenIdx] = finalColor;
-                    for (let d = 1; d < maxD; d++) {
-                        screenBuffer[screenIdx + d] = finalColor;
+                        const finalColor = (255 << 24) | (b << 16) | (g << 8) | r;
+                        const screenIdx = y * width + x;
+                        screenBuffer[screenIdx] = finalColor;
+                        for (let d = 1; d < maxD; d++) {
+                            screenBuffer[screenIdx + d] = finalColor;
+                        }
                     }
                 }
             }
@@ -682,12 +753,15 @@ export function renderWindowSegment({
                 const cutoutScreenHeight = gScreenBot - gScreenTop;
                 const targetLh = cutoutScreenHeight > 0 ? cutoutScreenHeight : 1;
 
-                drawWindowPart(
-                    x, glassDrawStart, glassDrawEnd, pt, glassBuf, glassTexX,
-                    gScreenTop, 0, targetLh,
-                    rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, alphaMultiplier,
-                    screenBuffer, width, resolutionDivisor
-                );
+                const glassSpans = getUnoccludedSpans(glassDrawStart, glassDrawEnd, passThroughWallsCol, glassDist);
+                for (let s = 0; s < glassSpans.length; s++) {
+                    drawWindowPart(
+                        x, glassSpans[s].start, glassSpans[s].end, pt, glassBuf, glassTexX,
+                        gScreenTop, 0, targetLh,
+                        rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, alphaMultiplier,
+                        screenBuffer, width, resolutionDivisor
+                    );
+                }
             }
         }
     }
@@ -700,6 +774,10 @@ export interface PreparedWindowOcclusion {
     isCutoutCol: boolean;
     screenCutoutTop: number;
     screenCutoutBot: number;
+    screenCutoutTopFar: number;
+    screenCutoutBotFar: number;
+    actualCutoutTop: number;
+    actualCutoutBot: number;
 }
 
 export function prepareSpriteWindowOcclusion(
@@ -720,8 +798,9 @@ export function prepareSpriteWindowOcclusion(
 ): PreparedWindowOcclusion {
     const topZ = topZ_val !== undefined ? topZ_val : (pt.topZ !== undefined ? pt.topZ : 1.0);
     const botZ = botZ_val !== undefined ? botZ_val : (pt.bottomZ !== undefined ? pt.bottomZ : 0.0);
-    const absTopZ = pt.layer + topZ;
-    const absBotZ = pt.layer + botZ;
+    const layerVal = pt.layer !== undefined ? pt.layer : 0;
+    const absTopZ = layerVal + topZ;
+    const absBotZ = layerVal + botZ;
 
     const lh = height / pt.dist;
     const levelDrawStart = Math.floor(horizon + lh * (cameraZ - absTopZ));
@@ -758,13 +837,34 @@ export function prepareSpriteWindowOcclusion(
     const screenCutoutTop = Math.floor(levelDrawStart + (levelDrawEnd - levelDrawStart) * cTop);
     const screenCutoutBot = Math.floor(levelDrawStart + (levelDrawEnd - levelDrawStart) * cBot);
 
+    // Account for inner head/sill cheeks
+    const exitDist = (pt.exitDist !== undefined && pt.exitDist > pt.dist) ? pt.exitDist : pt.dist + 1.0;
+    const lhFar = height / exitDist;
+    const levelDrawStartFar = Math.floor(horizon + lhFar * (cameraZ - absTopZ));
+    const levelDrawEndFar = Math.ceil(horizon + lhFar * (cameraZ - absBotZ));
+    const screenCutoutTopFar = Math.floor(levelDrawStartFar + (levelDrawEndFar - levelDrawStartFar) * cTop);
+    const screenCutoutBotFar = Math.floor(levelDrawStartFar + (levelDrawEndFar - levelDrawStartFar) * cBot);
+
+    const headZ_world = absTopZ - cTop * (topZ - botZ);
+    const sillZ_world = absTopZ - cBot * (topZ - botZ);
+
+    const hasHeadCheek = cameraZ < headZ_world;
+    const hasSillCheek = cameraZ > sillZ_world;
+
+    const actualCutoutTop = hasHeadCheek ? Math.max(screenCutoutTop, screenCutoutTopFar) : screenCutoutTop;
+    const actualCutoutBot = hasSillCheek ? Math.min(screenCutoutBot, screenCutoutBotFar) : screenCutoutBot;
+
     return {
         isAlwaysOccluded: !isCutoutCol,
         levelDrawStart,
         levelDrawEnd,
         isCutoutCol,
         screenCutoutTop,
-        screenCutoutBot
+        screenCutoutBot,
+        screenCutoutTopFar,
+        screenCutoutBotFar,
+        actualCutoutTop,
+        actualCutoutBot
     };
 }
 
@@ -783,7 +883,7 @@ export function isSpritePixelOccludedByWindowPrepared(
         return true;
     }
 
-    if (y < prepared.screenCutoutTop || y >= prepared.screenCutoutBot) {
+    if (y < prepared.actualCutoutTop || y >= prepared.actualCutoutBot) {
         return true;
     }
 

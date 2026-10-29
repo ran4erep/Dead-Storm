@@ -204,7 +204,7 @@ export const CustomSelect = ({
         onClick={toggleDropdown}
       >
         <div className={`flex items-center justify-between w-full h-full min-h-[32px] px-2 py-1 bg-gray-950 border border-gray-700 rounded text-sm text-gray-200 outline-none hover:border-indigo-500 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-          <span className="truncate mr-2 leading-none">{selectedOptionLabel}</span>
+          <span className="truncate mr-2 flex items-center min-w-0">{selectedOptionLabel}</span>
           <ChevronDown size={14} className="text-gray-500 group-hover:text-indigo-400 shrink-0" />
         </div>
       </div>

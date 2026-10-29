@@ -1,6 +1,6 @@
 
 import { Tile, Player, Item, GameStrings } from '../types';
-import { hasPitLineOfSight } from './combatLogic';
+import { hasPitLineOfSight, hasLineOfSight } from './combatLogic';
 
 export interface AimingTarget {
     id: string;
@@ -75,6 +75,9 @@ export const scanForTargets = (
     const weaponRange = player.equippedWeapon?.range || 1; 
     const candidatesMap = new Map<string, AimingTarget>();
 
+    const pX = Math.floor(player.pos.x);
+    const pY = Math.floor(player.pos.y);
+
     const directions = [
         { dx: 0, dy: -1, dir: 0 }, // N
         { dx: 1, dy: 0, dir: 1 },  // E
@@ -88,13 +91,13 @@ export const scanForTargets = (
         
         // Scan 3 lanes (Center + 1 Left + 1 Right) matching the Aggro width
         [-1, 0, 1].forEach(offset => {
-            let cx = player.pos.x + (px * offset);
-            let cy = player.pos.y + (py * offset);
+            let cx = pX + (px * offset);
+            let cy = pY + (py * offset);
             
             if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
                 // 1. Blinders check: If there is a wall immediately to the side, the lane is blocked
                 if (offset !== 0) {
-                    const sideTile = grid[cy][cx];
+                    const sideTile = grid[cy]?.[cx];
                     if (isVisuallyBlocking(sideTile, false)) {
                         return; // Skip this lane
                     }
@@ -106,23 +109,29 @@ export const scanForTargets = (
                      
                      if (tx < 0 || tx >= width || ty < 0 || ty >= height) break;
 
-                     // 2. Center lane check (Corner Cutting prevention)
+                     // Corner cutting check: If scanning a side lane, central tile at distance i must not be visually blocking
                      if (offset !== 0) {
-                          const centerTx = player.pos.x + (dx * i);
-                          const centerTy = player.pos.y + (dy * i);
-                          if (centerTx >= 0 && centerTx < width && centerTy >= 0 && centerTy < height) {
-                              const centerTile = grid[centerTy][centerTx];
-                              // The center tile itself is on the center lane for aiming, so true
-                              if (isVisuallyBlocking(centerTile, true)) {
-                                  break; // Center is blocked, so side lane is blocked from here on
-                              }
-                          }
+                         const centerTx = pX + (dx * i);
+                         const centerTy = pY + (dy * i);
+                         if (centerTx >= 0 && centerTx < width && centerTy >= 0 && centerTy < height) {
+                             const centerTile = grid[centerTy]?.[centerTx];
+                             if (isVisuallyBlocking(centerTile, true)) {
+                                 break;
+                             }
+                         }
                      }
 
-                     const tile = grid[ty][tx];
-                     
+                     const tile = grid[ty]?.[tx];
+                     if (!tile) break;
+
+                     const diffX = Math.abs(tx - pX);
+                     const diffY = Math.abs(ty - pY);
+                     const isDiagonalClose = (diffX === 1 && diffY === 1);
+
+                     const checkLOS = () => hasLineOfSight(player.pos, { x: tx + 0.5, y: ty + 0.5 }, grid, width, height, "PLAYER", false);
+
                      if (tile.decoration) {
-                          if (tile.decoration.destructable) {
+                          if (tile.decoration.destructable && checkLOS()) {
                               const decorId = `decor_${tx}_${ty}`;
                               const existing = candidatesMap.get(decorId);
                               const newCandidate: AimingTarget = {
@@ -138,12 +147,9 @@ export const scanForTargets = (
                                   candidatesMap.set(decorId, newCandidate);
                               }
                           }
-                          if (tile.decoration.blocking) {
-                              // Note: we'll handle blocking after all checks
-                          }
                      }
 
-                     if (tile.isWindow && tile.canBeDestroyed !== false && !tile.isGlassBroken && tile.glassAssetId) {
+                     if (!isDiagonalClose && tile.isWindow && tile.canBeDestroyed !== false && !tile.isGlassBroken && tile.glassAssetId && checkLOS()) {
                           const windowId = `window_${tx}_${ty}`;
                           const existing = candidatesMap.get(windowId);
                           const newCandidate: AimingTarget = {
@@ -158,10 +164,9 @@ export const scanForTargets = (
                           if (!existing || Math.abs(offset) < Math.abs(existing.offset)) {
                               candidatesMap.set(windowId, newCandidate);
                           }
-                          // Let the ray pass through to hit stuff behind the window
                      }
 
-                     if (tile.type === 'DOOR' && tile.door && tile.door.maskId && !tile.door.broken && tile.door.state !== 'OPEN') {
+                     if (!isDiagonalClose && tile.type === 'DOOR' && tile.door && tile.door.maskId && !tile.door.broken && tile.door.state !== 'OPEN' && checkLOS()) {
                           const doorGlassId = `door_${tx}_${ty}`;
                           const existing = candidatesMap.get(doorGlassId);
                           const newCandidate: AimingTarget = {
@@ -176,10 +181,9 @@ export const scanForTargets = (
                           if (!existing || Math.abs(offset) < Math.abs(existing.offset)) {
                               candidatesMap.set(doorGlassId, newCandidate);
                           }
-                          // Let the ray pass through
                      }
 
-                     if (tile.mirror && tile.canBeDestroyed !== false && !tile.isMirrorBroken && tile.maskId) {
+                     if (!isDiagonalClose && tile.mirror && tile.canBeDestroyed !== false && !tile.isMirrorBroken && tile.maskId && checkLOS()) {
                           const mirrorId = `mirror_${tx}_${ty}`;
                           const existing = candidatesMap.get(mirrorId);
                           const newCandidate: AimingTarget = {
@@ -194,12 +198,11 @@ export const scanForTargets = (
                           if (!existing || Math.abs(offset) < Math.abs(existing.offset)) {
                               candidatesMap.set(mirrorId, newCandidate);
                           }
-                          // Let the ray pass through
                      }
 
-                     if (tile.enemyId) {
+                     if (tile.enemyId && checkLOS()) {
                           const isPitTile = (t: any) => t && t.type === 'FLOOR' && t.height !== undefined && t.height < 0;
-                          const playerTile = grid[Math.floor(player.pos.y)]?.[Math.floor(player.pos.x)];
+                          const playerTile = grid[pY]?.[pX];
                           const playerInPit = isPitTile(playerTile);
                           const enemyInPit = isPitTile(tile);
 
@@ -237,7 +240,8 @@ export const scanForTargets = (
 
                      if (isVisuallyBlocking(tile, offset === 0)) break;
                      if (tile.enemyId) break;
-                     if (tile.decoration && tile.decoration.blocking) break;
+                     const isDecoBlocking = tile.decorations && tile.decorations.length > 0 ? tile.decorations.some((d: any) => d.blocking) : !!(tile.decoration && tile.decoration.blocking);
+                     if (isDecoBlocking) break;
 
                 }
             }
@@ -283,6 +287,9 @@ export const scanForInspectTargets = (
 ): AimingTarget[] => {
     const candidatesMap = new Map<string, AimingTarget>();
 
+    const pX = Math.floor(player.pos.x);
+    const pY = Math.floor(player.pos.y);
+
     const directions = [
         { dx: 0, dy: -1, dir: 0 }, // N
         { dx: 1, dy: 0, dir: 1 },  // E
@@ -295,13 +302,13 @@ export const scanForInspectTargets = (
         const py = dx;
         
         [-1, 0, 1].forEach(offset => {
-            let cx = player.pos.x + (px * offset);
-            let cy = player.pos.y + (py * offset);
+            let cx = pX + (px * offset);
+            let cy = pY + (py * offset);
             
             if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
                 if (offset !== 0) {
-                    const sideTile = grid[cy][cx];
-                    if (sideTile && ((sideTile.type === 'WALL' && sideTile.blocking !== false) || (sideTile.type === 'DOOR' && sideTile.door?.state !== 'OPEN'))) {
+                    const sideTile = grid[cy]?.[cx];
+                    if (isVisuallyBlocking(sideTile, false)) {
                         return;
                     }
                 }
@@ -313,21 +320,24 @@ export const scanForInspectTargets = (
                      if (tx < 0 || tx >= width || ty < 0 || ty >= height) break;
 
                      if (offset !== 0) {
-                          const centerTx = player.pos.x + (dx * i);
-                          const centerTy = player.pos.y + (dy * i);
+                          const centerTx = pX + (dx * i);
+                          const centerTy = pY + (dy * i);
                           if (centerTx >= 0 && centerTx < width && centerTy >= 0 && centerTy < height) {
-                              const centerTile = grid[centerTy][centerTx];
-                              if (centerTile && ((centerTile.type === 'WALL' && centerTile.blocking !== false) || (centerTile.type === 'DOOR' && centerTile.door?.state !== 'OPEN'))) {
+                              const centerTile = grid[centerTy]?.[centerTx];
+                              if (isVisuallyBlocking(centerTile, true)) {
                                   break;
                               }
                           }
                      }
 
-                     const tile = grid[ty][tx];
+                     const tile = grid[ty]?.[tx];
+                     if (!tile) break;
 
                      let targetFound = false;
+                     const checkLOS = () => hasLineOfSight(player.pos, { x: tx + 0.5, y: ty + 0.5 }, grid, width, height, "PLAYER", false);
 
                      const addCandidate = (id: string) => {
+                         if (!checkLOS()) return;
                          targetFound = true;
                          const existing = candidatesMap.get(id);
                          const newCandidate: AimingTarget = {
@@ -375,7 +385,12 @@ export const scanForInspectTargets = (
                      }
 
                      if (tile.items && tile.items.length > 0) {
-                         const inspectableItems = tile.items.filter((item) => item.canBeInspected !== false);
+                         const inspectableItems = tile.items.filter((item) => 
+                             item.canBeInspected !== false && 
+                             !(item as any).uncollectible && 
+                             !(item as any).placedAsThrown && 
+                             !((item as any).type === 'FLARE' && (item as any).isLit === true)
+                         );
                          if (inspectableItems.length > 0) {
                              inspectableItems.forEach((item, idx) => {
                                  const id = inspectableItems.length > 1 ? `item_${tx}_${ty}_${idx}` : `item_${tx}_${ty}`;
@@ -384,8 +399,7 @@ export const scanForInspectTargets = (
                          }
                      }
 
-                     if (tile.type === 'WALL' && tile.blocking !== false) break;
-                     if (tile.type === 'DOOR' && tile.door && tile.door.state !== 'OPEN') break;
+                     if (isVisuallyBlocking(tile, offset === 0)) break;
 
                      const isBlockingDeco = decList.some(d => d.blocking);
                      if (targetFound && (tile.enemyId || isBlockingDeco)) {

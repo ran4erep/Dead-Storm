@@ -553,10 +553,10 @@ export const useInventorySystem = (
         return null;
     };
 
-    const handleInventoryAction = (item: Item, action: 'EQUIP' | 'USE' | 'THROW', initiateThrow: (i: Item, countToDrop?: number) => void, onFeedback?: (msg: string) => void, countToDrop?: number) => {
+    const handleInventoryAction = (item: Item, action: 'EQUIP' | 'USE' | 'THROW', initiateThrow: (i: Item, countToDrop?: number, isSafe?: boolean) => void, onFeedback?: (msg: string) => void, countToDrop?: number, isSafe?: boolean) => {
         if (!strings) return;
         if (action === 'EQUIP') handleEquipItem(item, onFeedback);
-        else if (action === 'THROW') { initiateThrow(item, countToDrop); setActiveModal(null); }
+        else if (action === 'THROW') { initiateThrow(item, countToDrop, isSafe); setActiveModal(null); }
         else if (action === 'USE') {
             
             let wasUsed = false;

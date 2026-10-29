@@ -106,19 +106,15 @@ const TradeModal: React.FC<TradeModalProps> = ({ onClose, spriteMap, localize, n
       const landscape = window.innerWidth > window.innerHeight;
       setIsLandscape(landscape);
 
-      if (landscape) {
-        const el = document.getElementById('viewport-touch-layer');
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          setViewportRect({
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height
-          });
-        }
-      } else {
-        setViewportRect(null);
+      const el = document.getElementById('viewport-touch-layer');
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        setViewportRect({
+          top: rect.top,
+          left: rect.left,
+          width: rect.width,
+          height: rect.height
+        });
       }
     };
 
@@ -135,20 +131,13 @@ const TradeModal: React.FC<TradeModalProps> = ({ onClose, spriteMap, localize, n
 
   const safeTopOffset = Math.max(0, topOffset);
 
-  const overlayStyle: React.CSSProperties = isLandscape && viewportRect ? {
-    position: 'fixed',
-    top: `${safeTopOffset}px`,
-    left: `${viewportRect.left}px`,
-    width: `${viewportRect.width}px`,
-    height: `${Math.max(50, viewportRect.top + viewportRect.height - safeTopOffset)}px`,
-    zIndex: 250,
-  } : {
+  const overlayStyle: React.CSSProperties = {
     position: 'fixed',
     top: `${safeTopOffset}px`,
     left: 0,
     width: '100vw',
     height: `calc(100vh - ${safeTopOffset}px)`,
-    zIndex: 250,
+    zIndex: 350,
   };
 
   const cardStyle: React.CSSProperties = isLandscape ? {
@@ -554,7 +543,7 @@ const TradeModal: React.FC<TradeModalProps> = ({ onClose, spriteMap, localize, n
 
   return createPortal(
     <div 
-        className="bg-black/40 flex flex-col items-center justify-center p-3 font-['Jura'] pointer-events-auto transition-all duration-300"
+        className="bg-transparent flex flex-col items-center justify-center p-3 font-['Jura'] pointer-events-auto transition-all duration-300"
         style={overlayStyle}
         onClick={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}

@@ -17,6 +17,7 @@ export function usePlayerFall({
     levelData?: any;
 }) {
     const [fallAnimProgress, setFallAnimProgress] = useState(0);
+    const fallAnimProgressRef = useRef(0);
     const previousStateRef = useRef<GameState | null>(null);
 
     const hasStartedFallRef = useRef(false);
@@ -58,7 +59,8 @@ export function usePlayerFall({
         // Reset if we are no longer in the FALLING state
         if (gameState !== GameState.FALLING) {
             hasStartedFallRef.current = false;
-            setFallAnimProgress(prev => (prev !== 0 ? 0 : prev));
+            fallAnimProgressRef.current = 0;
+            setFallAnimProgress(0);
             if (animStateRef.current.frameId) {
                 cancelAnimationFrame(animStateRef.current.frameId);
                 animStateRef.current.frameId = null;
@@ -92,13 +94,16 @@ export function usePlayerFall({
                     visualProgress = (1 - progress) * 2; // 1 down to 0
                 }
 
+                fallAnimProgressRef.current = visualProgress;
                 setFallAnimProgress(visualProgress);
+                if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('raycaster-look'));
 
                 if (progress < 1) {
                     animStateRef.current.frameId = requestAnimationFrame(animateFall);
                 } else {
                     hasStartedFallRef.current = false;
-                    setFallAnimProgress(prev => (prev !== 0 ? 0 : prev));
+                    fallAnimProgressRef.current = 0;
+                    setFallAnimProgress(0);
                     if (setGameStateRef.current) {
                         setGameStateRef.current(previousStateRef.current || GameState.PLAYING);
                     }
@@ -116,5 +121,8 @@ export function usePlayerFall({
         }
     }, [gameState]);
 
-    return { fallAnimProgress };
+    return {
+        fallAnimProgress,
+        fallAnimProgressRef
+    };
 }

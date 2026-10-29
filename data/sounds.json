@@ -39,6 +39,14 @@
     "streaming": true,
     "randomizePitch": false
   },
+  "STATIC_IN_THE_WALLS": {
+    "assetId": "STATIC_IN_THE_WALLS",
+    "volume": 1,
+    "looped": true,
+    "allowOverlap": false,
+    "streaming": true,
+    "randomizePitch": false
+  },
   "GLASS": {
     "assetId": "GLASS",
     "volume": 1,
@@ -137,6 +145,15 @@
     "triggerRange": 3
   },
   "AK47_SHOT": {
+    "assetId": "AK47_SHOT",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true,
+    "triggerRange": 5
+  },
+  "RIFLE_SHOT": {
     "assetId": "AK47_SHOT",
     "volume": 1,
     "looped": false,
@@ -327,6 +344,14 @@
   },
   "AK47_RELOAD": {
     "assetId": "AK47_RELOAD",
+    "volume": 1,
+    "looped": false,
+    "allowOverlap": false,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "RIFLE_RELOAD": {
+    "assetId": "RIFLE_RELOAD",
     "volume": 1,
     "looped": false,
     "allowOverlap": false,
@@ -658,6 +683,70 @@
     "assetId": "ARMOR_HIT",
     "volume": 1.0,
     "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "FOOTSTEP_WOOD": {
+    "assetId": "FOOTSTEP_WOOD",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "CLUB_MUSIC": {
+    "assetId": "CLUB_MUSIC",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": true,
+    "randomizePitch": false
+  },
+  "AMBIENT_DOG_BARKING": {
+    "assetId": "AMBIENT_DOG_BARKING",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "AMBIENT_BIRDS": {
+    "assetId": "AMBIENT_BIRDS",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "AMBIENT_FRIDGE": {
+    "assetId": "AMBIENT_FRIDGE",
+    "volume": 1.0,
+    "looped": true,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "AMBIENT_SHITTING": {
+    "assetId": "AMBIENT_SHITTING",
+    "volume": 1.0,
+    "looped": false,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": true
+  },
+  "AMBIENT_DOG_HIGHWAY": {
+    "assetId": "AMBIENT_HIGHWAY",
+    "volume": 1.0,
+    "looped": true,
+    "allowOverlap": true,
+    "streaming": false,
+    "randomizePitch": false
+  },
+  "AMBIENT_NIGHT": {
+    "assetId": "AMBIENT_NIGHT",
+    "volume": 1.0,
+    "looped": true,
     "allowOverlap": true,
     "streaming": false,
     "randomizePitch": true

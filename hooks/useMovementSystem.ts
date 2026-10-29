@@ -8,6 +8,81 @@ import { evaluateFlagCondition, evaluateFlagsArray } from './useScriptSystem';
 
 const MAX_VISION_DISTANCE = 12;
 
+export function findActiveKeypad(player: { pos: { x: number, y: number }, dir: number }, grid: Tile[][]) {
+    if (!grid || !grid[player.pos.y] || !grid[player.pos.y][player.pos.x]) return null;
+
+    const pX = player.pos.x;
+    const pY = player.pos.y;
+    const pDirNum = ((Math.round(player.dir) % 4) + 4) % 4;
+    const dirStr = ['N', 'E', 'S', 'W'][pDirNum];
+
+    // 1. Check currentTile (where player stands) for mesh or panelPlacedAt KEYPAD decoration
+    const currentTile = grid[pY][pX];
+    if (currentTile) {
+        const decs: any[] = currentTile.decorations 
+            ? currentTile.decorations 
+            : (currentTile.decoration ? [currentTile.decoration] : []);
+        
+        for (const dec of decs) {
+            if (dec && dec.type === 'KEYPAD' && dec.password) {
+                const placedAtRaw = dec.panelPlacedAt || dec.keypadDirection || dec.facing;
+                const placedAt = placedAtRaw ? String(placedAtRaw).toUpperCase().charAt(0) : 'N';
+                if (placedAt === dirStr) {
+                    return {
+                        tile: currentTile,
+                        decoration: dec,
+                        isCurrentTile: true
+                    };
+                }
+            }
+        }
+    }
+
+    // 2. Check frontTile (tile in front of player)
+    const dx = [0, 1, 0, -1][pDirNum];
+    const dy = [-1, 0, 1, 0][pDirNum];
+    const fX = pX + dx;
+    const fY = pY + dy;
+
+    if (grid[fY] && grid[fY][fX]) {
+        const frontTile = grid[fY][fX];
+        
+        const decs: any[] = frontTile.decorations 
+            ? frontTile.decorations 
+            : (frontTile.decoration ? [frontTile.decoration] : []);
+        
+        for (const dec of decs) {
+            if (dec && dec.type === 'KEYPAD' && dec.password) {
+                if (!dec.panelPlacedAt) {
+                    return {
+                        tile: frontTile,
+                        decoration: dec,
+                        isCurrentTile: false
+                    };
+                }
+            }
+        }
+
+        if (frontTile.keylock && frontTile.password) {
+            let isFacingCorrectly = true;
+            if (frontTile.keypadDirection) {
+                const reqFace = String(frontTile.keypadDirection).toUpperCase().charAt(0);
+                const facingWallFace = ['S', 'W', 'N', 'E'][pDirNum];
+                isFacingCorrectly = (reqFace === facingWallFace);
+            }
+            if (isFacingCorrectly) {
+                return {
+                    tile: frontTile,
+                    decoration: undefined,
+                    isCurrentTile: false
+                };
+            }
+        }
+    }
+
+    return null;
+}
+
 export const useMovementSystem = (
     player: Player,
     setPlayer: React.Dispatch<React.SetStateAction<Player>>,
@@ -52,7 +127,7 @@ export const useMovementSystem = (
 ) => {
 
     const onTakeTurnRef = useRef(onTakeTurn);
-    React.useEffect(() => { onTakeTurnRef.current = onTakeTurn; }, [onTakeTurn]);
+    onTakeTurnRef.current = onTakeTurn;
 
     const inputLockRef = useRef<boolean>(false);
     const loggedItemIdsRef = useRef<Set<string>>(new Set());
@@ -97,14 +172,17 @@ export const useMovementSystem = (
                 if (frontPos) {
                     const frontTile = levelData.grid[frontPos.y]?.[frontPos.x];
                     if (frontTile && frontTile.items && frontTile.items.length > 0) {
-                        const hasNewItems = frontTile.items.some((item: Item) => !loggedItemIdsRef.current.has(item.id));
-                        if (hasNewItems) {
-                            if (frontTile.items.length > 1) {
-                                addLog(strings.logs.multiple_items_in_front, 'INFO');
-                            } else {
-                                addLog(t(strings.logs.item_in_front, { name: frontTile.items[frontTile.items.length - 1].name }), 'INFO');
+                        const visibleItems = frontTile.items.filter((item: Item) => isPickableItem(item));
+                        if (visibleItems.length > 0) {
+                            const hasNewItems = visibleItems.some((item: Item) => !loggedItemIdsRef.current.has(item.id));
+                            if (hasNewItems) {
+                                if (visibleItems.length > 1) {
+                                    addLog(strings.logs.multiple_items_in_front, 'INFO');
+                                } else {
+                                    addLog(t(strings.logs.item_in_front, { name: visibleItems[visibleItems.length - 1].name }), 'INFO');
+                                }
+                                visibleItems.forEach((item: Item) => loggedItemIdsRef.current.add(item.id));
                             }
-                            frontTile.items.forEach((item: Item) => loggedItemIdsRef.current.add(item.id));
                         }
                     }
                 }
@@ -384,15 +462,26 @@ export const useMovementSystem = (
             targetHeight = 0.0;
         }
 
-        let targetDecoBlocking = targetTile.decoration ? targetTile.decoration.blocking : false;
-        if (targetTile.decoration?.isBox) {
-            const isBoxAtBottom = isBoxInPit && !targetTile.pitDecoration;
-            if (isBoxAtBottom) {
-                // Если коробка на дне ямы, она блокирует только если игрок тоже в яме на одном уровне.
-                // Иначе (игрок сверху) коробка работает как пол/мост и пропускает его.
-                targetDecoBlocking = isPlayerInPit;
-            } else {
-                targetDecoBlocking = targetTile.decoration.blocking;
+        const targetDecs = targetTile.decorations && targetTile.decorations.length > 0 
+            ? targetTile.decorations 
+            : (targetTile.decoration ? [targetTile.decoration] : []);
+
+        let targetDecoBlocking = false;
+        for (const dec of targetDecs) {
+            if (dec.isBox) {
+                const isBoxAtBottom = isBoxInPit && !targetTile.pitDecoration;
+                if (isBoxAtBottom) {
+                    if (isPlayerInPit) {
+                        targetDecoBlocking = true;
+                        break;
+                    }
+                } else if (dec.blocking) {
+                    targetDecoBlocking = true;
+                    break;
+                }
+            } else if (dec.blocking) {
+                targetDecoBlocking = true;
+                break;
             }
         }
 
@@ -427,10 +516,20 @@ export const useMovementSystem = (
                     const isTooHigh = nextHeight > realTargetHeight;
 
                     // Если коробка на следующем тайле находится на дне ямы, она не блокирует толкаемую коробку (служит мостом)
-                    const isNextBoxAtBottom = !!(nextTile.decoration?.isBox && nextHeight < 0.0 && !nextTile.pitDecoration);
-                    let nextDecoBlocking = nextTile.decoration ? nextTile.decoration.blocking : false;
-                    if (isNextBoxAtBottom) {
-                        nextDecoBlocking = false;
+                    let nextDecoBlocking = false;
+                    const nextDecs = nextTile.decorations && nextTile.decorations.length > 0
+                        ? nextTile.decorations
+                        : (nextTile.decoration ? [nextTile.decoration] : []);
+
+                    for (const dec of nextDecs) {
+                        const isNextBoxAtBottom = !!(dec.isBox && nextHeight < 0.0 && !nextTile.pitDecoration);
+                        if (isNextBoxAtBottom) {
+                            continue;
+                        }
+                        if (dec.blocking) {
+                            nextDecoBlocking = true;
+                            break;
+                        }
                     }
 
                     const isNextBlocking = (nextTile.type === 'WALL' && nextTile.blocking !== false) || 
@@ -545,7 +644,8 @@ export const useMovementSystem = (
                  const blockingItem = targetTile.items.find((i: Item) => i.blocking);
                  msg = t(strings.logs.blocking, { name: blockingItem?.name || "???" });
               } else {
-                 msg = t(strings.logs.blocking, { name: targetTile.decoration?.name || "???" });
+                 const blockingDec = targetDecs.find(d => d.blocking) || targetTile.decoration;
+                 msg = t(strings.logs.blocking, { name: blockingDec?.name || "???" });
               }
           }
           if (msg !== "") {
@@ -766,14 +866,17 @@ export const useMovementSystem = (
         if (frontPos) { 
             const frontTile = levelData.grid[frontPos.y]?.[frontPos.x]; 
             if (frontTile && frontTile.items && frontTile.items.length > 0) {
-                const hasNewItems = frontTile.items.some((item: Item) => !loggedItemIdsRef.current.has(item.id));
-                if (hasNewItems) {
-                    if (frontTile.items.length > 1) {
-                        addLog(strings.logs.multiple_items_in_front, 'INFO');
-                    } else {
-                        addLog(t(strings.logs.item_in_front, { name: frontTile.items[frontTile.items.length - 1].name }), 'INFO');
+                const visibleItems = frontTile.items.filter((item: Item) => isPickableItem(item));
+                if (visibleItems.length > 0) {
+                    const hasNewItems = visibleItems.some((item: Item) => !loggedItemIdsRef.current.has(item.id));
+                    if (hasNewItems) {
+                        if (visibleItems.length > 1) {
+                            addLog(strings.logs.multiple_items_in_front, 'INFO');
+                        } else {
+                            addLog(t(strings.logs.item_in_front, { name: visibleItems[visibleItems.length - 1].name }), 'INFO');
+                        }
+                        visibleItems.forEach((item: Item) => loggedItemIdsRef.current.add(item.id));
                     }
-                    frontTile.items.forEach((item: Item) => loggedItemIdsRef.current.add(item.id));
                 }
             } 
         }
@@ -795,6 +898,17 @@ export const useMovementSystem = (
     };
 
     const pickedUpItemsRef = useRef<Set<string>>(new Set());
+
+    const isPickableItem = (item: any) => {
+        if (!item) return false;
+        if (item.type === 'CONTAINER') return false;
+        if (item.uncollectible) return false;
+        if (item.placedAsThrown) return false;
+        if (item.canBeInspected === false) return false;
+        if (item.isLit === true) return false;
+        if ((item.type === 'GRENADE' || item.type === 'FLASHBANG') && item.activeTimer > 0) return false;
+        return true;
+    };
 
     const handlePickUpSingle = (item: Item, pos: {x: number, y: number}, containerId?: string) => {
         if (!strings || !levelData) return;
@@ -821,7 +935,7 @@ export const useMovementSystem = (
             foundItem = tile.items.find((i: Item) => i.id === item.id);
         }
 
-        if (!foundItem) return;
+        if (!foundItem || !isPickableItem(foundItem)) return;
 
         let willMerge = false;
         if (foundItem.type === 'AMMO' || foundItem.type === 'MATERIAL') {
@@ -1107,7 +1221,7 @@ export const useMovementSystem = (
             if (looted) return;
         }
 
-        if (actionId === 'KEYPAD' && tile.keylock) {
+        if (actionId === 'KEYPAD' && findActiveKeypad(player, levelData.grid)) {
             if (setActiveModal) {
                 setActiveModal('keypad');
             }
@@ -1149,22 +1263,10 @@ export const useMovementSystem = (
         }
 
         // Priority logic for multiple interactions on the same tile
-        if (tile.keylock) {
-            let isFacingCorrectly = true;
-            if (tile.keypadDirection) {
-                const pDir = Math.round(player.dir) % 4;
-                const reqFace = tile.keypadDirection.toUpperCase();
-                isFacingCorrectly = (
-                    (pDir === 0 && (reqFace === 'S' || reqFace === 'SOUTH')) ||
-                    (pDir === 1 && (reqFace === 'W' || reqFace === 'WEST')) ||
-                    (pDir === 2 && (reqFace === 'N' || reqFace === 'NORTH')) ||
-                    (pDir === 3 && (reqFace === 'E' || reqFace === 'EAST'))
-                );
-            }
-            if (isFacingCorrectly && setActiveModal) {
-                setActiveModal('keypad');
-                return;
-            }
+        const activeKeypad = findActiveKeypad(player, levelData.grid);
+        if (activeKeypad && setActiveModal) {
+            setActiveModal('keypad');
+            return;
         }
 
         if (tile.type === 'DOOR' && !tile.door?.nonInteractable) {
@@ -1221,10 +1323,18 @@ export const useMovementSystem = (
         if (result.secondarySound) setTimeout(() => playSound(result.secondarySound!, pos), 300);
 
         if (result.action === 'UNLOCK' && result.keyToConsume) {
-            const keyId = result.keyToConsume.id;
+            const keyItemToConsume = result.keyToConsume;
             setPlayer(prev => ({
                 ...prev,
-                inventory: prev.inventory.filter(i => i.id !== keyId)
+                inventory: prev.inventory.map(item => {
+                    if (item.id === keyItemToConsume.id) {
+                        if (item.count && item.count > 1) {
+                            return { ...item, count: item.count - 1 };
+                        }
+                        return null;
+                    }
+                    return item;
+                }).filter(Boolean) as typeof prev.inventory
             }));
         }
 
@@ -1342,7 +1452,7 @@ export const useMovementSystem = (
 
     const handleLootInteraction = (tile: Tile, pos: {x: number, y: number}): boolean => {
         if (tile.items && tile.items.length > 0) {
-            const pickableItems = tile.items.filter((item: any) => !((item.type === 'GRENADE' || item.type === 'FLASHBANG') && item.activeTimer > 0) && item.type !== 'CONTAINER');
+            const pickableItems = tile.items.filter(isPickableItem);
             if (pickableItems.length === 0) return false;
             
             if (pickableItems.length === 1) {
@@ -1381,7 +1491,7 @@ export const useMovementSystem = (
         }
         
         if (tile.items && tile.items.length > 0) {
-            const pickableItems = tile.items.filter((item: any) => !((item.type === 'GRENADE' || item.type === 'FLASHBANG') && item.activeTimer > 0) && item.type !== 'CONTAINER');
+            const pickableItems = tile.items.filter(isPickableItem);
             if (pickableItems.length > 0) {
                 availableActions.push({ id: 'LOOT', label: strings.ui.controls.btn_pickup || "LOOT" });
             }
@@ -1453,29 +1563,12 @@ export const useMovementSystem = (
             });
         }
         
-        if (tile.keylock) {
-            let isFacingCorrectly = true;
-            if (tile.keypadDirection) {
-                const pDir = Math.round(player.dir) % 4;
-                const reqFace = tile.keypadDirection.toUpperCase();
-                // pDir 0 -> facing North -> seeing South face
-                // pDir 1 -> facing East -> seeing West face
-                // pDir 2 -> facing South -> seeing North face
-                // pDir 3 -> facing West -> seeing East face
-                isFacingCorrectly = (
-                    (pDir === 0 && (reqFace === 'S' || reqFace === 'SOUTH')) ||
-                    (pDir === 1 && (reqFace === 'W' || reqFace === 'WEST')) ||
-                    (pDir === 2 && (reqFace === 'N' || reqFace === 'NORTH')) ||
-                    (pDir === 3 && (reqFace === 'E' || reqFace === 'EAST'))
-                );
-            }
-            
-            if (isFacingCorrectly) {
-                availableActions.push({
-                   id: 'KEYPAD',
-                   label: strings.inventory?.btn_use || "Использовать"
-                });
-            }
+        const activeKeypadInfo = findActiveKeypad(player, levelData.grid);
+        if (activeKeypadInfo) {
+            availableActions.push({
+               id: 'KEYPAD',
+               label: strings.inventory?.btn_use || "Использовать"
+            });
         }
 
         if (tile.decoration?.isWorkbench) {

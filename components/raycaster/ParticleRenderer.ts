@@ -2,6 +2,7 @@
 import React from 'react';
 import { Particle, updateParticles, drawParticles, createRainSplash, createRainParticles, casingParticles, updateCasingParticles, bloodParticles, updateBloodParticles, rainSplashParticles, updateRainSplashParticles } from '../../utils/particleSystem';
 import { Tile } from '../../types';
+import { prepareSpriteWindowOcclusion } from './WindowRenderer';
 
 interface ParticleRenderProps {
     ctx: CanvasRenderingContext2D;
@@ -64,13 +65,38 @@ export const updateAndProcessParticles = ({
             const lh = Math.abs(Math.floor(height / transY));
             p.y = horizon + lh * ((cameraZ || 0.5) - p.worldZ);
             
-            // Check overhang and pit wall occlusion
+            // Check overhang, window frames, and pit wall occlusion
             if (passThroughWalls && p.x >= 0 && p.x < width) {
-                const ptw = passThroughWalls[p.x];
+                let targetX = p.x;
+                if (!passThroughWalls[targetX] || passThroughWalls[targetX].length === 0) {
+                    for (let offset = 1; offset <= 4; offset++) {
+                        if (targetX - offset >= 0 && passThroughWalls[targetX - offset] && passThroughWalls[targetX - offset].length > 0) {
+                            targetX = targetX - offset;
+                            break;
+                        }
+                        if (targetX + offset < width && passThroughWalls[targetX + offset] && passThroughWalls[targetX + offset].length > 0) {
+                            targetX = targetX + offset;
+                            break;
+                        }
+                    }
+                }
+                const ptw = passThroughWalls[targetX];
                 if (ptw && ptw.length > 0) {
+                    const cameraX = (2 * targetX) / width - 1;
+                    const rayDirX = dirX + planeX * cameraX;
+                    const rayDirY = dirY + planeY * cameraX;
+
                     for (let i = 0; i < ptw.length; i++) {
                         const pt = ptw[i];
                         if (transY > pt.dist) {
+                            if (pt.isPolyOccluder) {
+                                if (p.y >= pt.wallTop && p.y <= pt.wallBottom) {
+                                    p.x = -1000;
+                                    break;
+                                }
+                                continue;
+                            }
+
                             const isPitOrFloorWall = pt.isPitWall || pt.isFloorWall;
                             const topZValue = pt.topZ !== undefined ? pt.topZ : 1.0;
                             
@@ -80,32 +106,50 @@ export const updateAndProcessParticles = ({
                                 continue;
                             }
                             
-                            const ptLh = height / pt.dist;
-                            const absTopZ = pt.layer + topZValue;
-                            const absBotZ = pt.layer + (pt.bottomZ !== undefined ? pt.bottomZ : 0.0);
-                            
-                            const levelDrawEnd = Math.ceil(horizon + ptLh * ((cameraZ || 0.5) - absBotZ));
-                            const levelDrawStart = Math.floor(horizon + ptLh * ((cameraZ || 0.5) - absTopZ));
+                            if (pt.isWindow || pt.cutoutTop !== undefined || pt.cutoutBottom !== undefined) {
+                                const prep = prepareSpriteWindowOcclusion(
+                                    pt,
+                                    height,
+                                    horizon,
+                                    cameraZ || 0.5,
+                                    posX,
+                                    posY,
+                                    rayDirX,
+                                    rayDirY
+                                );
 
-                            if (isPitOrFloorWall) {
-                                // For pit / floor-step walls, the wall occupies [levelDrawStart, levelDrawEnd].
-                                if (p.y >= levelDrawStart && p.y <= levelDrawEnd) {
+                                if (prep.isAlwaysOccluded || p.y < prep.actualCutoutTop || p.y >= prep.actualCutoutBot) {
                                     p.x = -1000;
                                     break;
                                 }
                             } else {
-                                // Standard overhang / upper wall stack check
-                                if (p.y < levelDrawEnd) {
-                                    p.x = -1000; // Occlude
-                                    break;
-                                }
+                                const ptLh = height / pt.dist;
+                                const absTopZ = pt.layer + topZValue;
+                                const absBotZ = pt.layer + (pt.bottomZ !== undefined ? pt.bottomZ : 0.0);
                                 
-                                // Occlude if behind the bottom cap (ceiling of the upper block)
-                                if (pt.layer >= 1 && p.y >= levelDrawEnd && p.y < horizon && p.type === 'rain') {
-                                    const distToP = ((pt.layer - (cameraZ || 0.5)) * height) / (horizon - p.y);
-                                    if (distToP >= pt.dist && distToP <= pt.exitDist && transY > distToP) {
+                                const levelDrawEnd = Math.ceil(horizon + ptLh * ((cameraZ || 0.5) - absBotZ));
+                                const levelDrawStart = Math.floor(horizon + ptLh * ((cameraZ || 0.5) - absTopZ));
+
+                                if (isPitOrFloorWall) {
+                                    // For pit / floor-step walls, the wall occupies [levelDrawStart, levelDrawEnd].
+                                    if (p.y >= levelDrawStart && p.y <= levelDrawEnd) {
                                         p.x = -1000;
                                         break;
+                                    }
+                                } else {
+                                    // Standard overhang / upper wall stack check
+                                    if (p.y < levelDrawEnd) {
+                                        p.x = -1000; // Occlude
+                                        break;
+                                    }
+                                    
+                                    // Occlude if behind the bottom cap (ceiling of the upper block)
+                                    if (pt.layer >= 1 && p.y >= levelDrawEnd && p.y < horizon && p.type === 'rain') {
+                                        const distToP = ((pt.layer - (cameraZ || 0.5)) * height) / (horizon - p.y);
+                                        if (distToP >= pt.dist && distToP <= pt.exitDist && transY > distToP) {
+                                            p.x = -1000;
+                                            break;
+                                        }
                                     }
                                 }
                             }
@@ -272,6 +316,7 @@ export const renderParticles = ({
 
         const checkVisible = (p: Particle) => {
             if (p.dist <= 0) return false;
+            if (p.x < 0 || p.x >= width) return false;
             if (drawnParticles && drawnParticles.has(p)) return false;
             if (zBuffer) {
                 const bx = Math.floor(p.x);

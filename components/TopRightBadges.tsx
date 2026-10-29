@@ -170,7 +170,10 @@ const TopRightBadges: React.FC<TopRightBadgesProps> = ({
                         ctx.fillRect(drawX, drawY, tileSize, tileSize);
 
                         // Impassable decorations warning (blocking crosses)
-                        if (tile.decoration && tile.decoration.blocking && !tile.decoration.isEmptyness) {
+                        const isDecoBlocking = tile.decorations && tile.decorations.length > 0
+                            ? tile.decorations.some((d: any) => d.blocking && !d.isEmptyness)
+                            : !!(tile.decoration && tile.decoration.blocking && !tile.decoration.isEmptyness);
+                        if (isDecoBlocking) {
                             const radarBgStyle = 'rgba(16, 185, 129, 0.12)';
                             if (currentFillStyle !== radarBgStyle) {
                                 ctx.fillStyle = radarBgStyle;

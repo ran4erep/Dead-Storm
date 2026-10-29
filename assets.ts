@@ -108,6 +108,8 @@ export const ASSETS = {
     HAND_RADIO_FEMALE: `${BASE_URL}/hand_radio_female.png`,
     HAND_AK47: `${BASE_URL}/hand_ak47.png`,
     HAND_AK47_FEMALE: `${BASE_URL}/hand_ak47_female.png`,
+    HAND_RIFLE: `${BASE_URL}/hand_rifle.png`,
+    HAND_RIFLE_FEMALE: `${BASE_URL}/hand_rifle_female.png`,
 
     // Console
     CONSOLE_STILL: `${BASE_URL}/console_still.png`,
@@ -147,6 +149,8 @@ export const ASSETS = {
     BOTTLE_GLASS: `${BASE_URL}/bottle_glass.png`,
     FLASHBANG: `${BASE_URL}/flashbang.png`,
     FLASHBANG_ARMED: `${BASE_URL}/flashbang_armed.png`,
+    FLARE: `${BASE_URL}/flashbang.png`,
+    FLARE_BURNT: `${BASE_URL}/flashbang_armed.png`,
     MAP: `${BASE_URL}/map_item.png`,
     C4: `${BASE_URL}/C4.png`,
     C4_WALL: `${BASE_URL}/C4_wall.png`,
@@ -163,6 +167,7 @@ export const ASSETS = {
     BOTTLED_WATER: `${BASE_URL}/bottle_water.png`,
     PASSPORT_MALE: `${BASE_URL}/passport_male.png`,
     PASSPORT_FEMALE: `${BASE_URL}/passport_female.png`,
+    RIFLE: `${BASE_URL}/rifle.png`,
     
     // Ammo
     PISTOL_AMMO: `${BASE_URL}/pistol_ammo.png`,
@@ -204,6 +209,7 @@ export const ASSETS = {
     REVOLVER_DOLL: `${EQUIP_URL}/revolver.png`,
     SHOTGUN_DOLL: `${EQUIP_URL}/shotgun.png`,
     AK47_DOLL: `${EQUIP_URL}/ak47.png`,
+    RIFLE_DOLL: `${EQUIP_URL}/rifle.png`,
 
     // Portraits
     MALE_PORTRAIT1: `${BASE_URL}/male_portrait1.png`,
@@ -275,6 +281,7 @@ export const ASSETS = {
     WINE: `${BASE_URL}/wine.png`,
     BAR_SIGN: `${BASE_URL}/bar_sign.png`,
     CHAIN_FENCE2: `${BASE_URL}/chain_fence2.png`,
+    STOP_SIGN: `${BASE_URL}/stop_sign.png`,
 
     // NPCs
     LANA: `${BASE_URL}/lana.png`,
@@ -453,6 +460,9 @@ export const ASSETS = {
     SHOTGUN_SHOT5: `${ANIM_URL}/shotgun_shot/shotgun_shot5.png`,
     SHOTGUN_SHOT6: `${ANIM_URL}/shotgun_shot/shotgun_shot6.png`,
     SHOTGUN_SHOT7: `${ANIM_URL}/shotgun_shot/shotgun_shot7.png`,
+    SHOTGUN_SHOT8: `${ANIM_URL}/shotgun_shot/shotgun_shot8.png`,
+    SHOTGUN_SHOT9: `${ANIM_URL}/shotgun_shot/shotgun_shot9.png`,
+    SHOTGUN_MUZZLE: `${BASE_URL}/shotgun_muzzle.png`,
 
     // Shotgun shot female
     SHOTGUN_SHOT_FEMALE1: `${ANIM_URL}/shotgun_shot_female/shotgun_shot_female1.png`,
@@ -462,6 +472,9 @@ export const ASSETS = {
     SHOTGUN_SHOT_FEMALE5: `${ANIM_URL}/shotgun_shot_female/shotgun_shot_female5.png`,
     SHOTGUN_SHOT_FEMALE6: `${ANIM_URL}/shotgun_shot_female/shotgun_shot_female6.png`,
     SHOTGUN_SHOT_FEMALE7: `${ANIM_URL}/shotgun_shot_female/shotgun_shot_female7.png`,
+    SHOTGUN_SHOT_FEMALE8: `${ANIM_URL}/shotgun_shot_female/shotgun_shot_female8.png`,
+    SHOTGUN_SHOT_FEMALE9: `${ANIM_URL}/shotgun_shot_female/shotgun_shot_female9.png`,
+    SHOTGUN_MUZZLE_FEMALE: `${BASE_URL}/shotgun_muzzle_female.png`,
 
     // AK47 shot
     AK47_SHOT1: `${ANIM_URL}/ak47_shot/ak47_shot1.png`,
@@ -474,6 +487,22 @@ export const ASSETS = {
     AK47_SHOT_FEMALE2: `${ANIM_URL}/ak47_shot_female/ak47_shot_female2.png`,
     AK47_SHOT_FEMALE3: `${ANIM_URL}/ak47_shot_female/ak47_shot_female3.png`,
     AK47_SHOT_FEMALE4: `${ANIM_URL}/ak47_shot_female/ak47_shot_female4.png`,
+
+    //Rifle shot
+    RIFLE_SHOT1: `${ANIM_URL}/rifle_shot/rifle_shot1.png`,
+    RIFLE_SHOT2: `${ANIM_URL}/rifle_shot/rifle_shot2.png`,
+    RIFLE_SHOT3: `${ANIM_URL}/rifle_shot/rifle_shot3.png`,
+    RIFLE_SHOT4: `${ANIM_URL}/rifle_shot/rifle_shot4.png`,
+    RIFLE_SHOT5: `${ANIM_URL}/rifle_shot/rifle_shot5.png`,
+    RIFLE_SHOT6: `${ANIM_URL}/rifle_shot/rifle_shot6.png`,
+
+    // Rifle shot female
+    RIFLE_SHOT_FEMALE1: `${ANIM_URL}/rifle_shot_female/rifle_shot_female1.png`,
+    RIFLE_SHOT_FEMALE2: `${ANIM_URL}/rifle_shot_female/rifle_shot_female2.png`,
+    RIFLE_SHOT_FEMALE3: `${ANIM_URL}/rifle_shot_female/rifle_shot_female3.png`,
+    RIFLE_SHOT_FEMALE4: `${ANIM_URL}/rifle_shot_female/rifle_shot_female4.png`,
+    RIFLE_SHOT_FEMALE5: `${ANIM_URL}/rifle_shot_female/rifle_shot_female5.png`,
+    RIFLE_SHOT_FEMALE6: `${ANIM_URL}/rifle_shot_female/rifle_shot_female6.png`,
 
     // Tree
     TREE_ANIM1: `${ANIM_URL}/tree/tree1.png`,
@@ -503,6 +532,7 @@ export const ASSETS = {
     BATTLE: `${BASE_URL}/sounds/battle.mp3`,
     GAME_OVER: `${BASE_URL}/sounds/game_over.mp3`,
     METAL_LULLABY: `${BASE_URL}/sounds/metal_lullaby.mp3`,
+    STATIC_IN_THE_WALLS: `${BASE_URL}/sounds/static_in_the_walls.mp3`,
     CONSOLE_START: `${SOUND_URL}/console_start.mp3`,
     CONSOLE_FOOD: `${SOUND_URL}/console_food.mp3`,
     CONSOLE_BUTTON: `${SOUND_URL}/console_button.mp3`,
@@ -590,6 +620,18 @@ export const ASSETS = {
     LANA_GASP: `${SOUND_URL}/lana_gasp.mp3`,
     CASE_OPEN: `${SOUND_URL}/case_open.mp3`,
     FOOTSTEP_DIRT: `${SOUND_URL}/footstep_dirt.mp3`,
-    FOOTSTEP_ASPHALT: `${SOUND_URL}/footstep_asphalt.mp3`
+    FOOTSTEP_ASPHALT: `${SOUND_URL}/footstep_asphalt.mp3`,
+    FOOTSTEP_WOOD: `${SOUND_URL}/footstep_wood.mp3`,
+    CLUB_MUSIC: `${SOUND_URL}/club_music.mp3`,
+    RIFLE_SHOT: `${SOUND_URL}/rifle_shot.mp3`,
+    RIFLE_RELOAD: `${SOUND_URL}/rifle_reload.mp3`,
+    AMBIENT_DOG_BARKING: `${SOUND_URL}/ambient_dog_barking.mp3`,
+    AMBIENT_BIRDS: `${SOUND_URL}/ambient_birds.mp3`,
+    AMBIENT_FRIDGE: `${SOUND_URL}/ambient_fridge.mp3`,
+    AMBIENT_SHITTING: `${SOUND_URL}/ambient_shitting.mp3`,
+    AMBIENT_HIGHWAY: `${SOUND_URL}/ambient_highway.mp3`,
+    AMBIENT_NIGHT: `${SOUND_URL}/ambient_night.mp3`
+
+
   } as Record<string, string>
 };

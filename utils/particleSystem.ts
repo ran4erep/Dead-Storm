@@ -74,7 +74,7 @@ export const returnParticlesToPool = (particles: Particle[]) => {
     }
 };
 
-export const casingParticles: Particle[] = new Array(30).fill(null).map(() => ({
+export const casingParticles: Particle[] = new Array(60).fill(null).map(() => ({
     worldX: 0, worldY: 0, worldZ: 0, wvx: 0, wvy: 0, wvz: 0, x: 0, y: 0, dist: 0, life: 0, maxLife: 0, color: '', size: 0, floorZ: 0, type: 'casing'
 }));
 export let casingIndex = 0;
@@ -167,6 +167,116 @@ export const getParticle = (): Particle => {
     return p;
 };
 
+export function parseColorToRGB(colorInput: any): { r: number; g: number; b: number } {
+  if (!colorInput) return { r: 255, g: 70, b: 30 };
+  if (typeof colorInput === 'object' && colorInput !== null) {
+    const r = typeof colorInput.r === 'number' ? colorInput.r : 255;
+    const g = typeof colorInput.g === 'number' ? colorInput.g : 70;
+    const b = typeof colorInput.b === 'number' ? colorInput.b : 30;
+    return {
+      r: Math.min(255, Math.max(0, r)),
+      g: Math.min(255, Math.max(0, g)),
+      b: Math.min(255, Math.max(0, b))
+    };
+  }
+  if (typeof colorInput === 'string') {
+    if (colorInput.startsWith('#')) {
+      const hex = colorInput.replace('#', '');
+      const fullHex = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex;
+      const num = parseInt(fullHex, 16);
+      if (!isNaN(num)) {
+        return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+      }
+    }
+    const match = colorInput.match(/\d+/g);
+    if (match && match.length >= 3) {
+      return {
+        r: Math.min(255, Math.max(0, parseInt(match[0], 10))),
+        g: Math.min(255, Math.max(0, parseInt(match[1], 10))),
+        b: Math.min(255, Math.max(0, parseInt(match[2], 10)))
+      };
+    }
+  }
+  return { r: 255, g: 70, b: 30 };
+}
+
+export const createFlareSmokeParticle = (
+  worldX: number,
+  worldY: number,
+  colorInput?: any,
+  worldZ: number = 0.0,
+  floorZ?: number
+): Particle => {
+  const p = getParticle();
+  // Tight baseline spread for a focused column base (~0.04 grid units)
+  p.worldX = worldX + (Math.random() - 0.5) * 0.04;
+  p.worldY = worldY + (Math.random() - 0.5) * 0.04;
+  p.worldZ = worldZ + Math.random() * 0.005;
+
+  // Minimal horizontal drift to keep it in a straight column (not a wide fan)
+  p.wvx = (Math.random() - 0.5) * 0.0006;
+  p.wvy = (Math.random() - 0.5) * 0.0006;
+  // Strong, steady upward rise for thermal smoke column
+  p.wvz = 0.009 + Math.random() * 0.004;
+
+  p.life = 2.8 + Math.random() * 0.8;
+  p.maxLife = p.life;
+
+  const { r, g, b } = parseColorToRGB(colorInput);
+
+  p.color = `rgba(${r}, ${g}, ${b}, 0.9)`;
+  // Rich starting size so particles overlap into a thick, dense pillar
+  p.size = 0.18 + Math.random() * 0.08;
+  p.baseSize = p.size;
+  p.alpha = 0.9;
+  p.floorZ = floorZ !== undefined ? floorZ : worldZ;
+  p.type = 'smoke';
+  p.useGravity = false;
+  // Billowing expansion as it rises upward
+  p.sizeGrowth = 1.012;
+  // Low friction so upward draft stays strong throughout its lifespan
+  p.friction = 0.992;
+  p.isForeground = false;
+  return p;
+};
+
+export const createFlareTrailParticles = (
+  worldX: number,
+  worldY: number,
+  worldZ: number,
+  colorInput?: any,
+  floorZ?: number
+): Particle[] => {
+  const particles: Particle[] = [];
+  const { r, g, b } = parseColorToRGB(colorInput);
+
+  const count = 1 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < count; i++) {
+    const p = getParticle();
+    p.worldX = worldX + (Math.random() - 0.5) * 0.04;
+    p.worldY = worldY + (Math.random() - 0.5) * 0.04;
+    p.worldZ = worldZ + (Math.random() - 0.5) * 0.02;
+    p.wvx = (Math.random() - 0.5) * 0.0008;
+    p.wvy = (Math.random() - 0.5) * 0.0008;
+    p.wvz = 0.008 + Math.random() * 0.003;
+    p.x = 0; p.y = 0; p.dist = 0;
+    p.life = 2.2 + Math.random() * 0.6;
+    p.maxLife = p.life;
+    p.color = `rgba(${r}, ${g}, ${b}, 0.9)`;
+    p.size = 0.16 + Math.random() * 0.06;
+    p.baseSize = p.size;
+    p.alpha = 0.9;
+    p.floorZ = floorZ !== undefined ? floorZ : (worldZ - 0.2);
+    p.type = 'smoke';
+    p.useGravity = false;
+    p.sizeGrowth = 1.010;
+    p.friction = 0.990;
+    p.isForeground = false;
+    particles.push(p);
+  }
+  return particles;
+};
+
 export const createCasingParticle = (
   worldX: number,
   worldY: number,
@@ -201,7 +311,7 @@ export const createCasingParticle = (
   p.worldZ = worldZ;
   p.wvx = Math.cos(finalAngle) * speed;
   p.wvy = Math.sin(finalAngle) * speed;
-  p.wvz = (isReload ? (Math.random() * 0.01) : (0.015 + Math.random() * 0.015));
+  p.wvz = (isReload ? (0.012 + Math.random() * 0.015) : (0.015 + Math.random() * 0.015));
   p.x = 0; p.y = 0; p.dist = 0;
   p.life = 3.0; // Keep same life
   p.maxLife = 3.0;
@@ -214,10 +324,10 @@ export const createCasingParticle = (
   p.uvRect = { u: 0, v: 0, w: 1, h: 1 };
   p.rotation = Math.random() * Math.PI * 2;
   p.rotationSpeed = (direction === 'right' ? (0.3 + Math.random() * 0.3) : -(0.3 + Math.random() * 0.3));
-  if (isReload) p.rotationSpeed *= 0.5;
+  if (isReload) p.rotationSpeed *= 0.7;
   p.isForeground = isPlayerCasing;
   p.bounceCount = 0;
-  p.maxBounces = isReload ? (1 + Math.floor(Math.random() * 2)) : (3 + Math.floor(Math.random() * 3));
+  p.maxBounces = isReload ? (3 + Math.floor(Math.random() * 2)) : (3 + Math.floor(Math.random() * 3));
   p.casingGroundScaleMultiplier = casingGroundScaleMultiplier;
   p.landed = false;
   p.isReload = isReload;
@@ -250,6 +360,7 @@ export const createMolotovTrailParticles = (
       p.maxLife = 0.3;
       p.color = colors[Math.floor(Math.random() * colors.length)];
       p.size = 0.5 + Math.random() * 0.75;
+      p.baseSize = p.size;
       p.floorZ = 0;
       p.type = 'fire';
       p.isForeground = false;
@@ -271,6 +382,7 @@ export const createMolotovTrailParticles = (
       p.maxLife = 1.3;
       p.color = 'rgba(10, 10, 10, 0.95)';
       p.size = 0.3 + Math.random() * 0.3;
+      p.baseSize = p.size;
       p.floorZ = 0;
       p.type = 'smoke';
       p.isForeground = false;
@@ -1303,7 +1415,7 @@ export const updateBloodParticles = (
             const tileY = Math.floor(p.worldY);
             if (tileY >= 0 && tileY < grid.length && tileX >= 0 && tileX < grid[tileY].length) {
                 const tile = grid[tileY][tileX];
-                if (tile.type === 'FLOOR' && tile.height !== undefined) {
+                if (tile && tile.height !== undefined) {
                     dynamicFloorZ = tile.height;
                 }
             }
@@ -1400,7 +1512,7 @@ export const updateCasingParticles = (
             const tileY = Math.floor(p.worldY);
             if (tileY >= 0 && tileY < grid.length && tileX >= 0 && tileX < grid[tileY].length) {
                 const tile = grid[tileY][tileX];
-                if (tile.type === 'FLOOR' && tile.height !== undefined) {
+                if (tile && tile.height !== undefined) {
                     dynamicFloorZ = tile.height;
                 }
             }
@@ -1474,8 +1586,8 @@ export const updateCasingParticles = (
                 
                 if (p.bounceCount <= maxBounces) {
                     p.worldZ = p.floorZ;
-                    p.wvz = Math.max(0.021, Math.abs(p.wvz) * (p.isReload ? 0.35 : 0.5));
-                    const speed = Math.sqrt(p.wvx * p.wvx + p.wvy * p.wvy) * (p.isReload ? 0.5 : 0.7);
+                    p.wvz = Math.max(0.018, Math.abs(p.wvz) * (p.isReload ? 0.45 : 0.5));
+                    const speed = Math.sqrt(p.wvx * p.wvx + p.wvy * p.wvy) * (p.isReload ? 0.6 : 0.7);
                     const currentAngle = Math.atan2(p.wvy, p.wvx);
                     const angle = currentAngle + (Math.random() - 0.5) * 1.0; // Отскок по инерции с небольшим отклонением
                     p.wvx = Math.cos(angle) * speed;
@@ -1524,7 +1636,7 @@ export const updateParticles = (
         const tileY = Math.floor(p.worldY);
         if (tileY >= 0 && tileY < grid.length && tileX >= 0 && tileX < grid[tileY].length) {
             const tile = grid[tileY][tileX];
-            if (tile.type === 'FLOOR' && tile.height !== undefined) {
+            if (tile && tile.height !== undefined) {
                 dynamicFloorZ = tile.height;
             }
         }
@@ -1547,6 +1659,9 @@ export const updateParticles = (
     } else if (p.type === 'smoke' || p.type === 'fire') {
         if (p.useGravity) p.wvz += pGravity;
         p.worldZ += p.wvz;
+        if (p.type === 'smoke' && p.worldZ > (p.floorZ + 0.95)) {
+            p.life -= 0.03;
+        }
         if (p.useGravity && p.worldZ <= p.floorZ) {
             p.worldZ = p.floorZ + 0.05 + Math.random() * 0.05;
             p.wvz = Math.random() * 0.02; // Small randomized bounce to keep them slightly floaty
@@ -1557,7 +1672,7 @@ export const updateParticles = (
         p.worldY += p.wvy;
         p.life -= 0.015;
         if (p.life <= 0) isAlive = false;
-        p.size *= (p.sizeGrowth !== undefined ? p.sizeGrowth : 1.03);
+        p.size *= (p.sizeGrowth !== undefined ? p.sizeGrowth : 1.02);
         const pFriction = p.friction !== undefined ? p.friction : 0.96;
         p.wvx *= pFriction; 
         p.wvy *= pFriction;
@@ -1752,6 +1867,7 @@ export const drawParticles = (
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
     if (p.dist <= 0) continue;
+    if (p.x < 0 || (ctx.canvas && p.x >= ctx.canvas.width)) continue;
     if (drawnParticles && drawnParticles.has(p)) continue;
 
     if (zBuffer) { 
@@ -2070,7 +2186,7 @@ export const drawParticles = (
             const baseHeight = ctx.canvas.height / Math.max(0.05, p.dist);
             const size = Math.max(0.5, p.size * (baseHeight * 0.005)) * resolutionDivisor;
             ctx.fillRect(Math.floor(drawX), Math.floor(drawY), size, size);
-        } else if (p.type === 'smoke') {
+        } else if (p.type === 'smoke' || p.type === 'fire') {
             const baseHeight = ctx.canvas.height / Math.max(0.05, p.dist);
             const size = Math.max(1, p.size * baseHeight * 0.2) * resolutionDivisor; 
             

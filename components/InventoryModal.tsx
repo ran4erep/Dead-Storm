@@ -27,7 +27,7 @@ interface InventoryModalProps {
   language?: 'en' | 'ru';
   onEquip: (item: Item, onFeedback?: (msg: string) => void) => void;
   onUse: (item: Item, onFeedback?: (msg: string) => void) => void;
-  onThrow: (item: Item, count?: number) => void;
+  onThrow: (item: Item, count?: number, isSafe?: boolean) => void;
   onClose: () => void;
   onUnload?: (item: Item, onFeedback?: (msg: string) => void) => void;
   onExtractBattery?: (item: Item, onFeedback?: (msg: string) => void, selectedBatteryId?: string) => void; 
@@ -162,7 +162,8 @@ const InventoryModal: React.FC<InventoryModalProps> = ({ items, strings, uiStrin
       case 'MAP': return <MapIcon className={`${className} text-cyan-400 ${brokenClass}`} />;
       case 'NOTE': return <MapIcon className={`${className} text-amber-200 ${brokenClass}`} />;
       case 'GRENADE':
-      case 'FLASHBANG': return <Flame className={`${className} ${item.type === 'FLASHBANG' ? 'text-yellow-300' : 'text-orange-500'} ${brokenClass}`} />;
+      case 'FLASHBANG':
+      case 'FLARE': return <Flame className={`${className} ${item.type === 'FLASHBANG' ? 'text-yellow-300' : item.type === 'FLARE' ? 'text-orange-400' : 'text-orange-500'} ${brokenClass}`} />;
       case 'FLASHLIGHT': return <Flashlight className={`${className} text-yellow-200 ${brokenClass}`} />;
       default: return <Package className={`${className} text-gray-400 ${brokenClass}`} />;
     }
@@ -346,8 +347,11 @@ const InventoryModal: React.FC<InventoryModalProps> = ({ items, strings, uiStrin
                 </button>
                 <button 
                   onClick={() => {
-                     onThrow(dropQtyTarget, dropQty);
-                     setDropQtyTarget(null);
+                     if (dropQtyTarget) {
+                       const isThrowable = dropQtyTarget.type === 'GRENADE' || dropQtyTarget.type === 'MOLOTOV' || dropQtyTarget.type === 'FLASHBANG' || dropQtyTarget.type === 'FLARE';
+                       onThrow(dropQtyTarget, dropQty, isThrowable ? true : undefined);
+                       setDropQtyTarget(null);
+                     }
                   }}
                   className="flex-1 py-3 bg-red-900/40 border border-red-700/40 text-red-400 font-bold rounded active:bg-red-900/60 flex items-center justify-center gap-2 uppercase tracking-widest text-xs transition-all"
                 >
@@ -643,17 +647,20 @@ const InventoryModal: React.FC<InventoryModalProps> = ({ items, strings, uiStrin
                   {!liveItem.cannotDrop && (
                     <button 
                       onClick={() => {
-                        if ((liveItem.type === 'AMMO' || liveItem.type === 'MATERIAL') && liveItem.count !== undefined && liveItem.count > 1) {
+                        const isThrowable = liveItem.type === 'GRENADE' || liveItem.type === 'MOLOTOV' || liveItem.type === 'FLASHBANG' || liveItem.type === 'FLARE';
+                        if ((liveItem.type === 'AMMO' || liveItem.type === 'MATERIAL' || isThrowable) && liveItem.count !== undefined && liveItem.count > 1) {
                           setDropQtyTarget(liveItem);
                           setDropQty(liveItem.count);
                         } else {
-                          onThrow(liveItem);
+                          onThrow(liveItem, liveItem.count && liveItem.count > 1 ? 1 : undefined, isThrowable ? true : undefined);
                         }
                         setInspectItem(null);
                       }}
                       className="flex-1 py-3 bg-red-900/20 border border-red-700/40 text-red-400 font-bold rounded active:bg-red-900/40 flex items-center justify-center gap-2 uppercase tracking-widest text-xs transition-all"
                     >
-                      {strings.btn_throw}
+                      {(liveItem.type === 'GRENADE' || liveItem.type === 'MOLOTOV' || liveItem.type === 'FLASHBANG' || liveItem.type === 'FLARE')
+                        ? ((strings as any)?.btn_drop_to_floor || (language === 'ru' ? 'Бросить' : 'Throw'))
+                        : strings.btn_throw}
                     </button>
                   )}
               </div>
@@ -752,9 +759,22 @@ const InventoryModal: React.FC<InventoryModalProps> = ({ items, strings, uiStrin
         </div>
         
         <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-gray-800/95 relative">
-          {displayItems.length === 0 && <p className="text-gray-500 text-center italic mt-4">{strings.empty}</p>}
-          
-          {displayItems.map((item, idx) => {
+          {displayItems.length === 0 ? (
+            <div className="py-10 px-4 flex flex-col items-center justify-center text-center select-none">
+              <div className="w-12 h-12 rounded-full bg-gray-900/90 border border-gray-700/80 flex items-center justify-center mb-3 text-cyan-400/60 shadow-inner relative">
+                <Briefcase size={22} className="text-gray-500" />
+              </div>
+              <p className="text-gray-300 font-bold text-xs tracking-widest uppercase">
+                {strings.empty || (language === 'ru' ? 'Карманы пусты.' : 'Inventory is empty.')}
+              </p>
+              <p className="text-gray-500 text-[11px] mt-1 max-w-[220px] leading-relaxed">
+                {language === 'ru'
+                  ? 'Найденные или полученные предметы будут отображаться здесь'
+                  : 'Items found or acquired during exploration will appear here'}
+              </p>
+            </div>
+          ) : (
+            displayItems.map((item, idx) => {
             const isMap = item.type === 'MAP' || item.type === 'NOTE';
             const isMapCurrentlyOpen = isMap && gameState === GameState.MAP_VIEW;
             const isRadio = item.type === 'RADIO';
@@ -817,6 +837,15 @@ const InventoryModal: React.FC<InventoryModalProps> = ({ items, strings, uiStrin
                       className="px-3 py-1.5 bg-green-900/40 text-[9px] rounded active:bg-green-800 text-green-200 border border-green-800/50 uppercase tracking-wider transition-colors touch-manipulation font-bold"
                     >
                       {strings.btn_use}
+                    </button>
+                  )}
+
+                  {(item.type === 'GRENADE' || item.type === 'MOLOTOV' || item.type === 'FLASHBANG' || item.type === 'FLARE') && (
+                    <button 
+                      onClick={() => onThrow(item, item.count && item.count > 1 ? 1 : undefined)}
+                      className="px-3 py-1.5 bg-red-900/40 text-[9px] rounded active:bg-red-800 text-red-200 border border-red-800/50 uppercase tracking-wider transition-colors touch-manipulation font-bold"
+                    >
+                      {strings.btn_throw}
                     </button>
                   )}
 
@@ -883,7 +912,8 @@ const InventoryModal: React.FC<InventoryModalProps> = ({ items, strings, uiStrin
                 </div>
               </div>
             );
-          })}
+          })
+          )}
         </div>
       </div>
       <ToastContainer toasts={toasts} variant="fixed-bottom" isAbsolute={true} />

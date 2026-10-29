@@ -1,4 +1,14 @@
 {
+  "poly_chair": {
+    "name": "Стул 3D/3D Chair",
+    "description": "Деревянный 3D стул из полигонов (polyObject)./Wooden 3D chair made of polyObject cubes.",
+    "assetId": "TRANSPARENT",
+    "renderMode": "polyObject",
+    "polyModelId": "chair",
+    "scale": 1.0,
+    "blocking": true,
+    "yOffset": 0
+  },
   "box_test": {
     "name": "Коробка/Box",
     "description": "Тестовая коробка./Test box.",
@@ -370,7 +380,9 @@
     "assetId": "LAMPPOST",
     "scale": 1.4,
     "blocking": true,
-    "yOffset": -0.2
+    "yOffset": -0.2,
+    "spriteFacing": "right",
+    "autoMirror": true
   },
   "light_switch": {
     "name": "Выключатель света/Light switch",
@@ -403,8 +415,9 @@
     "name": "Бильярдный стол/Pool table",
     "description": "Старый бильярдный стол с зеленым сукном./An old pool table with green felt.",
     "assetId": "POOL_TABLE",
-    "scale": 0.95,
-    "blocking": true
+    "scale": 0.65,
+    "blocking": true,
+    "yOffset": 0.6
   },
   "pool_light": {
     "name": "Бильярдный светильник/Pool light",
@@ -455,5 +468,23 @@
     "renderMode": "mesh",
     "meshAxis": "NS",
     "meshOffset": 1
+  },
+  "keypad_panel": {
+    "name": "Панель пароля/Keypad Panel",
+    "description": "Электронная панель ввода кодового пароля./Electronic password entry panel.",
+    "assetId": "KEYPAD",
+    "panelAsset": "KEYPAD",
+    "panelMaskAsset": "KEYPAD_MASK",
+    "panelPlacedAt": "N",
+    "scale": 0.5,
+    "blocking": true,
+    "type": "KEYPAD",
+    "targetId": "door_1",
+    "password": "1234",
+    "sounds": [
+      "KEYPAD_BUTTON",
+      "KEYPAD_SUCCESS",
+      "KEYPAD_FAILED"
+    ]
   }
 }

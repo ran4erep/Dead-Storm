@@ -94,6 +94,208 @@
       }
     }
   },
+  "cashier": {
+    "id": "cashier",
+    "rootNodeId": "start",
+    "nodes": {
+      "start": {
+        "id": "start",
+        "speaker": "NPC",
+        "text": "Здравствуйте! Что вам, милок{девушка}? Пробивать товары будете или поговорим о жизни?/Hello! What would you like, dear? Are you buying goods or just talking about life?",
+        "next": "player_options"
+      },
+      "player_options": {
+        "id": "player_options",
+        "speaker": "PLAYER",
+        "text": "",
+        "options": [
+          {
+            "text": "Покажите, что у вас есть на продажу./Show me what you have for sale.",
+            "nextNodeId": "cashier_trade"
+          },
+          {
+            "text": "Как проходит ваша смена?/How is your shift going?",
+            "nextNodeId": "chitchat_shift"
+          },
+          {
+            "text": "Расскажите про газировку и товары./Tell me about the soda and goods.",
+            "nextNodeId": "chitchat_water"
+          },
+          {
+            "text": "У вас отличная причёска!/Nice hairstyle!",
+            "nextNodeId": "chitchat_hair"
+          },
+          {
+            "text": "Что с кассой и сканером? Всё работает без сбоев?/How are the register and scanner working?",
+            "nextNodeId": "chitchat_tech"
+          },
+          {
+            "text": "Ничего, я пойду./Nothing, I'll be going.",
+            "nextNodeId": null
+          }
+        ]
+      },
+      "cashier_trade": {
+        "id": "cashier_trade",
+        "speaker": "NPC",
+        "text": "",
+        "action": "trade",
+        "next": "player_options"
+      },
+      "chitchat_shift": {
+        "id": "chitchat_shift",
+        "speaker": "NPC",
+        "text": "Ох, смены у нас по 8[восемь] часов, а кажется, будто целый день у кассы стоишь! Сканер пищит, покупатели идут... Но я держусь! Главное — делать перерыв на чай каждые 2[два] часа./Oh, shifts are 8[eight] hours long, but it feels like standing at the register all day! Scanner beeps, customers come... But I'm holding on! Main thing is tea breaks every 2[two] hours.",
+        "next": "hero_shift_remark"
+      },
+      "hero_shift_remark": {
+        "id": "hero_shift_remark",
+        "speaker": "PLAYER",
+        "text": "8[восемь] часов на ногах за кассой? Удивительно, как вы еще не устали./8[eight] hours on your feet at the register? Surprising you're not exhausted.",
+        "next": "cashier_shift_2"
+      },
+      "cashier_shift_2": {
+        "id": "cashier_shift_2",
+        "speaker": "NPC",
+        "text": "Секрет простой, милок{девушка}! Работа должна быть в радость. А с хорошим мятным чаем смена пролетает незаметно!/The secret is simple, dear! Work should bring joy. And with good mint tea, the shift flies by!",
+        "next": "shift_branch_options"
+      },
+      "shift_branch_options": {
+        "id": "shift_branch_options",
+        "speaker": "PLAYER",
+        "text": "",
+        "options": [
+          {
+            "text": "И много покупателей заходит за день?/Do many customers come in during the day?",
+            "nextNodeId": "cashier_customers"
+          },
+          {
+            "text": "А чай вы сами завариваете?/Do you brew the tea yourself?",
+            "nextNodeId": "cashier_tea"
+          },
+          {
+            "text": "Понятно. Вернёмся к другим вопросам./I see. Let's return to other topics.",
+            "nextNodeId": "player_options"
+          }
+        ]
+      },
+      "cashier_customers": {
+        "id": "cashier_customers",
+        "speaker": "NPC",
+        "text": "Заходят постоянно! То студенты за напитками прибегут, то соседи за хлебом. Вчера вот молодой человек купил 3[три] упаковки сока и забыл сдачу в 5[пять] долларов!/They come in all the time! Students for drinks, neighbors for bread. Yesterday a young man bought 3[three] juice packs and forgot 5[five] dollars change!",
+        "next": "hero_customers_remark"
+      },
+      "hero_customers_remark": {
+        "id": "hero_customers_remark",
+        "speaker": "PLAYER",
+        "text": "Забыть сдачу в 5[пять] долларов? Видимо, очень торопился./Forgot 5[five] dollars change? He must have been in a big hurry.",
+        "next": "cashier_customers_2"
+      },
+      "cashier_customers_2": {
+        "id": "cashier_customers_2",
+        "speaker": "NPC",
+        "text": "Вот и я говорю! Догнала его на улице и вернула. Честность и порядок — главный принцип нашего магазина!/That's what I said! Caught up with him outside and returned it. Honesty is our main principle!",
+        "next": "player_options"
+      },
+      "cashier_tea": {
+        "id": "cashier_tea",
+        "speaker": "NPC",
+        "text": "Конечно! В термосе с собой приношу. Листовой, с мятой и чабрецом! Бодрит лучше любого кофе, хе-хе!/Of course! Bring it in a thermos. Leaf tea with mint and thyme! Refreshes better than coffee, heh-heh!",
+        "next": "hero_tea_remark"
+      },
+      "hero_tea_remark": {
+        "id": "hero_tea_remark",
+        "speaker": "PLAYER",
+        "text": "Мята и чабрец — отличный выбор для рабочей смены./Mint and thyme is a great choice for a work shift.",
+        "next": "player_options"
+      },
+      "chitchat_water": {
+        "id": "chitchat_water",
+        "speaker": "NPC",
+        "text": "О, у нас всегда свежайшая газированная вода! Ледяная, пузырьки прямо в нос бьют. Всего за 2[два] доллара — отлично освежает в жаркий день!/Oh, we always have fresh sparkling water! Ice cold, bubbles tickle your nose. For just 2[two] dollars — great refreshment on a hot day!",
+        "next": "hero_water_remark"
+      },
+      "hero_water_remark": {
+        "id": "hero_water_remark",
+        "speaker": "PLAYER",
+        "text": "2[два] доллара за бутылку — отличная цена./2[two] dollars a bottle — great price.",
+        "next": "cashier_water_2"
+      },
+      "cashier_water_2": {
+        "id": "cashier_water_2",
+        "speaker": "NPC",
+        "text": "Ещё бы! Поставки прямо от местного завода каждые 3[три] дня. Всё свежее, только из холодильника!/Indeed! Deliveries straight from the local factory every 3[three] days. Everything is fresh, right out of the fridge!",
+        "next": "water_branch_options"
+      },
+      "water_branch_options": {
+        "id": "water_branch_options",
+        "speaker": "PLAYER",
+        "text": "",
+        "options": [
+          {
+            "text": "А скидочные карты у вас действуют?/Do you accept discount cards?",
+            "nextNodeId": "cashier_discount"
+          },
+          {
+            "text": "Отлично, покажите товары./Great, show me the goods.",
+            "nextNodeId": "cashier_trade"
+          },
+          {
+            "text": "Понятно, спрошу о другом./I see, let me ask something else.",
+            "nextNodeId": "player_options"
+          }
+        ]
+      },
+      "cashier_discount": {
+        "id": "cashier_discount",
+        "speaker": "NPC",
+        "text": "Скидка по нашей накопительной карте идет от 5[пяти] процентов! Главное — предъявить её до того, как я пробиваю чек./Discount with our loyalty card starts from 5[five] percent! Just show it before I scan the receipt.",
+        "next": "hero_discount_remark"
+      },
+      "hero_discount_remark": {
+        "id": "hero_discount_remark",
+        "speaker": "PLAYER",
+        "text": "Удобная система. Обязательно заведу карту./Convenient system. I'll make sure to get one.",
+        "next": "player_options"
+      },
+      "chitchat_hair": {
+        "id": "chitchat_hair",
+        "speaker": "NPC",
+        "text": "Спасибо, милок{девушка}! Аккуратная укладка — залог уважения к покупателям. Приятно же смотреть на опрятного кассира!/Thank you, dear! Neat hair styling is respect for customers. It's pleasant to see a tidy cashier!",
+        "next": "hero_hair_remark"
+      },
+      "hero_hair_remark": {
+        "id": "hero_hair_remark",
+        "speaker": "PLAYER",
+        "text": "Причёска действительно выглядит отлично. Как вам удаётся держать форму всю смену?/Looks impressive indeed. How do you maintain shape through the whole shift?",
+        "next": "cashier_hair_2"
+      },
+      "cashier_hair_2": {
+        "id": "cashier_hair_2",
+        "speaker": "NPC",
+        "text": "Специальный спрей и капелька усердия! Держит объём по 12[двенадцать] часов в день, никакой сквозняк не страшен!/Special hairspray and a drop of effort! Keeps volume for 12[twelve] hours a day, no draft can ruin it!",
+        "next": "player_options"
+      },
+      "chitchat_tech": {
+        "id": "chitchat_tech",
+        "speaker": "NPC",
+        "text": "Касса у нас новенькая! Правда, сканер штрихкодов иногда задумывается на секунду, если штрихкод слегка мятый./Our register is pretty new! Though the barcode scanner pauses for a second if the barcode is slightly wrinkled.",
+        "next": "hero_tech_remark"
+      },
+      "hero_tech_remark": {
+        "id": "hero_tech_remark",
+        "speaker": "PLAYER",
+        "text": "Современная техника тоже любит точность./Modern tech likes precision too.",
+        "next": "cashier_tech_2"
+      },
+      "cashier_tech_2": {
+        "id": "cashier_tech_2",
+        "speaker": "NPC",
+        "text": "Это точно! Но если аккуратно расправить упаковку — считывает моментально. Настоящий помощник на кассе!/Exactly! But if you smooth out the package — scans instantly. A true helper at the register!",
+        "next": "player_options"
+      }
+    }
+  },
   "lana_intro": {
     "id": "lana_intro",
     "rootNodeId": "start",

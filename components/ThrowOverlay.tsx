@@ -2,11 +2,12 @@
 import React, { useRef, useEffect } from 'react';
 import { Player, Item } from '../types';
 import { getTintedSprite, globalSpriteTintCache } from './raycaster/SpriteCache';
-import { createMolotovTrailParticles } from '../utils/particleSystem';
+import { createMolotovTrailParticles, createFlareSmokeParticle, createFlareTrailParticles } from '../utils/particleSystem';
 
 interface ThrowOverlayProps {
     player: Player;
-    throwAnim: { item: Item, startTime: number, x: number, y: number };
+    throwAnim?: { item: Item, startTime: number, x: number, y: number } | null;
+    throwAnimRef?: React.RefObject<{ item: Item, startTime: number, x: number, y: number } | null>;
     width: number;
     height: number;
     sprites: Map<string, HTMLImageElement>;
@@ -18,7 +19,7 @@ interface ThrowOverlayProps {
     lookAroundPitch?: number;
 }
 
-const ThrowOverlay: React.FC<ThrowOverlayProps> = ({ player, throwAnim, width, height, sprites, lightMap, fov = 0.66, animations, onSpawnParticles, levelData, lookAroundPitch = 0 }) => {
+const ThrowOverlay: React.FC<ThrowOverlayProps> = ({ player, throwAnim: propsThrowAnim, throwAnimRef, width, height, sprites, lightMap, fov = 0.66, animations, onSpawnParticles, levelData, lookAroundPitch = 0 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const spriteTintCache = { current: globalSpriteTintCache };
 
@@ -31,26 +32,32 @@ const ThrowOverlay: React.FC<ThrowOverlayProps> = ({ player, throwAnim, width, h
         let animationFrameId: number;
         let lastSmokeTime = 0;
 
-        const getFloorLevel = (tile: any) => {
-            if (!tile) return 0;
-            if (tile.type === 'FLOOR' && tile.height !== undefined && tile.height < 0) {
-                return tile.height;
-            }
-            return 0;
-        };
-
-        const grid = levelData?.grid;
-        const startTileX = Math.round(player.pos.x);
-        const startTileY = Math.round(player.pos.y);
-        const startTile = grid?.[startTileY]?.[startTileX];
-        const targetTile = grid?.[throwAnim.y]?.[throwAnim.x];
-
-        const startZ = getFloorLevel(startTile);
-        const targetZ = getFloorLevel(targetTile);
-        const cameraZ = 0.5;
-
         const render = () => {
+            const throwAnim = throwAnimRef?.current || propsThrowAnim;
+            if (!throwAnim) {
+                ctx.clearRect(0, 0, width, height);
+                return;
+            }
+
             ctx.clearRect(0, 0, width, height);
+
+            const getFloorLevel = (tile: any) => {
+                if (!tile) return 0;
+                if (tile.height !== undefined) {
+                    return tile.height;
+                }
+                return 0;
+            };
+
+            const grid = levelData?.grid;
+            const startTileX = Math.round(player.pos.x);
+            const startTileY = Math.round(player.pos.y);
+            const startTile = grid?.[startTileY]?.[startTileX];
+            const targetTile = grid?.[throwAnim.y]?.[throwAnim.x];
+
+            const startZ = getFloorLevel(startTile);
+            const targetZ = getFloorLevel(targetTile);
+            const cameraZ = 0.5;
 
             const THROW_DURATION = 450; 
             const elapsed = performance.now() - throwAnim.startTime; 
@@ -93,24 +100,36 @@ const ThrowOverlay: React.FC<ThrowOverlayProps> = ({ player, throwAnim, width, h
                 const proximityScale = Math.max(1.0, 2.0 - transformY); 
                 const finalItemScale = itemScale * proximityScale;
 
+                const isSafe = !!(throwAnim.item as any).isSafeDrop;
+
                 // Linearly interpolate the ground floor height underneath the throwing path
                 const zFloor = startZ + (targetZ - startZ) * t;
 
-                // Spawn more frequently for a dense trail
-                if (throwAnim.item.type === 'MOLOTOV' && onSpawnParticles && elapsed - lastSmokeTime > 5 && t < 1.0) {
-                    lastSmokeTime = elapsed;
-                    const worldDist = Math.sqrt((worldTargetX - worldStartX)**2 + (worldTargetY - worldStartY)**2);
-                    const arcPower = 0.4 + (Math.max(0, worldDist - 1) * 0.1);
-                    const worldZ = zFloor + (finalItemScale / 2) + arcPower * Math.sin(t * Math.PI);
-                    const particles = createMolotovTrailParticles(currWorldX, currWorldY, worldZ);
-                    onSpawnParticles(particles);
+                // Spawn trail particles during throw flight
+                if (!isSafe && onSpawnParticles && elapsed - lastSmokeTime > 15 && t < 1.0) {
+                    if (throwAnim.item.type === 'MOLOTOV') {
+                        lastSmokeTime = elapsed;
+                        const worldDist = Math.sqrt((worldTargetX - worldStartX)**2 + (worldTargetY - worldStartY)**2);
+                        const arcPower = 0.4 + (Math.max(0, worldDist - 1) * 0.1);
+                        const worldZ = zFloor + (finalItemScale / 2) + arcPower * Math.sin(t * Math.PI);
+                        const particles = createMolotovTrailParticles(currWorldX, currWorldY, worldZ);
+                        onSpawnParticles(particles);
+                    } else if (throwAnim.item.type === 'FLARE' || (throwAnim.item as any).flareDuration !== undefined) {
+                        lastSmokeTime = elapsed;
+                        const worldDist = Math.sqrt((worldTargetX - worldStartX)**2 + (worldTargetY - worldStartY)**2);
+                        const arcPower = 0.4 + (Math.max(0, worldDist - 1) * 0.1);
+                        const worldZ = zFloor + (finalItemScale / 2) + arcPower * Math.sin(t * Math.PI);
+                        const smokeCol = (throwAnim.item as any).smokeColor || (throwAnim.item as any).flareColor || 'rgba(255, 90, 40, 0.9)';
+                        const particles = createFlareTrailParticles(currWorldX, currWorldY, worldZ, smokeCol, zFloor);
+                        onSpawnParticles(particles);
+                    }
                 }
                 
                 const spriteH = Math.floor(baseH * finalItemScale);
                 
                 // THROW LOGIC: Use throwId if available, otherwise assetId
-                const isThrowableObject = throwAnim.item.type === 'GRENADE' || throwAnim.item.type === 'MOLOTOV' || throwAnim.item.type === 'FLASHBANG';
-                let assetId = ((throwAnim.item as any).throwId) 
+                const isThrowableObject = !isSafe && (throwAnim.item.type === 'GRENADE' || throwAnim.item.type === 'MOLOTOV' || throwAnim.item.type === 'FLASHBANG' || throwAnim.item.type === 'FLARE');
+                let assetId = (!isSafe && (throwAnim.item as any).throwId) 
                     ? (throwAnim.item as any).throwId 
                     : throwAnim.item.assetId;
 
@@ -189,7 +208,7 @@ const ThrowOverlay: React.FC<ThrowOverlayProps> = ({ player, throwAnim, width, h
         return () => {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
         };
-    }, [throwAnim, player, width, height, sprites, lightMap, fov, animations, levelData, lookAroundPitch]);
+    }, [propsThrowAnim, throwAnimRef, player, width, height, sprites, lightMap, fov, animations, levelData, lookAroundPitch]);
 
     return (
         <canvas 

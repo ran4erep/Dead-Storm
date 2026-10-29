@@ -60,7 +60,7 @@ interface EquipmentModalProps {
   characterId: 'male' | 'female';
   onEquip: (item: Item, onFeedback?: (msg: string) => void) => void;
   onUnequip: (item: Item, onFeedback?: (msg: string) => void) => void;
-  onThrow: (item: Item, count?: number) => void;
+  onThrow: (item: Item, count?: number, isSafe?: boolean) => void;
   onClose: () => void;
   onUnload?: (item: Item, onFeedback?: (msg: string) => void) => void;
   onExtractBattery?: (item: Item, onFeedback?: (msg: string) => void, selectedBatteryId?: string) => void;
@@ -522,10 +522,16 @@ const EquipmentModal: React.FC<EquipmentModalProps> = ({
                   )}
                   {!liveItem.cannotDrop && (
                     <button 
-                      onClick={() => { onThrow(liveItem); setInspectItem(null); }}
+                      onClick={() => {
+                        const isThrowable = liveItem.type === 'GRENADE' || liveItem.type === 'MOLOTOV' || liveItem.type === 'FLASHBANG' || liveItem.type === 'FLARE';
+                        onThrow(liveItem, undefined, isThrowable ? true : undefined);
+                        setInspectItem(null);
+                      }}
                       className="flex-1 py-3 bg-red-900/20 border border-red-700/40 text-red-400 font-bold rounded active:bg-red-900/40 flex items-center justify-center gap-2 uppercase tracking-widest text-xs transition-all"
                     >
-                      {strings.btn_throw}
+                      {(liveItem.type === 'GRENADE' || liveItem.type === 'MOLOTOV' || liveItem.type === 'FLASHBANG' || liveItem.type === 'FLARE')
+                        ? ((strings as any)?.btn_drop_to_floor || (language === 'ru' ? 'Бросить' : 'Throw'))
+                        : strings.btn_throw}
                     </button>
                   )}
               </div>

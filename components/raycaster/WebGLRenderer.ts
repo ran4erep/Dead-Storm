@@ -2,6 +2,8 @@ import { RaycasterBuffer } from './RaycasterUtils';
 import { getFogColorR, getFogColorG, getFogColorB, isFogWeather, applyDepthBrightness, getMinBrightness, getFogStart, getInvFogRange, getInvRenderDistance, getDisableDistanceShading } from './DepthEffect';
 import { MirrorReflection, SpriteShadow } from './RaycasterTypes';
 import { globalSpriteTintCache } from './SpriteCache';
+import { PolyObjectInstance, buildPolyObjectVertexBuffer, PolyBatch } from './PolyObjectRenderer';
+import { getPolyTextureImage } from '../../utils/polyTextureUtils';
 
 const getFogColorVec3 = (): [number, number, number] => {
   if (!isFogWeather()) {
@@ -79,6 +81,127 @@ const areHighlightedSame = (a?: any[], b?: any[]) => {
   }
   return true;
 };
+
+// Dedicated upper-floor underside (ceiling cap) shader.
+// The CPU only builds static tile geometry; projection, texturing, lighting,
+// fog and dynamic flashes are all evaluated on the GPU.
+const CAP_VS = `
+  attribute vec3 a_position;
+  attribute vec2 a_texCoord;
+  attribute vec3 a_light;
+
+  varying vec2 v_texCoord;
+  varying vec3 v_light;
+  varying float v_depth;
+  varying vec2 v_world;
+
+  uniform vec2 u_playerPos;
+  uniform float u_cameraZ;
+  uniform vec2 u_dir;
+  uniform vec2 u_plane;
+  uniform float u_horizon;
+  uniform vec2 u_resolution;
+  uniform float u_depthFar;
+
+  void main() {
+    vec3 cameraPos = vec3(u_playerPos, u_cameraZ);
+    vec3 delta = a_position - cameraPos;
+
+    float det = u_dir.x * u_plane.y - u_dir.y * u_plane.x;
+    float depth = (delta.x * u_plane.y - delta.y * u_plane.x) / det;
+    if (depth <= 0.0001) {
+      v_texCoord = a_texCoord;
+      v_light = a_light;
+      v_depth = -1.0;
+      v_world = a_position.xy;
+      gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+      return;
+    }
+
+    float camX = (u_dir.x * delta.y - u_dir.y * delta.x) / det;
+    float horizonShift = 1.0 - 2.0 * u_horizon / max(u_resolution.y, 1.0);
+
+    // Equivalent to the raycaster perspective, expressed directly in NDC.
+    float ndcX = camX / depth;
+    float ndcY = horizonShift + 2.0 * delta.z / depth;
+    float depth01 = clamp(depth / max(u_depthFar, 1.0), 0.0, 1.0);
+
+    gl_Position = vec4(ndcX, ndcY, depth01 * 2.0 - 1.0, 1.0);
+    v_texCoord = a_texCoord;
+    v_light = a_light;
+    v_depth = depth;
+    v_world = a_position.xy;
+  }
+`;
+
+const CAP_FS = `
+  precision highp float;
+
+  varying vec2 v_texCoord;
+  varying vec3 v_light;
+  varying float v_depth;
+  varying vec2 v_world;
+
+  uniform sampler2D u_texture;
+  uniform vec3 u_fogColor;
+  uniform float u_renderDistance;
+  uniform float u_minBrightness;
+  uniform bool u_isFog;
+  uniform float u_fogStart;
+  uniform float u_invFogRange;
+  uniform float u_invRenderDistance;
+  uniform float u_lightningIntensity;
+  uniform float u_muzzleFlashIntensity;
+  uniform int u_activeFlashCount;
+  uniform vec3 u_activeFlashes[8];
+  uniform vec2 u_playerPos;
+  uniform float u_flashlightAttenuation;
+
+  float getDepthFactor(float d) {
+    if (u_isFog) {
+      float t = clamp(d * u_invRenderDistance, 0.0, 1.0);
+      return 1.0 - (t * t * (3.0 - 2.0 * t));
+    }
+    if (d <= u_fogStart) return 1.0;
+    float t = clamp((d - u_fogStart) * u_invFogRange, 0.0, 1.0);
+    return max(u_minBrightness, 1.0 - (t * t * (3.0 - 2.0 * t)));
+  }
+
+  void main() {
+    if (v_depth <= 0.0) discard;
+    vec4 texColor = texture2D(u_texture, fract(v_texCoord));
+    if (texColor.a < 0.01) discard;
+
+    // Bottom faces of upper walls are deliberately darker than floor tops.
+    vec3 lit = texColor.rgb * v_light * 0.6;
+
+    float depthFactor = getDepthFactor(v_depth);
+    if (u_isFog) {
+      lit = mix(lit, u_fogColor, 1.0 - depthFactor);
+    } else {
+      lit *= depthFactor;
+    }
+
+    // Keep the existing dynamic flash behaviour without any CPU pixel work.
+    vec2 fromPlayer = v_world - u_playerPos;
+    float muzzle = u_muzzleFlashIntensity / (dot(fromPlayer, fromPlayer) * 0.5 + 1.0);
+    lit += vec3(muzzle, muzzle * 0.7843, muzzle * 0.3137) * u_flashlightAttenuation;
+
+    for (int i = 0; i < 8; i++) {
+      if (i >= u_activeFlashCount) break;
+      vec3 flash = u_activeFlashes[i];
+      vec2 d = v_world - flash.xy;
+      float f = flash.z / (dot(d, d) * 0.5 + 1.0);
+      lit += vec3(f, f * 0.7843, f * 0.3137) * u_flashlightAttenuation;
+    }
+
+    if (u_lightningIntensity > 0.0) {
+      lit += vec3(0.5882, 0.6275, 0.7843) * u_lightningIntensity;
+    }
+
+    gl_FragColor = vec4(clamp(lit, 0.0, 1.0), 1.0);
+  }
+`;
 
 // Shader source code
 const BACKGROUND_VS = `
@@ -368,16 +491,12 @@ const BACKGROUND_FS = `
             vec2 mapUV = vec2((cellX + tx_fraction) / u_mapSize.x, (cellY + ty_fraction) / u_mapSize.y);
             vec4 texColor = texture2D(u_floorTex, mapUV);
             
-            // Sample lightmap and highlights at the exact world (u, v) positions
-            vec2 lightPos = vec2(sampleU, sampleV);
-            if (abs(fLevel) > 0.001) {
-              lightPos = vec2(u, v);
-            }
+            // Sample lightmap and highlights at the exact surface positions (finalU, finalV)
+            vec2 lightPos = vec2(finalU, finalV);
             vec4 lightMapColor = getInterpolatedLight(lightPos, u_lightTex, u_waterTex, u_mapSize);
             
-            // For floor highlights, we always use the actual intersection coordinates of the floor / pit floor (sampleU, sampleV)
-            // to ensure highlighted floors in pits line up exactly with their 3D perspective geometry.
-            vec2 highlightUV = vec2(sampleU / u_mapSize.x, sampleV / u_mapSize.y);
+            // For floor highlights, sample u_highlightTex using exact tile surface coordinates
+            vec2 highlightUV = vec2(lightPos.x / u_mapSize.x, lightPos.y / u_mapSize.y);
             vec4 highlightColor = texture2D(u_highlightTex, highlightUV);
             
             // Apply GPU-rendered sprite shadows
@@ -443,9 +562,10 @@ const BACKGROUND_FS = `
 
             // Apply highlight tint (just like software mode)
             if (highlightColor.r > 0.1) {
-              foggedColor.r = min(1.0, foggedColor.r + 60.0 / 255.0);
-              foggedColor.g *= 0.4;
-              foggedColor.b *= 0.4;
+              float highlightPulse = 0.25 + 0.75 * (sin(u_time * 2.2222222) * 0.5 + 0.5);
+              foggedColor.r = min(1.0, foggedColor.r + (60.0 / 255.0) * highlightPulse);
+              foggedColor.g *= (1.0 - 0.6 * highlightPulse);
+              foggedColor.b *= (1.0 - 0.6 * highlightPulse);
             }
             
             finalColor = vec4(foggedColor, 1.0);
@@ -766,15 +886,12 @@ const MIRROR_BG_FS = `
       texColor = texture2D(u_ceilTex, mapUV);
     }
 
-    // Base brightness/lighting
-    vec2 lightPos = vec2(sampleFloorX, sampleFloorY);
-    if (isFloor && abs(fLevel) > 0.001) {
-      lightPos = vec2(floorX, floorY);
-    }
+    // Base brightness/lighting using exact surface coordinates (finalU, finalV)
+    vec2 lightPos = vec2(finalU, finalV);
     vec4 lightMapColor = getInterpolatedLight(lightPos, u_lightTex, u_waterTex, u_mapSize);
     
-    // For floor highlights in reflection, use sampleFloorX/Y to align with pit floor depth in reflection space.
-    vec2 highlightUV = vec2(sampleFloorX / u_mapSize.x, sampleFloorY / u_mapSize.y);
+    // For floor highlights in reflection, sample u_highlightTex using exact tile surface coordinates
+    vec2 highlightUV = vec2(lightPos.x / u_mapSize.x, lightPos.y / u_mapSize.y);
     vec4 highlightColor = texture2D(u_highlightTex, highlightUV);
 
     // Apply GPU-rendered sprite shadows in reflections
@@ -840,9 +957,10 @@ const MIRROR_BG_FS = `
 
     // Apply highlight tint (just like software mode)
     if (highlightColor.r > 0.1 && isFloor) {
-      foggedColor.r = min(1.0, foggedColor.r + 60.0 / 255.0);
-      foggedColor.g *= 0.4;
-      foggedColor.b *= 0.4;
+      float highlightPulse = 0.25 + 0.75 * (sin(u_time * 2.2222222) * 0.5 + 0.5);
+      foggedColor.r = min(1.0, foggedColor.r + (60.0 / 255.0) * highlightPulse);
+      foggedColor.g *= (1.0 - 0.6 * highlightPulse);
+      foggedColor.b *= (1.0 - 0.6 * highlightPulse);
     }
 
     gl_FragColor = vec4(foggedColor * v_mirrorLight, 1.0);
@@ -974,7 +1092,7 @@ const SPRITE_FS = `
     if (v_dist > -0.5) {
       vec2 screenUV = gl_FragCoord.xy / u_resolution;
       vec4 pack = texture2D(u_zBufferTex, vec2(screenUV.x, 0.5));
-      float wallDist = (pack.r * 65536.0 + pack.g * 256.0 + pack.b) / 16777215.0 * 100.0;
+      float wallDist = (pack.r * 65536.0 + pack.g * 256.0 + pack.b) * (255.0 / 16777215.0) * 100.0;
       if (wallDist > 0.001 && v_dist > wallDist + u_zBias) {
         discard;
       }
@@ -992,6 +1110,12 @@ const SPRITE_FS = `
 interface MeshBatch {
   textureId: string;
   vertices: number[];
+  vertexBuffer: WebGLBuffer | null;
+  vertexCount: number;
+}
+
+interface CapBatch {
+  textureId: string;
   vertexBuffer: WebGLBuffer | null;
   vertexCount: number;
 }
@@ -1041,21 +1165,29 @@ export class WebGLRenderer {
 
   // 3D Mesh properties
   private meshProgram: WebGLProgram | null = null;
+  private capProgram: WebGLProgram | null = null;
   private meshBatches = new Map<string, MeshBatch>();
+  private capBatches = new Map<string, CapBatch>();
+  private polyBatches: PolyBatch[] = [];
   private wallTextureGroups = new Map<string, QuadData[]>();
   private lastActiveGrids: any[][] | null = null;
   private lastCustomWallBuffers: any = null;
   private lastCustomFloorBuffers: any = null;
+  private lastFloorLightMaps: any = null;
+  private lastDebugTextures = true;
   
   // Shaders compilation cache
   private bgProgram: WebGLProgram | null = null;
   private wallProgram: WebGLProgram | null = null;
   private mirrorBgProgram: WebGLProgram | null = null;
+  private polyProgram: WebGLProgram | null = null;
 
   // Vertex buffers
   private bgQuadBuffer: WebGLBuffer | null = null;
   private wallVertexBuffer: WebGLBuffer | null = null;
   private mirrorBgVertexBuffer: WebGLBuffer | null = null;
+  private polyVertexBuffer: WebGLBuffer | null = null;
+  private polyFloatArray: Float32Array = new Float32Array(65536);
 
   // GPU Texture cache
   private gpuTextures = new Map<string, WebGLTexture>();
@@ -1115,6 +1247,8 @@ export class WebGLRenderer {
   private spriteProgram: WebGLProgram | null = null;
   private spriteVertexBuffer: WebGLBuffer | null = null;
   private zBufferTexture: WebGLTexture | null = null;
+  private mirrorMaskTexture: WebGLTexture | null = null;
+  private cachedMirrorMaskBytes: Uint8Array | null = null;
 
   // Buffer capacity tracking to avoid gl.bufferData reallocation overhead
   private wallVertexBufferCapacity = 0;
@@ -1154,6 +1288,7 @@ export class WebGLRenderer {
     }
     return this.cachedSpriteVertexArray;
   }
+
 
   private getParticleVertexArray(minSize: number): Float32Array {
     if (this.cachedParticleVertexArray.length < minSize) {
@@ -1198,7 +1333,7 @@ export class WebGLRenderer {
     try {
       this.gl = this.canvas.getContext('webgl', { 
         alpha: true, 
-        depth: false, 
+        depth: true, 
         stencil: false, 
         antialias: false, 
         preserveDrawingBuffer: true 
@@ -1219,6 +1354,11 @@ export class WebGLRenderer {
       this.bgProgram = this.createProgram(BACKGROUND_VS, BACKGROUND_FS);
       // Compile mesh shader
       this.meshProgram = this.createProgram(MESH_VS, MESH_FS);
+      // Compile dedicated upper-floor ceiling-cap shader
+      this.capProgram = this.createProgram(CAP_VS, CAP_FS);
+      // Compile polyObject 3D shader
+      this.polyProgram = this.createProgram(POLY_VS, POLY_FS);
+      this.polyVertexBuffer = gl.createBuffer();
       // Compile wall shader
       this.wallProgram = this.createProgram(WALL_VS, WALL_FS);
       // Compile mirror background shader
@@ -1272,6 +1412,7 @@ export class WebGLRenderer {
       this.spriteProgram = this.createProgram(SPRITE_VS, SPRITE_FS);
       this.spriteVertexBuffer = gl.createBuffer();
       this.zBufferTexture = gl.createTexture();
+      this.mirrorMaskTexture = gl.createTexture();
 
       // Set up fullscreen screen quad
       this.bgQuadBuffer = gl.createBuffer();
@@ -1307,7 +1448,8 @@ export class WebGLRenderer {
       { prog: this.wallProgram, uniforms: ["u_fogColor", "u_height", "u_wallTex"] },
       { prog: this.particleProgram, uniforms: ["u_resolution", "u_renderType", "u_texture"] },
       { prog: this.flashlightProgram, uniforms: ["u_useMask", "u_sceneTex", "u_lightProfileTex", "u_maskTex"] },
-      { prog: this.spriteProgram, uniforms: ["u_resolution", "u_zBias", "u_zBufferTex", "u_spriteTex"] }
+      { prog: this.spriteProgram, uniforms: ["u_resolution", "u_zBias", "u_zBufferTex", "u_spriteTex"] },
+      { prog: this.polyProgram, uniforms: ["u_playerPos", "u_cameraZ", "u_dir", "u_plane", "u_horizon", "u_resolution", "u_mapSize", "u_renderDistance", "u_minBrightness", "u_fogColor", "u_isFog", "u_lightningIntensity", "u_muzzleFlashIntensity", "u_time", "u_activeFlashCount", "u_activeFlashes", "u_lightTex", "u_highlightTex", "u_zBufferTex", "u_mirrorMaskTex", "u_polyTex", "u_useTexture"] }
     ];
 
     for (let i = 0; i < programs.length; i++) {
@@ -1377,7 +1519,14 @@ export class WebGLRenderer {
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, source.width, source.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(source.data.buffer));
             (source as any).dirty = false;
           } else if (source instanceof HTMLImageElement || source instanceof HTMLCanvasElement) {
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+            if (source instanceof HTMLImageElement && (!source.complete || source.naturalWidth === 0)) {
+              return this.blankTexture!;
+            }
+            try {
+              gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+            } catch (err) {
+              return this.blankTexture!;
+            }
           }
         }
       } else {
@@ -1440,7 +1589,14 @@ export class WebGLRenderer {
       (source as any).dirty = false;
     } else {
       // Re-map direct image
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source as HTMLImageElement);
+      if (source instanceof HTMLImageElement && (!source.complete || source.naturalWidth === 0)) {
+        return this.blankTexture!;
+      }
+      try {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source as HTMLImageElement);
+      } catch (err) {
+        return this.blankTexture!;
+      }
     }
 
     this.gpuTextures.set(key, tex);
@@ -1782,7 +1938,11 @@ export class WebGLRenderer {
     activeFlashes?: { x: number; y: number; intensity: number; isFlashbang?: boolean }[],
     flashlightActive?: boolean,
     flashlightBatteryRatio?: number,
-    grids?: any[][][]
+    grids?: any[][][],
+    polyObjects?: PolyObjectInstance[],
+    zBuffer?: Float32Array | number[],
+    floorLightMaps?: { r: number; g: number; b: number }[][][],
+    debugTextures?: boolean
   ) {
     if (!this.gl) return;
     const gl = this.gl;
@@ -1792,8 +1952,18 @@ export class WebGLRenderer {
 
     // Check grid/active level changes for 3D geometry rebuild
     const activeGrids = grids || [grid];
+    const gridRefChanged = (
+      grid !== this.lastGrid ||
+      activeGrids !== this.lastActiveGrids ||
+      customWallBuffers !== this.lastCustomWallBuffers ||
+      customFloorBuffers !== this.lastCustomFloorBuffers ||
+      (auxBuffers && auxBuffers.size !== this.lastAuxBuffersSize)
+    );
+    const capLightingChanged = floorLightMaps !== this.lastFloorLightMaps;
+    const capTextureModeChanged = debugTextures !== this.lastDebugTextures;
+
     let currentGeomHash = 0;
-    if (activeGrids.length > 0) {
+    if (gridRefChanged && activeGrids.length > 0) {
       for (let l = 0; l < activeGrids.length; l++) {
         const layer = activeGrids[l];
         if (!layer) continue;
@@ -1820,6 +1990,18 @@ export class WebGLRenderer {
                 tVal = (tVal * 31 + str.charCodeAt(i)) | 0;
               }
             }
+            if (tile.bottomTextureId) {
+              const str = tile.bottomTextureId;
+              for (let i = 0; i < str.length; i++) {
+                tVal = (tVal * 31 + str.charCodeAt(i)) | 0;
+              }
+            }
+            if (tile.textureId) {
+              const str = tile.textureId;
+              for (let i = 0; i < str.length; i++) {
+                tVal = (tVal * 31 + str.charCodeAt(i)) | 0;
+              }
+            }
             if (tile.isWindow) tVal = (tVal + 1000) | 0;
             if (tile.door?.broken) tVal = (tVal + 2000) | 0;
             if (tile.door?.maskId) {
@@ -1834,21 +2016,13 @@ export class WebGLRenderer {
       }
     }
 
-    const gridRefChanged = (
-      grid !== this.lastGrid ||
-      activeGrids !== this.lastActiveGrids ||
-      customWallBuffers !== this.lastCustomWallBuffers ||
-      customFloorBuffers !== this.lastCustomFloorBuffers ||
-      (auxBuffers && auxBuffers.size !== this.lastAuxBuffersSize)
-    );
-
-    const mustRebuildGeometry = gridRefChanged && (
+    const mustRebuildGeometry = (gridRefChanged && (
       this.lastGrid === null ||
       currentGeomHash !== this.lastBuild3DGeometryHash ||
       customWallBuffers !== this.lastCustomWallBuffers ||
       customFloorBuffers !== this.lastCustomFloorBuffers ||
       (auxBuffers && auxBuffers.size !== this.lastAuxBuffersSize)
-    );
+    )) || capLightingChanged || capTextureModeChanged;
 
     if (gridRefChanged) {
       this.lastGrid = grid;
@@ -1857,10 +2031,12 @@ export class WebGLRenderer {
       this.lastCustomFloorBuffers = customFloorBuffers;
       this.lastAuxBuffersSize = auxBuffers ? auxBuffers.size : 0;
     }
+    if (capLightingChanged) this.lastFloorLightMaps = floorLightMaps;
+    if (capTextureModeChanged) this.lastDebugTextures = debugTextures;
 
     if (mustRebuildGeometry) {
       this.lastBuild3DGeometryHash = currentGeomHash;
-      this.build3DGeometry(grid, activeGrids, customWallBuffers, customFloorBuffers, auxBuffers);
+      this.build3DGeometry(grid, activeGrids, customWallBuffers, customFloorBuffers, auxBuffers, floorLightMaps, lightMap, debugTextures);
 
       // Pre-warm WebGL textures for all static assets in auxBuffers to eliminate first-render GPU upload lag
       if (auxBuffers) {
@@ -1993,6 +2169,7 @@ export class WebGLRenderer {
         }
       }
       this.lastGridGeometryHash = hash;
+      this.lastGridForLight = grid;
     }
 
     // 1. Update/Upload u_lightTex
@@ -2026,9 +2203,14 @@ export class WebGLRenderer {
       const lightData = this.lightDataBuffer;
       const neighborCache = getWallNeighbors(grid);
 
+      const defaultOutdoorMult = ceilingType === 'OUTDOOR' ? 1.0 : 0.0;
+      const hasOutdoorMap = !!outdoorMap;
+
       for (let y = 0; y < mapHeight; y++) {
         const gridRow = grid ? grid[y] : null;
         const lightMapRow = lightMap ? lightMap[y] : null;
+        const outdoorRow = hasOutdoorMap && outdoorMap ? outdoorMap[y] : null;
+
         for (let x = 0; x < mapWidth; x++) {
           let valR = 1.0;
           let valG = 1.0;
@@ -2070,19 +2252,27 @@ export class WebGLRenderer {
           // Вычисляем коэффициент молнии для данной ячейки
           let lightningMult = 0.0;
           if (lightningMap) {
-            if (y >= 0 && y < mapHeight && x >= 0 && x < mapWidth) {
-              lightningMult = lightningMap[y * mapWidth + x];
-            }
+            lightningMult = lightningMap[y * mapWidth + x] || 0.0;
+          } else if (outdoorRow) {
+            lightningMult = outdoorRow[x] ? 1.0 : 0.0;
           } else {
-            const isOutdoor = outdoorMap && y >= 0 && y < mapHeight && x >= 0 && x < mapWidth ? outdoorMap[y][x] : (ceilingType === 'OUTDOOR');
-            lightningMult = isOutdoor ? 1.0 : 0.0;
+            lightningMult = defaultOutdoorMult;
           }
 
           const idx = (y * mapWidth + x) * 4;
-          lightData[idx] = Math.min(255, Math.max(0, (valR * 255) | 0));
-          lightData[idx + 1] = Math.min(255, Math.max(0, (valG * 255) | 0));
-          lightData[idx + 2] = Math.min(255, Math.max(0, (valB * 255) | 0));
-          lightData[idx + 3] = Math.min(255, Math.max(0, (lightningMult * 255) | 0));
+          let rByte = (valR * 255) | 0;
+          let gByte = (valG * 255) | 0;
+          let bByte = (valB * 255) | 0;
+          let aByte = (lightningMult * 255) | 0;
+          if (rByte > 255) rByte = 255; else if (rByte < 0) rByte = 0;
+          if (gByte > 255) gByte = 255; else if (gByte < 0) gByte = 0;
+          if (bByte > 255) bByte = 255; else if (bByte < 0) bByte = 0;
+          if (aByte > 255) aByte = 255; else if (aByte < 0) aByte = 0;
+
+          lightData[idx] = rByte;
+          lightData[idx + 1] = gByte;
+          lightData[idx + 2] = bByte;
+          lightData[idx + 3] = aByte;
         }
       }
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, mapWidth, mapHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, lightData);
@@ -2305,7 +2495,105 @@ export class WebGLRenderer {
       );
     }
 
-    // ------------------ PASS 1c: 3D MESHES (Walls, Floors, Ceilings, Windows) ------------------
+    // ------------------ PASS 1c: UPPER-FLOOR CEILING CAPS ------------------
+    // Static cap geometry is uploaded only when the level/lighting definition changes.
+    // Every frame below is GPU-only: no per-pixel ceiling work remains on the CPU.
+    if (this.capProgram && this.capBatches.size > 0) {
+      gl.useProgram(this.capProgram);
+      gl.disable(gl.BLEND);
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthMask(true);
+      gl.depthFunc(gl.LESS);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+
+      gl.uniform2f(this.getUniformLoc(this.capProgram, "u_playerPos"), playerX, playerY);
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_cameraZ"), cameraZ);
+      gl.uniform2f(this.getUniformLoc(this.capProgram, "u_dir"), dirX, dirY);
+      gl.uniform2f(this.getUniformLoc(this.capProgram, "u_plane"), planeX, planeY);
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_horizon"), horizon);
+      gl.uniform2f(this.getUniformLoc(this.capProgram, "u_resolution"), width, height);
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_depthFar"), Math.max(renderDistance, 256.0));
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_renderDistance"), getDisableDistanceShading() ? 999999.0 : renderDistance);
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_minBrightness"), getMinBrightness());
+      gl.uniform1i(this.getUniformLoc(this.capProgram, "u_isFog"), isFogWeather() ? 1 : 0);
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_fogStart"), getFogStart());
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_invFogRange"), getInvFogRange());
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_invRenderDistance"), getInvRenderDistance());
+      gl.uniform3f(this.getUniformLoc(this.capProgram, "u_fogColor"), fogColorVec[0], fogColorVec[1], fogColorVec[2]);
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_lightningIntensity"), lightningIntensity);
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_muzzleFlashIntensity"), muzzleFlashIntensity);
+
+      const capFlashCount = activeFlashes ? Math.min(8, activeFlashes.length) : 0;
+      gl.uniform1i(this.getUniformLoc(this.capProgram, "u_activeFlashCount"), capFlashCount);
+      if (capFlashCount > 0) {
+        const flashArray = this.cachedFlashArray;
+        for (let i = 0; i < capFlashCount; i++) {
+          const f = activeFlashes![i];
+          flashArray[i * 3] = f.x;
+          flashArray[i * 3 + 1] = f.y;
+          flashArray[i * 3 + 2] = f.intensity;
+        }
+        gl.uniform3fv(this.getUniformLoc(this.capProgram, "u_activeFlashes"), flashArray);
+      }
+      let capFlashAttenuation = 1.0;
+      if (flashlightActive) {
+        let quality = 1.0;
+        if (flashlightBatteryRatio !== undefined && flashlightBatteryRatio <= 0.5) {
+          const factor = Math.max(0, flashlightBatteryRatio - 0.47) / 0.03;
+          quality = factor * 0.5 + 0.5;
+        }
+        capFlashAttenuation = 1.0 - (0.75 * quality);
+      }
+      gl.uniform1f(this.getUniformLoc(this.capProgram, "u_flashlightAttenuation"), capFlashAttenuation);
+
+      const posAttr = gl.getAttribLocation(this.capProgram, "a_position");
+      const texAttr = gl.getAttribLocation(this.capProgram, "a_texCoord");
+      const lightAttr = gl.getAttribLocation(this.capProgram, "a_light");
+      gl.enableVertexAttribArray(posAttr);
+      gl.enableVertexAttribArray(texAttr);
+      gl.enableVertexAttribArray(lightAttr);
+
+      for (const [texId, batch] of this.capBatches) {
+        if (!batch.vertexBuffer || batch.vertexCount === 0) continue;
+        let tex: WebGLTexture | null = null;
+        const normId = texId.toLowerCase();
+        if (auxBuffers && auxBuffers.has(texId)) {
+          tex = this.getTexture(texId, auxBuffers.get(texId)!);
+        } else if (auxBuffers && auxBuffers.has('TEX_' + texId)) {
+          tex = this.getTexture(texId, auxBuffers.get('TEX_' + texId)!);
+        } else if (auxBuffers && auxBuffers.has(normId)) {
+          tex = this.getTexture(normId, auxBuffers.get(normId)!);
+        } else if (auxBuffers && auxBuffers.has('TEX_' + normId)) {
+          tex = this.getTexture(normId, auxBuffers.get(normId)!);
+        } else if (customFloorBuffers && texId.startsWith('custom_floor_')) {
+          const numericKey = parseInt(texId.substring(13), 10);
+          const customBuf = customFloorBuffers.get(numericKey);
+          tex = customBuf ? this.getTexture(texId, customBuf) : this.blankTexture;
+        } else if (auxBuffers && auxBuffers.has('TEX_FALLBACK')) {
+          tex = this.getTexture('TEX_FALLBACK', auxBuffers.get('TEX_FALLBACK')!);
+        } else {
+          tex = this.blankTexture;
+        }
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.uniform1i(this.getUniformLoc(this.capProgram, "u_texture"), 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, batch.vertexBuffer);
+        gl.vertexAttribPointer(posAttr, 3, gl.FLOAT, false, 32, 0);
+        gl.vertexAttribPointer(texAttr, 2, gl.FLOAT, false, 32, 12);
+        gl.vertexAttribPointer(lightAttr, 3, gl.FLOAT, false, 32, 20);
+        gl.drawArrays(gl.TRIANGLES, 0, batch.vertexCount);
+      }
+
+      gl.disableVertexAttribArray(posAttr);
+      gl.disableVertexAttribArray(texAttr);
+      gl.disableVertexAttribArray(lightAttr);
+      gl.disable(gl.DEPTH_TEST);
+      gl.depthMask(false);
+      gl.enable(gl.BLEND);
+    }
+
+    // ------------------ PASS 1d: 3D MESHES (Walls, Floors, Ceilings, Windows) ------------------
     if (this.meshProgram && this.meshBatches.size > 0) {
       gl.useProgram(this.meshProgram);
 
@@ -2437,7 +2725,7 @@ export class WebGLRenderer {
       });
     }
 
-    // ------------------ PASS 2: WALLS & COLUMNS ------------------
+      // ------------------ PASS 2: WALLS & COLUMNS ------------------
     if (this.wallProgram && wallQuads.length > 0) {
       gl.useProgram(this.wallProgram);
 
@@ -2882,6 +3170,149 @@ export class WebGLRenderer {
       // Draw real-world walls and physical frames SECOND (grouped by texture, maximum speed)
       renderQuadList(realQuads);
     }
+
+    // ------------------ PASS 2b: 3D POLYOBJECTS ------------------
+    if (this.polyProgram && polyObjects && polyObjects.length > 0) {
+      if (zBuffer) {
+        this.updateZBufferTexture(zBuffer, width);
+      }
+      this.updateMirrorMaskTexture(mirrorReflections, width, height);
+
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthMask(true);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.depthFunc(gl.LEQUAL);
+
+      gl.useProgram(this.polyProgram);
+
+      gl.uniform2f(this.getUniformLoc(this.polyProgram, "u_playerPos"), playerX, playerY);
+      gl.uniform1f(this.getUniformLoc(this.polyProgram, "u_cameraZ"), cameraZ);
+      gl.uniform2f(this.getUniformLoc(this.polyProgram, "u_dir"), dirX, dirY);
+      gl.uniform2f(this.getUniformLoc(this.polyProgram, "u_plane"), planeX, planeY);
+      gl.uniform1f(this.getUniformLoc(this.polyProgram, "u_horizon"), horizon);
+      gl.uniform2f(this.getUniformLoc(this.polyProgram, "u_resolution"), width, height);
+      gl.uniform2f(this.getUniformLoc(this.polyProgram, "u_mapSize"), mapWidth, mapHeight);
+      gl.uniform1f(this.getUniformLoc(this.polyProgram, "u_renderDistance"), getDisableDistanceShading() ? 999999.0 : renderDistance);
+      gl.uniform1f(this.getUniformLoc(this.polyProgram, "u_minBrightness"), getMinBrightness());
+      gl.uniform3f(this.getUniformLoc(this.polyProgram, "u_fogColor"), fogColorVec[0], fogColorVec[1], fogColorVec[2]);
+      gl.uniform1i(this.getUniformLoc(this.polyProgram, "u_isFog"), isFogWeather() ? 1 : 0);
+      gl.uniform1f(this.getUniformLoc(this.polyProgram, "u_lightningIntensity"), lightningIntensity);
+      gl.uniform1f(this.getUniformLoc(this.polyProgram, "u_muzzleFlashIntensity"), muzzleFlashIntensity);
+      gl.uniform1f(this.getUniformLoc(this.polyProgram, "u_time"), (Date.now() % 3600000) / 1000);
+
+      const flashCount = activeFlashes ? Math.min(8, activeFlashes.length) : 0;
+      gl.uniform1i(this.getUniformLoc(this.polyProgram, "u_activeFlashCount"), flashCount);
+      if (flashCount > 0) {
+        const flashArray = this.cachedFlashArray;
+        let flashAttenuation = 0.25;
+        if (flashlightActive) {
+          let quality = 1.0;
+          if (flashlightBatteryRatio !== undefined && flashlightBatteryRatio <= 0.5) {
+            const factor = Math.max(0, flashlightBatteryRatio - 0.47) / 0.03;
+            quality = factor * 0.5 + 0.5;
+          }
+          flashAttenuation = 1.0 - (0.75 * quality);
+        }
+        for (let i = 0; i < flashCount; i++) {
+          const f = activeFlashes![i];
+          flashArray[i * 3] = f.x;
+          flashArray[i * 3 + 1] = f.y;
+          flashArray[i * 3 + 2] = flashlightActive ? f.intensity * flashAttenuation : f.intensity;
+        }
+        gl.uniform3fv(this.getUniformLoc(this.polyProgram, "u_activeFlashes"), flashArray);
+      }
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.lightTexture);
+      gl.uniform1i(this.getUniformLoc(this.polyProgram, "u_lightTex"), 0);
+
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.highlightTexture);
+      gl.uniform1i(this.getUniformLoc(this.polyProgram, "u_highlightTex"), 1);
+
+      if (this.zBufferTexture) {
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, this.zBufferTexture);
+        gl.uniform1i(this.getUniformLoc(this.polyProgram, "u_zBufferTex"), 2);
+      }
+
+      if (this.mirrorMaskTexture) {
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, this.mirrorMaskTexture);
+        gl.uniform1i(this.getUniformLoc(this.polyProgram, "u_mirrorMaskTex"), 3);
+      }
+
+      const estimatedFloats = polyObjects.length * 720;
+      if (this.polyFloatArray.length < estimatedFloats) {
+        this.polyFloatArray = new Float32Array(estimatedFloats * 2);
+      }
+
+      const vertCount = buildPolyObjectVertexBuffer(
+        polyObjects,
+        playerX,
+        playerY,
+        cameraZ,
+        this.polyFloatArray,
+        dirX,
+        dirY,
+        planeX,
+        planeY,
+        this.polyBatches
+      );
+
+      if (vertCount > 0) {
+        const posAttr = gl.getAttribLocation(this.polyProgram, "a_position");
+        const colAttr = gl.getAttribLocation(this.polyProgram, "a_color");
+        const lightAttr = gl.getAttribLocation(this.polyProgram, "a_lightCoord");
+        const sideAttr = gl.getAttribLocation(this.polyProgram, "a_side");
+        const texAttr = gl.getAttribLocation(this.polyProgram, "a_texCoord");
+
+        gl.enableVertexAttribArray(posAttr);
+        gl.enableVertexAttribArray(colAttr);
+        gl.enableVertexAttribArray(lightAttr);
+        gl.enableVertexAttribArray(sideAttr);
+        if (texAttr >= 0) gl.enableVertexAttribArray(texAttr);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.polyVertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, this.polyFloatArray.subarray(0, vertCount * 12), gl.DYNAMIC_DRAW);
+
+        // Stride = 48 bytes (12 floats per vertex)
+        gl.vertexAttribPointer(posAttr, 3, gl.FLOAT, false, 48, 0);
+        gl.vertexAttribPointer(colAttr, 4, gl.FLOAT, false, 48, 12);
+        gl.vertexAttribPointer(lightAttr, 2, gl.FLOAT, false, 48, 28);
+        gl.vertexAttribPointer(sideAttr, 1, gl.FLOAT, false, 48, 36);
+        if (texAttr >= 0) gl.vertexAttribPointer(texAttr, 2, gl.FLOAT, false, 48, 40);
+
+        const uPolyTex = this.getUniformLoc(this.polyProgram, "u_polyTex");
+        const uUseTexture = this.getUniformLoc(this.polyProgram, "u_useTexture");
+
+        if (this.polyBatches.length > 0) {
+          for (let b = 0; b < this.polyBatches.length; b++) {
+            const batch = this.polyBatches[b];
+            let hasTex = false;
+            if (batch.textureId) {
+              const img = getPolyTextureImage(batch.textureId);
+              if (img) {
+                const tex = this.getTexture('poly_' + batch.textureId, img);
+                gl.activeTexture(gl.TEXTURE4);
+                gl.bindTexture(gl.TEXTURE_2D, tex);
+                gl.uniform1i(uPolyTex, 4);
+                gl.uniform1i(uUseTexture, 1);
+                hasTex = true;
+              }
+            }
+            if (!hasTex) {
+              gl.uniform1i(uUseTexture, 0);
+            }
+            gl.drawArrays(gl.TRIANGLES, batch.startVertex, batch.vertexCount);
+          }
+        } else {
+          gl.uniform1i(uUseTexture, 0);
+          gl.drawArrays(gl.TRIANGLES, 0, vertCount);
+        }
+        gl.disable(gl.DEPTH_TEST);
+      }
+    }
   }
 
   public getCanvas(): HTMLCanvasElement {
@@ -3252,7 +3683,7 @@ export class WebGLRenderer {
           texturedGroups.set(key, []);
         }
         texturedGroups.get(key)!.push(p);
-      } else if (p.type === 'smoke' || p.type === 'generic') {
+      } else if (p.type === 'smoke' || p.type === 'fire' || p.type === 'generic') {
         if (p.spriteId && sprites && (sprites.has(p.spriteId) || sprites.has(`TEX_${p.spriteId}`))) {
           const key = p.spriteId;
           if (!texturedGroups.has(key)) {
@@ -3376,7 +3807,7 @@ export class WebGLRenderer {
         } else if (p.type === 'splash') {
           sizeW = Math.max(0.5, p.size * (baseHeight * 0.005));
           sizeH = sizeW;
-        } else if (p.type === 'smoke') {
+        } else if (p.type === 'smoke' || p.type === 'fire') {
           sizeW = Math.max(1.0, p.size * baseHeight * 0.2);
           sizeH = sizeW;
         } else if (p.type === 'gib' || p.type === 'deco_gib') {
@@ -3640,14 +4071,8 @@ export class WebGLRenderer {
     });
   }
 
-  public renderSpritesWebGL(
-    width: number,
-    height: number,
-    spritesToDraw: any[],
-    zBuffer: Float32Array,
-    auxBuffers: Map<string, RaycasterBuffer> | undefined
-  ) {
-    if (!this.gl || !this.spriteProgram) return;
+  private updateZBufferTexture(zBuffer: Float32Array | number[], width: number) {
+    if (!this.gl) return;
     const gl = this.gl;
 
     if (!this.zBufferTexture) {
@@ -3665,7 +4090,7 @@ export class WebGLRenderer {
     }
     const zBufferData = this.cachedZBufferBytes;
     for (let i = 0; i < width; i++) {
-      const val = zBuffer[i] !== undefined ? zBuffer[i] : 999.0;
+      const val = zBuffer && zBuffer[i] !== undefined ? zBuffer[i] : 999.0;
       const normalized = Math.min(0.999999, Math.max(0.000001, val / 100.0));
       const v = Math.floor(normalized * 16777215);
       const r = (v >> 16) & 0xff;
@@ -3678,6 +4103,86 @@ export class WebGLRenderer {
       zBufferData[idx + 3] = 255;
     }
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, zBufferData);
+  }
+
+  private updateMirrorMaskTexture(
+    mirrorReflections: MirrorReflection[][] | undefined,
+    width: number,
+    height: number
+  ) {
+    if (!this.gl) return;
+    const gl = this.gl;
+
+    if (!this.mirrorMaskTexture) {
+      this.mirrorMaskTexture = gl.createTexture();
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.mirrorMaskTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    const neededBytes = width * 4;
+    if (!this.cachedMirrorMaskBytes || this.cachedMirrorMaskBytes.length < neededBytes) {
+      this.cachedMirrorMaskBytes = new Uint8Array(neededBytes);
+    }
+    const maskData = this.cachedMirrorMaskBytes;
+
+    for (let i = 0; i < width; i++) {
+      const colRefs = mirrorReflections ? mirrorReflections[i] : null;
+      const colRef = colRefs && colRefs.length > 0 ? colRefs[0] : null;
+
+      const hasValidMask = Boolean(
+        colRef &&
+        colRef.maskBottom !== undefined &&
+        colRef.maskBottom !== -1 &&
+        colRef.maskTop !== undefined &&
+        colRef.maskTop !== 9999 &&
+        colRef.maskTop <= colRef.maskBottom
+      );
+
+      if (hasValidMask && colRef) {
+        const normTop = Math.floor(Math.min(1.0, Math.max(0.0, colRef.maskTop / height)) * 255);
+        const normBot = Math.ceil(Math.min(1.0, Math.max(0.0, (colRef.maskBottom + 1) / height)) * 255);
+        const maxDist = colRef.perpWallDist + colRef.mirrorRefDist;
+        const normMaxDist = Math.floor(Math.min(1.0, Math.max(0.0, maxDist / 100.0)) * 255);
+
+        maskData[i * 4] = 255;
+        maskData[i * 4 + 1] = normTop;
+        maskData[i * 4 + 2] = normBot;
+        maskData[i * 4 + 3] = normMaxDist;
+      } else {
+        maskData[i * 4] = 0;
+        maskData[i * 4 + 1] = 255;
+        maskData[i * 4 + 2] = 0;
+        maskData[i * 4 + 3] = 0;
+      }
+    }
+
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      width,
+      1,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      maskData
+    );
+  }
+
+  public renderSpritesWebGL(
+    width: number,
+    height: number,
+    spritesToDraw: any[],
+    zBuffer: Float32Array,
+    auxBuffers: Map<string, RaycasterBuffer> | undefined
+  ) {
+    if (!this.gl || !this.spriteProgram) return;
+    const gl = this.gl;
+
+    this.updateZBufferTexture(zBuffer, width);
 
     gl.useProgram(this.spriteProgram);
     gl.uniform2f(this.getUniformLoc(this.spriteProgram, "u_resolution"), width, height);
@@ -3807,6 +4312,8 @@ export class WebGLRenderer {
     this.spriteVertexBuffer = null;
     if (this.zBufferTexture) gl.deleteTexture(this.zBufferTexture);
     this.zBufferTexture = null;
+    if (this.mirrorMaskTexture) gl.deleteTexture(this.mirrorMaskTexture);
+    this.mirrorMaskTexture = null;
 
     if (this.bgQuadBuffer) gl.deleteBuffer(this.bgQuadBuffer);
     if (this.wallVertexBuffer) gl.deleteBuffer(this.wallVertexBuffer);
@@ -3842,17 +4349,134 @@ export class WebGLRenderer {
     activeGrids: any[][][],
     customWallBuffers: Map<number, RaycasterBuffer> | undefined,
     customFloorBuffers: Map<number, RaycasterBuffer> | undefined,
-    auxBuffers: Map<string, RaycasterBuffer> | undefined
+    auxBuffers: Map<string, RaycasterBuffer> | undefined,
+    floorLightMaps: any[] | undefined,
+    fallbackLightMap: any[][] | undefined,
+    debugTextures: boolean
   ) {
     if (!this.gl) return;
     const gl = this.gl;
 
-    // Clear old mesh batches
+    // Clear old mesh and ceiling-cap batches.
     this.meshBatches.forEach((batch) => {
       if (batch.vertexBuffer) gl.deleteBuffer(batch.vertexBuffer);
     });
     this.meshBatches.clear();
-    return;
+    this.capBatches.forEach((batch) => {
+      if (batch.vertexBuffer) gl.deleteBuffer(batch.vertexBuffer);
+    });
+    this.capBatches.clear();
+
+    if (!activeGrids || activeGrids.length <= 1 || !grid?.length) return;
+
+    const mapHeight = grid.length;
+    const mapWidth = grid[0]?.length || 0;
+    const grouped = new Map<string, number[]>();
+
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+    const sampleLight = (levelMap: any[][] | undefined, px: number, py: number) => {
+      if (!levelMap || !levelMap.length || !levelMap[0]?.length) return [1, 1, 1];
+      const h = levelMap.length;
+      const w = levelMap[0].length;
+      const sx = clamp(px - 0.5, 0, Math.max(0, w - 1));
+      const sy = clamp(py - 0.5, 0, Math.max(0, h - 1));
+      const x0 = Math.floor(sx);
+      const y0 = Math.floor(sy);
+      const x1 = Math.min(w - 1, x0 + 1);
+      const y1 = Math.min(h - 1, y0 + 1);
+      const tx = sx - x0;
+      const ty = sy - y0;
+      const c00 = levelMap[y0]?.[x0] || { r: 1, g: 1, b: 1 };
+      const c10 = levelMap[y0]?.[x1] || c00;
+      const c01 = levelMap[y1]?.[x0] || c00;
+      const c11 = levelMap[y1]?.[x1] || c00;
+      return [
+        c00.r + (c10.r - c00.r) * tx + (c01.r - c00.r) * ty + (c11.r - c10.r - c01.r + c00.r) * tx * ty,
+        c00.g + (c10.g - c00.g) * tx + (c01.g - c00.g) * ty + (c11.g - c10.g - c01.g + c00.g) * tx * ty,
+        c00.b + (c10.b - c00.b) * tx + (c01.b - c00.b) * ty + (c11.b - c10.b - c01.b + c00.b) * tx * ty
+      ];
+    };
+
+    const wallTop = (layer: number, x: number, y: number): number | null => {
+      const tile = activeGrids[layer]?.[y]?.[x];
+      if (!tile || tile.type !== 'WALL') return null;
+      let elev = tile.elevation !== undefined ? tile.elevation : 0;
+      let h = tile.height !== undefined ? Math.abs(tile.height) : 1;
+      if (tile.height !== undefined && tile.height < 0) elev = 1 - h;
+      return layer + elev + h;
+    };
+
+    const addVertex = (arr: number[], x: number, y: number, z: number, light: number[]) => {
+      arr.push(x, y, z, -x, y, light[0], light[1], light[2]);
+    };
+
+    for (let level = 1; level < activeGrids.length; level++) {
+      const levelGrid = activeGrids[level];
+      if (!levelGrid) continue;
+      const levelLight = floorLightMaps?.[level] || fallbackLightMap;
+
+      for (let y = 0; y < mapHeight; y++) {
+        const row = levelGrid[y];
+        if (!row) continue;
+        for (let x = 0; x < mapWidth; x++) {
+          const tile = row[x];
+          if (!tile || tile.type !== 'WALL') continue;
+
+          const bottomZ = level + (tile.height !== undefined && tile.height < 0
+            ? 1.0 - Math.abs(tile.height)
+            : (tile.elevation !== undefined ? tile.elevation : 0));
+
+          // Match the old CPU renderer: omit the underside when a solid lower wall
+          // reaches or passes the same Z plane. The upper wall then has no exposed cap.
+          let coveredByBelow = false;
+          if (level > 0) {
+            const belowTop = wallTop(level - 1, x, y);
+            coveredByBelow = belowTop !== null && belowTop >= bottomZ - 0.001;
+          }
+          if (coveredByBelow) continue;
+
+          let textureId = 'TEX_FALLBACK';
+          const cellKey = y * 10000 + x;
+          const customKey = cellKey * 10 + 5;
+          if (debugTextures && customFloorBuffers?.has(customKey)) {
+            textureId = `custom_floor_${customKey}`;
+          } else if (debugTextures) {
+            const candidate = tile.bottomTextureId || tile.assetId || tile.textureId;
+            if (candidate) textureId = candidate;
+          }
+
+          let out = grouped.get(textureId);
+          if (!out) {
+            out = [];
+            grouped.set(textureId, out);
+          }
+
+          const l00 = sampleLight(levelLight, x, y);
+          const l10 = sampleLight(levelLight, x + 1, y);
+          const l01 = sampleLight(levelLight, x, y + 1);
+          const l11 = sampleLight(levelLight, x + 1, y + 1);
+
+          // Two triangles. Texture coordinates intentionally mirror the legacy CPU
+          // sampler: U uses -worldX, V uses worldY, with repeat wrapping on the GPU.
+          addVertex(out, x, y, bottomZ, l00);
+          addVertex(out, x + 1, y, bottomZ, l10);
+          addVertex(out, x, y + 1, bottomZ, l01);
+          addVertex(out, x, y + 1, bottomZ, l01);
+          addVertex(out, x + 1, y, bottomZ, l10);
+          addVertex(out, x + 1, y + 1, bottomZ, l11);
+        }
+      }
+    }
+
+    for (const [textureId, vertices] of grouped) {
+      if (vertices.length === 0) continue;
+      const buffer = gl.createBuffer();
+      if (!buffer) continue;
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      const data = new Float32Array(vertices);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      this.capBatches.set(textureId, { textureId, vertexBuffer: buffer, vertexCount: data.length / 8 });
+    }
   }
 
   public clearLevelCache() {
@@ -3887,6 +4511,8 @@ export class WebGLRenderer {
     this.lastCeilBuf = null;
     this.lastAuxBuffers = null;
     this.lastAuxBuffersSize = 0;
+    this.lastFloorLightMaps = null;
+    this.lastDebugTextures = true;
     this.lastGridGeometryHash = 0;
     this.lastLightMap = null;
     this.lastGridForLight = null;
@@ -3900,6 +4526,12 @@ export class WebGLRenderer {
       if (batch.vertexBuffer) gl.deleteBuffer(batch.vertexBuffer);
     });
     this.meshBatches.clear();
+
+    // Clear static upper-floor ceiling cap batches
+    this.capBatches.forEach((batch) => {
+      if (batch.vertexBuffer) gl.deleteBuffer(batch.vertexBuffer);
+    });
+    this.capBatches.clear();
   }
 
   public renderFlashlightWebGL(
@@ -4245,11 +4877,202 @@ export const MESH_FS = `
 
     vec4 highlightColor = texture2D(u_highlightTex, lightUV);
     if (highlightColor.r > 0.1 && v_side == 2.0) {
-      foggedColor.r = min(1.0, foggedColor.r + 60.0 / 255.0);
-      foggedColor.g *= 0.4;
-      foggedColor.b *= 0.4;
+      float highlightPulse = 0.25 + 0.75 * (sin(u_time * 2.2222222) * 0.5 + 0.5);
+      foggedColor.r = min(1.0, foggedColor.r + (60.0 / 255.0) * highlightPulse);
+      foggedColor.g *= (1.0 - 0.6 * highlightPulse);
+      foggedColor.b *= (1.0 - 0.6 * highlightPulse);
     }
 
     gl_FragColor = vec4(clamp(foggedColor, 0.0, 1.0), texColor.a);
+  }
+`;
+
+export const POLY_VS = `
+  attribute vec3 a_position;
+  attribute vec4 a_color;
+  attribute vec2 a_lightCoord;
+  attribute float a_side;
+  attribute vec2 a_texCoord;
+
+  varying vec4 v_color;
+  varying vec2 v_lightCoord;
+  varying float v_side;
+  varying float v_depth;
+  varying vec2 v_texCoord;
+
+  uniform vec2 u_playerPos;
+  uniform float u_cameraZ;
+  uniform vec2 u_dir;
+  uniform vec2 u_plane;
+  uniform float u_horizon;
+  uniform vec2 u_resolution;
+
+  void main() {
+    vec3 camera_pos = vec3(u_playerPos.x, u_playerPos.y, u_cameraZ);
+    vec3 delta = a_position - camera_pos;
+
+    float det = u_dir.x * u_plane.y - u_dir.y * u_plane.x;
+    float depth = (delta.x * u_plane.y - delta.y * u_plane.x) / det;
+    float camX = (u_dir.x * delta.y - u_dir.y * delta.x) / det;
+    float camY = delta.z;
+
+    float horizon_shift = 1.0 - 2.0 * u_horizon / u_resolution.y;
+
+    float near = 0.01;
+    float far = 100.0;
+    float z_val = ((far + near) / (far - near)) * depth - (2.0 * far * near) / (far - near);
+    gl_Position = vec4(camX, horizon_shift * depth + 2.0 * camY, z_val, depth);
+
+    v_color = a_color;
+    v_lightCoord = a_lightCoord;
+    v_side = a_side;
+    v_depth = depth;
+    v_texCoord = a_texCoord;
+  }
+`;
+
+export const POLY_FS = `
+  precision highp float;
+
+  varying vec4 v_color;
+  varying vec2 v_lightCoord;
+  varying float v_side;
+  varying float v_depth;
+  varying vec2 v_texCoord;
+
+  uniform sampler2D u_lightTex;
+  uniform sampler2D u_highlightTex;
+  uniform sampler2D u_zBufferTex;
+  uniform sampler2D u_mirrorMaskTex;
+  uniform sampler2D u_polyTex;
+  uniform bool u_useTexture;
+
+  uniform vec2 u_resolution;
+  uniform vec2 u_mapSize;
+  uniform float u_renderDistance;
+  uniform float u_minBrightness;
+  uniform vec3 u_fogColor;
+  uniform bool u_isFog;
+  uniform float u_lightningIntensity;
+  uniform float u_muzzleFlashIntensity;
+  uniform int u_activeFlashCount;
+  uniform vec3 u_activeFlashes[8];
+  uniform vec2 u_playerPos;
+  uniform float u_time;
+
+  float getDepthFactor(float d) {
+    if (u_isFog) {
+      if (d <= 0.0) return 1.0;
+      if (d >= u_renderDistance) return 0.0;
+      float t = d / u_renderDistance;
+      return 1.0 - (t * t * (3.0 - 2.0 * t));
+    }
+
+    float fogStart = max(5.0, u_renderDistance * 0.25);
+    if (d <= fogStart) return 1.0;
+    float fogRange = u_renderDistance - fogStart;
+    if (fogRange <= 0.0) return u_minBrightness;
+
+    float t = clamp((d - fogStart) / fogRange, 0.0, 1.0);
+    return max(u_minBrightness, 1.0 - (t * t * (3.0 - 2.0 * t)));
+  }
+
+  void main() {
+    if (v_depth <= 0.01) {
+      discard;
+    }
+
+    bool isReflected = (v_side < 0.0);
+    float sideMultiplier = abs(v_side);
+
+    vec2 screenUV = gl_FragCoord.xy / u_resolution;
+
+    if (isReflected) {
+      vec4 mPack = texture2D(u_mirrorMaskTex, vec2(screenUV.x, 0.5));
+      if (mPack.r < 0.5) {
+        discard;
+      }
+      float maskTop = mPack.g;
+      float maskBottom = mPack.b;
+      float fragYFromTop = 1.0 - screenUV.y;
+      if (fragYFromTop < maskTop - 0.005 || fragYFromTop > maskBottom + 0.005) {
+        discard;
+      }
+      float maxRefDist = mPack.a * 100.0;
+      if (maxRefDist > 0.001 && v_depth > maxRefDist + 0.15) {
+        discard;
+      }
+    } else {
+      vec4 pack = texture2D(u_zBufferTex, vec2(screenUV.x, 0.5));
+      float wallDist = (pack.r * 65536.0 + pack.g * 256.0 + pack.b) * (255.0 / 16777215.0) * 100.0;
+      if (wallDist > 0.001 && v_depth > wallDist + 0.15) {
+        discard;
+      }
+    }
+
+    vec4 baseColor = v_color;
+    if (u_useTexture) {
+      vec4 texCol = texture2D(u_polyTex, v_texCoord);
+      if (texCol.a < 0.05) {
+        discard;
+      }
+      baseColor = baseColor * texCol;
+    }
+
+    if (baseColor.a < 0.01) {
+      discard;
+    }
+
+    vec2 lightUV = clamp((floor(v_lightCoord) + vec2(0.5)) / u_mapSize, vec2(0.5) / u_mapSize, (u_mapSize - vec2(0.5)) / u_mapSize);
+    vec4 lightMapColor = texture2D(u_lightTex, lightUV);
+
+    vec3 litColor = baseColor.rgb * lightMapColor.rgb * sideMultiplier;
+    if (isReflected) {
+      litColor *= 0.85;
+    }
+
+    float factor = getDepthFactor(v_depth);
+    vec3 foggedColor;
+    if (u_isFog) {
+      foggedColor = mix(litColor, u_fogColor, 1.0 - factor);
+    } else {
+      foggedColor = litColor * factor;
+    }
+
+    if (u_lightningIntensity > 0.0) {
+      foggedColor += vec3(
+        u_lightningIntensity * lightMapColor.a * (150.0 / 255.0),
+        u_lightningIntensity * lightMapColor.a * (160.0 / 255.0),
+        u_lightningIntensity * lightMapColor.a * (200.0 / 255.0)
+      );
+    }
+
+    if (u_muzzleFlashIntensity > 0.0) {
+      vec2 fragWorldPos = v_lightCoord + vec2(0.5);
+      vec2 playerToFrag = fragWorldPos - u_playerPos;
+      float distSq = dot(playerToFrag, playerToFrag);
+      float flashI = u_muzzleFlashIntensity / (distSq * 0.5 + 1.0);
+      foggedColor += vec3(flashI, flashI * 0.78, flashI * 0.31);
+    }
+
+    for (int i = 0; i < 8; i++) {
+      if (i >= u_activeFlashCount) break;
+      vec3 flash = u_activeFlashes[i];
+      vec2 fragWorldPos = v_lightCoord + vec2(0.5);
+      vec2 flashToFrag = fragWorldPos - flash.xy;
+      float distSq = dot(flashToFrag, flashToFrag);
+      float flashI = flash.z / (distSq * 0.5 + 1.0);
+      foggedColor += vec3(flashI, flashI * 0.78, flashI * 0.31);
+    }
+
+    vec4 highlightColor = texture2D(u_highlightTex, lightUV);
+    if (highlightColor.r > 0.1) {
+      float highlightPulse = 0.25 + 0.75 * (sin(u_time * 2.2222222) * 0.5 + 0.5);
+      foggedColor.r = min(1.0, foggedColor.r + (60.0 / 255.0) * highlightPulse);
+      foggedColor.g *= (1.0 - 0.6 * highlightPulse);
+      foggedColor.b *= (1.0 - 0.6 * highlightPulse);
+    }
+
+    gl_FragColor = vec4(clamp(foggedColor, 0.0, 1.0), baseColor.a);
   }
 `;

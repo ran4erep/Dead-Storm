@@ -19,6 +19,7 @@ import {
     hasPitLineOfSight
 } from '../utils/combatLogic';
 import { getMaskBuffer, createShardParticles, createExplodingDecorationParticles } from '../utils/particleSystem';
+import { spawnPolyObjectDebris, isPolyObjectDecoration } from '../utils/polyDebrisSystem';
 import { findPath } from '../utils/aiLogic';
 import animations from '../data/animations.json';
 
@@ -69,14 +70,16 @@ export const useCombatSystem = (
         isActive: false, activeGroup: [], log: [], lastPlayerHit: 0, isProcessingTurn: false, activeAttackerId: null, startTime: 0
     });
     
-    const fallbackEnemiesRef = useRef(enemies);
-    useEffect(() => {
-        fallbackEnemiesRef.current = enemies;
-    }, [enemies]);
+    const fallbackEnemiesRef = useRef(enemies || new Map());
+    if (enemies) fallbackEnemiesRef.current = enemies;
     const liveEnemiesRef = enemiesStateRef || fallbackEnemiesRef;
     
     const [combatTimerBonus, setCombatTimerBonus] = useState(0);
-    const [enemyMoveAnim, setEnemyMoveAnim] = useState<{id: string, startX: number, startY: number, endX: number, endY: number, startTime: number, duration?: number} | null>(null);
+    const enemyMoveAnimRef = useRef<{id: string, startX: number, startY: number, endX: number, endY: number, startTime: number, duration?: number} | null>(null);
+    const setEnemyMoveAnim = useCallback((anim: any) => {
+        enemyMoveAnimRef.current = typeof anim === 'function' ? anim(enemyMoveAnimRef.current) : anim;
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('raycaster-look'));
+    }, []);
     const [visualHitIds, setVisualHitIds] = useState<string[]>([]);
     
     const ambushTargetRef = useRef<string | null>(null);
@@ -100,7 +103,7 @@ export const useCombatSystem = (
     const nextAkimboHandRef = useRef<'main' | 'akimbo'>('main');
     const lastFiredHandRef = useRef<'main' | 'akimbo'>('main');
     const akimboShotsRemainingRef = useRef(0);
-    useEffect(() => { combatRef.current = combat; }, [combat]);
+    combatRef.current = combat;
 
     // Robust automatic combat ender when all enemies in the activeGroup are dead or missing
     useEffect(() => {
@@ -222,10 +225,10 @@ export const useCombatSystem = (
     }, [player.equippedWeapon, player.equipment.weaponAkimbo, itemsDb, strings, triggerWeaponAnimation]);
     
     const levelDataRef = useRef(levelData);
-    useEffect(() => { levelDataRef.current = levelData; }, [levelData]);
+    levelDataRef.current = levelData;
 
     const playerRef = useRef(player);
-    useEffect(() => { playerRef.current = player; }, [player]);
+    playerRef.current = player;
 
     const t = (template: string | undefined, params: { [key: string]: string | number }) => {
         if (!template) return "???";
@@ -266,13 +269,13 @@ export const useCombatSystem = (
         }
 
         const visible = getVisibleCombatEnemies(
-          groupToUse, enemies, levelData.grid, levelData.width, levelData.height, player.pos, roundedDir, spriteMap, enemyMoveAnim, levelData.lightMap, decorationsDb
+          groupToUse, enemies, levelData.grid, levelData.width, levelData.height, player.pos, roundedDir, spriteMap, enemyMoveAnimRef.current, levelData.lightMap, decorationsDb
         );
         return visible.map((enemy: any) => ({
             ...enemy,
             name: localize(enemy.name)
         }));
-    }, [combat.isActive, combat.activeGroup, combatOverlayDebug, levelData, enemies, Math.round(player.pos.x), Math.round(player.pos.y), Math.round(player.dir360), spriteMap, enemyMoveAnim, decorationsDb, language]);
+    }, [combat.isActive, combat.activeGroup, combatOverlayDebug, levelData, enemies, Math.round(player.pos.x), Math.round(player.pos.y), Math.round(player.dir360), spriteMap, decorationsDb, language]);
 
     const handleVisualHit = (targetId: string) => {
         setVisualHitIds(prev => [...prev, targetId]);
@@ -1614,7 +1617,7 @@ export const useCombatSystem = (
                           height,
                           playerRef.current.pos,
                           d,
-                          enemyMoveAnim
+                          enemyMoveAnimRef.current
                       );
                   };
 
@@ -2195,23 +2198,33 @@ export const useCombatSystem = (
                                     }
                                 });
                                 
-                                if (decor.explode && onSpawnParticles) {
-                                    let actualAssetId = originalAssetId;
-                                    if (actualAssetId in animations) {
-                                        actualAssetId = (animations as any)[actualAssetId].frames[0];
+                                if (decor.explode) {
+                                    if (isPolyObjectDecoration(decor)) {
+                                        const tileObj = levelData?.grid?.[dy]?.[dx];
+                                        const tileFH = (tileObj && tileObj.type === 'FLOOR' && tileObj.height !== undefined ? tileObj.height : 0) + (tileObj?.elevation || 0);
+                                        const debrisSound = decor.explodeSound || decor.destructionSoundId || 'SYS_DEBRIS_FALL';
+                                        spawnPolyObjectDebris(decor, dx, dy, tileFH, undefined, debrisSound);
+                                        if (decor.explodeSound && playSound) {
+                                            playSound(decor.explodeSound, { x: dx + 0.5, y: dy + 0.5 });
+                                        }
+                                    } else if (onSpawnParticles) {
+                                        let actualAssetId = originalAssetId;
+                                        if (actualAssetId in animations) {
+                                            actualAssetId = (animations as any)[actualAssetId].frames[0];
+                                        }
+                                        const isBox = decor.isBox;
+                                        const sizeFactor = isBox ? (decor.boxSize || 1.0) : (decor.scale || 1.0);
+                                        const multiplier = isBox ? 25 : 12.5;
+                                        const particleCount = Math.max(3, Math.min(25, Math.floor(multiplier * sizeFactor)));
+                                        const explodeParticles = createExplodingDecorationParticles(
+                                            dx + 0.5, dy + 0.5, 0.5,
+                                            actualAssetId,
+                                            particleCount,
+                                            decor.explodeSound,
+                                            decor.scale || 1.0
+                                        );
+                                        onSpawnParticles(explodeParticles);
                                     }
-                                    const isBox = decor.isBox;
-                                    const sizeFactor = isBox ? (decor.boxSize || 1.0) : (decor.scale || 1.0);
-                                    const multiplier = isBox ? 25 : 12.5;
-                                    const particleCount = Math.max(3, Math.min(25, Math.floor(multiplier * sizeFactor)));
-                                    const explodeParticles = createExplodingDecorationParticles(
-                                        dx + 0.5, dy + 0.5, 0.5,
-                                        actualAssetId,
-                                        particleCount,
-                                        decor.explodeSound,
-                                        decor.scale || 1.0
-                                    );
-                                    onSpawnParticles(explodeParticles);
                                 }
 
                                 if (decor.destructionSoundId && playSound) {
@@ -2341,7 +2354,10 @@ export const useCombatSystem = (
             const weaponDamage = activeWeapon?.damageDice || "1d1";
             const damage = rollDice(weaponDamage);
             
-            triggerMuzzleFlash();
+            const isDelayed = activeWeapon?.muzzleFrame && activeWeapon.muzzleFrame > 1;
+            if (activeWeapon?.muzzleFlash && !isDelayed) {
+                triggerMuzzleFlash();
+            }
             // triggerWeaponAnimation is called inside preparePlayerAttack, so we don't need to call it here.
             handlePlayerAttack(targetId, damage, false, false, true); 
         }
@@ -2399,7 +2415,8 @@ export const useCombatSystem = (
         setEnemies, 
         combatTimerBonus,
         setCombatTimerBonus,
-        enemyMoveAnim,
+        enemyMoveAnimRef,
+        get enemyMoveAnim() { return enemyMoveAnimRef.current; },
         setEnemyMoveAnim,
         visualHitIds,
         handleVisualHit,

@@ -30,8 +30,26 @@ import itemsData from "../../data/items.json";
 import animationsData from "../../data/animations.json";
 import { CustomSelect } from "./CustomSelect";
 import { AssetPicker } from "./AssetPicker";
+import { CustomColorPicker } from "./CustomColorPicker";
 import { HandOffsetVisualEditor } from "./HandOffsetVisualEditor";
 import { AttackAnimationVisualEditor } from "./AttackAnimationVisualEditor";
+
+const rgbToHex = (r: any, g: any, b: any): string => {
+  const clamp = (val: any) => Math.max(0, Math.min(255, Math.round(Number(val) || 0)));
+  const toHex = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${toHex(clamp(r))}${toHex(clamp(g))}${toHex(clamp(b))}`;
+};
+
+const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
+  let c = hex.replace("#", "");
+  if (c.length === 3) c = c.split("").map((x) => x + x).join("");
+  const num = parseInt(c, 16) || 0;
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255,
+  };
+};
 
 interface ItemConstructorProps {
   data: Record<string, any>;
@@ -147,6 +165,28 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
       current = current[parts[i]];
     }
     current[parts[parts.length - 1]] = value;
+
+    onChange(newData);
+  };
+
+  // Helper to update multiple fields atomically
+  const updateFields = (fieldsMap: Record<string, any>) => {
+    if (!selectedId || !activeItem) return;
+
+    const newData = JSON.parse(JSON.stringify(data));
+    const targetItem = newData[selectedId];
+
+    for (const [path, value] of Object.entries(fieldsMap)) {
+      const parts = path.split(".");
+      let current = targetItem;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!current[parts[i]]) {
+          current[parts[i]] = {};
+        }
+        current = current[parts[i]];
+      }
+      current[parts[parts.length - 1]] = value;
+    }
 
     onChange(newData);
   };
@@ -332,7 +372,7 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
     }
   };
 
-  const soundOptions = useMemo(() => Object.keys(soundsData), []);
+  const soundOptions = useMemo(() => Object.keys(soundsData).filter(key => !(soundsData as any)[key]?.alias), []);
   const allItemIds = useMemo(() => Object.keys(data), [data]);
 
   const ammoOptions = useMemo(() => {
@@ -600,7 +640,7 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
               <h3 className="text-xs font-bold text-indigo-400 flex items-center gap-1.5 mb-2.5 border-b border-gray-850 pb-1.5 uppercase tracking-wide">
                 <Backpack size={14} /> Базовые Свойства Предмета
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
                 <div className="flex flex-col">
                   <label className="text-[11px] text-gray-400 mb-1">Тип предмета</label>
                   <CustomSelect
@@ -612,6 +652,7 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
                     <option value="GRENADE">GRENADE (Граната)</option>
                     <option value="MOLOTOV">MOLOTOV (Коктейль Молотова)</option>
                     <option value="FLASHBANG">FLASHBANG (Светошумовая граната)</option>
+                    <option value="FLARE">FLARE (Сигнальный фаер)</option>
                     <option value="CONSUMABLE">CONSUMABLE (Расходник)</option>
                     <option value="NOTE">NOTE (Записка)</option>
                     <option value="MAP">MAP (Карта)</option>
@@ -678,6 +719,17 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
                     onChange={(e) => handleNumInput("scale", e.target.value, true)}
                     className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1.5 text-xs text-center text-white font-mono"
                     placeholder="0.15"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-[11px] text-gray-400 mb-1">Смещение Y (yOffset)</label>
+                  <input
+                    type="text"
+                    value={activeItem.yOffset ?? ""}
+                    onChange={(e) => handleNumInput("yOffset", e.target.value, true)}
+                    className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1.5 text-xs text-center text-white font-mono"
+                    placeholder="0.0"
                   />
                 </div>
               </div>
@@ -868,6 +920,7 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
                       <option value="default">Default (Обычный)</option>
                       <option value="shotgun">Shotgun (Дробовик)</option>
                       <option value="auto">Auto (Автоматический)</option>
+                      <option value="rifle">Rifle (Винтовка)</option>
                     </CustomSelect>
                   </div>
 
@@ -960,6 +1013,19 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
                       className="accent-indigo-600 rounded bg-gray-900 w-4 h-4 cursor-pointer"
                     />
                     <span className="text-[11px] text-gray-400 font-bold">Два оружия (akimbo)</span>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <label className="text-[11px] text-gray-400 mb-1">
+                      {isRu ? "Кадр вспышки" : "Muzzle Flash Frame"} (muzzleFrame)
+                    </label>
+                    <input
+                      type="text"
+                      value={activeItem.muzzleFrame ?? ""}
+                      onChange={(e) => handleNumInput("muzzleFrame", e.target.value)}
+                      className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center text-white font-mono"
+                      placeholder="2"
+                    />
                   </div>
 
                   <div className="flex items-center gap-1.5 mt-2">
@@ -1096,6 +1162,48 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
                       <div className="flex-1 min-w-0">
                         <span className="text-[9px] font-mono text-indigo-300 block truncate">{activeItem.attackAssetFemale || "Не задан"}</span>
                         <button onClick={() => setPickingField("attackAssetFemale")} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-bold mt-1">Выбрать</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* muzzleAsset */}
+                  <div className="bg-gray-900/40 border border-gray-850 p-2 rounded-lg flex flex-col gap-1.5">
+                    <span className="text-[11px] text-gray-400 font-bold flex justify-between">
+                      Спрайт вспышки (муж)
+                      <span className="text-[9px] text-gray-500 font-mono">muzzleAsset</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 bg-gray-950 border border-gray-800 flex items-center justify-center rounded overflow-hidden shrink-0">
+                        {getAssetPreviewUrl(activeItem.muzzleAsset) ? (
+                          <img src={getAssetPreviewUrl(activeItem.muzzleAsset)} className="max-h-full max-w-full object-contain pixelated" />
+                        ) : (
+                          <span className="text-[8px] text-gray-600">Пусто</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[9px] font-mono text-indigo-300 block truncate">{activeItem.muzzleAsset || "Не задан"}</span>
+                        <button onClick={() => setPickingField("muzzleAsset")} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-bold mt-1">Выбрать</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* muzzleFemaleAsset */}
+                  <div className="bg-gray-900/40 border border-gray-850 p-2 rounded-lg flex flex-col gap-1.5">
+                    <span className="text-[11px] text-gray-400 font-bold flex justify-between">
+                      Спрайт вспышки (жен)
+                      <span className="text-[9px] text-gray-500 font-mono">muzzleFemaleAsset</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 bg-gray-950 border border-gray-800 flex items-center justify-center rounded overflow-hidden shrink-0">
+                        {getAssetPreviewUrl(activeItem.muzzleFemaleAsset) ? (
+                          <img src={getAssetPreviewUrl(activeItem.muzzleFemaleAsset)} className="max-h-full max-w-full object-contain pixelated" />
+                        ) : (
+                          <span className="text-[8px] text-gray-600">Пусто</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[9px] font-mono text-indigo-300 block truncate">{activeItem.muzzleFemaleAsset || "Не задан"}</span>
+                        <button onClick={() => setPickingField("muzzleFemaleAsset")} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-bold mt-1">Выбрать</button>
                       </div>
                     </div>
                   </div>
@@ -1274,43 +1382,47 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
               </div>
             )}
 
-            {/* Section: EXPLOSIVES (GRENADE, MOLOTOV, FLASHBANG, C4) */}
-            {(activeItem.type === "GRENADE" || activeItem.type === "MOLOTOV" || activeItem.type === "FLASHBANG" || activeItem.type === "C4") && (
+            {/* Section: EXPLOSIVES & FLARES (GRENADE, MOLOTOV, FLASHBANG, C4, FLARE) */}
+            {(activeItem.type === "GRENADE" || activeItem.type === "MOLOTOV" || activeItem.type === "FLASHBANG" || activeItem.type === "C4" || activeItem.type === "FLARE") && (
               <div className="border-t border-gray-800 pt-4 flex flex-col gap-4">
                 <h3 className="text-xs font-bold text-indigo-400 flex items-center gap-1.5 mb-1.5 border-b border-gray-850 pb-1.5 uppercase tracking-wide">
-                  <Flame size={14} /> Настройки Метательного / Взрывчатки
+                  <Flame size={14} /> Настройки Метательного / Фаера / Взрывчатки
                 </h3>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 bg-gray-900/30 p-3 rounded-lg border border-gray-850">
-                  <div className="flex flex-col">
-                    <label className="text-[11px] text-gray-400 mb-1">Кубик Взрыва (damageDice)</label>
-                    <input
-                      type="text"
-                      value={activeItem.damageDice ?? ""}
-                      onChange={(e) => updateField("damageDice", e.target.value)}
-                      className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center font-mono text-white"
-                    />
-                  </div>
+                  {activeItem.type !== "FLARE" && (
+                    <>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] text-gray-400 mb-1">Кубик Взрыва (damageDice)</label>
+                        <input
+                          type="text"
+                          value={activeItem.damageDice ?? ""}
+                          onChange={(e) => updateField("damageDice", e.target.value)}
+                          className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center font-mono text-white"
+                        />
+                      </div>
 
-                  <div className="flex flex-col">
-                    <label className="text-[11px] text-gray-400 mb-1">Радиус взрыва (explosionRange)</label>
-                    <input
-                      type="text"
-                      value={activeItem.explosionRange ?? ""}
-                      onChange={(e) => handleNumInput("explosionRange", e.target.value, true)}
-                      className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center text-white"
-                    />
-                  </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] text-gray-400 mb-1">Радиус взрыва (explosionRange)</label>
+                        <input
+                          type="text"
+                          value={activeItem.explosionRange ?? ""}
+                          onChange={(e) => handleNumInput("explosionRange", e.target.value, true)}
+                          className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center text-white"
+                        />
+                      </div>
 
-                  <div className="flex flex-col">
-                    <label className="text-[11px] text-gray-400 mb-1">Таймер взрыва (сек)</label>
-                    <input
-                      type="text"
-                      value={activeItem.timer ?? ""}
-                      onChange={(e) => handleNumInput("timer", e.target.value)}
-                      className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center text-white"
-                    />
-                  </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] text-gray-400 mb-1">Таймер взрыва (сек)</label>
+                        <input
+                          type="text"
+                          value={activeItem.timer ?? ""}
+                          onChange={(e) => handleNumInput("timer", e.target.value)}
+                          className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center text-white"
+                        />
+                      </div>
+                    </>
+                  )}
 
                   <div className="flex flex-col">
                     <label className="text-[11px] text-gray-400 mb-1">Макс. Стаков (maxStack)</label>
@@ -1321,6 +1433,88 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
                       className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center text-white"
                     />
                   </div>
+
+                  {activeItem.type === "FLARE" && (
+                    <>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] text-gray-400 mb-1">Время горения (flareDuration, ходов)</label>
+                        <input
+                          type="text"
+                          value={activeItem.flareDuration ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const cleanVal = val.replace(/,/g, ".");
+                            if (cleanVal === "") {
+                              updateFields({
+                                flareDuration: "",
+                                initialFlareDuration: ""
+                              });
+                            } else if (/^-?\d*$/.test(cleanVal)) {
+                              if (cleanVal === "-") {
+                                updateFields({
+                                  flareDuration: "-",
+                                  initialFlareDuration: "-"
+                                });
+                              } else {
+                                const parsed = parseInt(cleanVal, 10);
+                                const numOrVal = isNaN(parsed) ? "" : parsed;
+                                updateFields({
+                                  flareDuration: numOrVal,
+                                  initialFlareDuration: numOrVal
+                                });
+                              }
+                            }
+                          }}
+                          className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center font-mono text-white"
+                          placeholder="15"
+                        />
+                      </div>
+
+                      <div className="flex flex-col">
+                        <label className="text-[11px] text-gray-400 mb-1">Радиус света (flareRadius)</label>
+                        <input
+                          type="text"
+                          value={activeItem.flareRadius ?? ""}
+                          onChange={(e) => handleNumInput("flareRadius", e.target.value, true)}
+                          className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center font-mono text-white"
+                          placeholder="5"
+                        />
+                      </div>
+
+                      <div className="flex flex-col">
+                        <label className="text-[11px] text-gray-400 mb-1">Яркость света (flareBrightness)</label>
+                        <input
+                          type="text"
+                          value={activeItem.flareBrightness ?? ""}
+                          onChange={(e) => handleNumInput("flareBrightness", e.target.value, true)}
+                          className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center font-mono text-white"
+                          placeholder="2.2"
+                        />
+                      </div>
+
+                      <div className="flex flex-col justify-end">
+                        <CustomColorPicker
+                          label="Цвет света (flareColor)"
+                          color={rgbToHex(activeItem.flareColor?.r ?? 255, activeItem.flareColor?.g ?? 60, activeItem.flareColor?.b ?? 30)}
+                          onChange={(hexColor) => {
+                            const rgb = hexToRgb(hexColor);
+                            updateField("flareColor", rgb);
+                          }}
+                        />
+                      </div>
+
+                      <div className="flex flex-col justify-end">
+                        <CustomColorPicker
+                          label="Цвет дыма (smokeColor)"
+                          color={typeof activeItem.smokeColor === "string" ? activeItem.smokeColor : "rgba(255, 80, 40, 0.7)"}
+                          onChange={(colorStr) => {
+                            updateField("smokeColor", colorStr);
+                          }}
+                          supportAlpha={true}
+                        />
+                      </div>
+                    </>
+                  )}
 
                   {activeItem.type === "FLASHBANG" && (
                     <div className="flex flex-col">
@@ -1343,6 +1537,26 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
                           value={activeItem.fireObjectId ?? "fire"}
                           onChange={(e) => updateField("fireObjectId", e.target.value)}
                           className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center font-mono text-white"
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] text-gray-400 mb-1">Кол-во распространений (spreadsLeft)</label>
+                        <input
+                          type="text"
+                          value={activeItem.spreadsLeft ?? ""}
+                          onChange={(e) => handleNumInput("spreadsLeft", e.target.value)}
+                          className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center font-mono text-white"
+                          placeholder="3"
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] text-gray-400 mb-1">Шанс распространения (spreadChance 0-1)</label>
+                        <input
+                          type="text"
+                          value={activeItem.spreadChance ?? ""}
+                          onChange={(e) => handleNumInput("spreadChance", e.target.value, true)}
+                          className="bg-gray-900 border border-gray-800 rounded px-2.5 py-1 text-xs text-center font-mono text-white"
+                          placeholder="0.5"
                         />
                       </div>
                       <div className="flex flex-col">
@@ -1370,9 +1584,9 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-900/30 p-2 rounded-lg border border-gray-850">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-gray-900/30 p-2.5 rounded-lg border border-gray-850">
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] text-gray-400 font-bold">Спрайт брошенного снаряда</span>
+                    <span className="text-[11px] text-gray-400 font-bold">Спрайт в полёте</span>
                     <div className="flex items-center gap-2">
                       <button onClick={() => setPickingField("throwId")} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-bold px-2 py-1 rounded uppercase">Выбрать (throwId)</button>
                       <span className="text-[10px] font-mono text-indigo-300 truncate">{activeItem.throwId || "Не задан"}</span>
@@ -1386,6 +1600,16 @@ export const ItemConstructor: React.FC<ItemConstructorProps> = ({
                       <span className="text-[10px] font-mono text-indigo-300 truncate">{activeItem.explosionId || "Не задана"}</span>
                     </div>
                   </div>
+
+                  {activeItem.type === "FLARE" && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[11px] text-gray-400 font-bold">Сгоревший спрайт</span>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setPickingField("burntAssetId")} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-bold px-2 py-1 rounded uppercase">Выбрать (burntAssetId)</button>
+                        <span className="text-[10px] font-mono text-indigo-300 truncate">{activeItem.burntAssetId || "FLASHBANG_ARMED"}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Sounds for explosive */}

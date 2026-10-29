@@ -27,6 +27,7 @@ export function usePlayerDeath({
     setGameOverType?: (type: 'death' | 'script') => void;
 }) {
     const [deathAnimProgress, setDeathAnimProgress] = useState(0);
+    const deathAnimProgressRef = useRef(0);
     const hasStartedDeathRef = useRef(false);
     const animStateRef = useRef({
         startTime: null as number | null,
@@ -68,7 +69,8 @@ export function usePlayerDeath({
             gameState !== GameState.EDITOR;
 
         if (player.hp > 0 || !isGameplayOrDying) {
-            setDeathAnimProgress(prev => (prev !== 0 ? 0 : prev));
+            deathAnimProgressRef.current = 0;
+            setDeathAnimProgress(0);
             hasStartedDeathRef.current = false;
             if (animStateRef.current.frameId) {
                 cancelAnimationFrame(animStateRef.current.frameId);
@@ -131,13 +133,16 @@ export function usePlayerDeath({
                     }
                 }
                 
+                deathAnimProgressRef.current = progress;
                 setDeathAnimProgress(progress);
+                if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('raycaster-look'));
                 
                 if (progress < 1) {
                     animStateRef.current.frameId = requestAnimationFrame(animateDeath);
                 } else {
                     if (setGameStateRef.current) setGameStateRef.current(GameState.GAME_OVER);
-                    setDeathAnimProgress(prev => (prev !== 0 ? 0 : prev));
+                    deathAnimProgressRef.current = 0;
+                    setDeathAnimProgress(0);
                 }
             };
             
@@ -151,5 +156,8 @@ export function usePlayerDeath({
         }
     }, [player.hp, gameState, loading]);
 
-    return { deathAnimProgress };
+    return {
+        deathAnimProgress,
+        deathAnimProgressRef
+    };
 }

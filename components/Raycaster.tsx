@@ -8,7 +8,8 @@ import React, { useEffect, useRef, useState, useCallback, useMemo, useImperative
 import { Tile, Player, Item, Enemy, AnimationConfig, RoamingEnemyAnim, GameStrings } from '../types';
 import { WebGLRenderer } from './raycaster/WebGLRenderer';
 import { isWebGLActive, setWebGLActive, clearQuads, wallQuadsCollector } from './raycaster/WebGLState';
-import { Particle, createRainParticles, createDirectionalBlood, returnParticlesToPool, clearCasingParticles, clearBloodParticles, clearRainSplashParticles, getParticle } from '../utils/particleSystem';
+import { Particle, createRainParticles, createDirectionalBlood, returnParticlesToPool, clearCasingParticles, clearBloodParticles, clearRainSplashParticles, getParticle, createFlareSmokeParticle } from '../utils/particleSystem';
+import { getFlareLightSpread } from '../utils/levelLogic';
 import { ShakeEvent } from '../hooks/useVisualEffects';
 import { getAngleFromDir, shortestAngleDiff, lerp, easeInOutQuad, createBufferFromImage, RaycasterBuffer, clearGlobalBufferCache } from './raycaster/RaycasterUtils';
 import { computeLightningMap } from './raycaster/LightningMap';
@@ -18,6 +19,7 @@ import { getDepthFactor, setDepthRenderDistance, setDepthWeather, setDepthAmbien
 import { setGlobalRenderDistance } from './raycaster/RaycasterConstants';
 import { PassThroughDoor, PassThroughWall, MirrorReflection } from './raycaster/RaycasterTypes';
 import { renderEntities, renderPickupAnimation } from './raycaster/EntityRenderer';
+import { collectPolyObjectsFromGrid, generatePolyObjectOccluders, generateReflectedPolyObjects } from './raycaster/PolyObjectRenderer';
 import { renderParticles, updateAndProcessParticles } from './raycaster/ParticleRenderer';
 import { hasActiveAmbientParticles } from '../utils/particleSystem';
 import { BLOOD_GROWTH_DURATION, FLY_SPAWN_DELAY } from './raycaster/RaycasterConstants';
@@ -221,7 +223,12 @@ interface RaycasterProps {
   throwAnim?: { item: Item, startTime: number, x: number, y: number } | null;
   shakeEvent?: ShakeEvent | null;
   enemyMoveAnim?: {id: string, startX: number, startY: number, endX: number, endY: number, startTime: number} | null;
+  enemyMoveAnimRef?: React.MutableRefObject<{id: string, startX: number, startY: number, endX: number, endY: number, startTime: number} | null>;
   boxMoveAnims?: {id: string, startX: number, startY: number, endX: number, endY: number, startTime: number}[];
+  boxMoveAnimsRef?: React.MutableRefObject<{id: string, startX: number, startY: number, endX: number, endY: number, startTime: number}[]>;
+  pickupAnimRef?: React.MutableRefObject<{ item: Item, startTime: number, x: number, y: number, reverse?: boolean } | null>;
+  throwAnimRef?: React.MutableRefObject<{ item: Item, startTime: number, x: number, y: number } | null>;
+  roamingAnimsRef?: React.MutableRefObject<RoamingEnemyAnim[]>;
   highlightedTiles?: { x: number, y: number, color: string }[]; 
   highlightedEntityId?: string | null;
   activeAttackerId?: string | null;
@@ -235,6 +242,7 @@ interface RaycasterProps {
   enemyFlashesRef?: React.MutableRefObject<{x: number, y: number, startTime: number, duration?: number, intensity?: number, isFlashbang?: boolean}[]>;
   playerDamageSource?: {x: number, y: number, id: string} | null; 
   enemies?: Map<string, Enemy>; 
+  enemiesRef?: React.MutableRefObject<Map<string, Enemy>>;
   isCombatActive?: boolean; 
   combatEnemies?: any[]; 
   animations: AnimationConfig;
@@ -257,8 +265,12 @@ interface RaycasterProps {
   resolutionDivisor?: number;
   isPaused?: boolean;
   deathAnimProgress?: number;
+  deathAnimProgressRef?: React.MutableRefObject<number>;
+  fallAnimProgressRef?: React.MutableRefObject<number>;
+  scriptedDeathProgressRef?: React.MutableRefObject<number>;
   renderDistance?: number;
   raycasterCamera?: { x: number; y: number; dir: number; pitch?: number; zoom?: number; floor?: number } | null;
+  cinematicCameraRef?: React.MutableRefObject<{ x: number; y: number; dir: number; pitch?: number; zoom?: number; floor?: number } | null>;
   onFrameRendered?: () => void;
   aimingSys?: any;
   gameState?: string;
@@ -286,12 +298,14 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     strings, grid, grids, lightMap, floorLightMaps, dynamicLights, outdoorMap, player, width, height, fov = 0.66, 
     sprites, wallTexture, floorTexture, doorTexture, skyTexture, ceilingTexture,
     ceilingType = 'INDOOR', weather = 'none', fogColor, fogDistance, hiddenEnemyIds = [], 
-    pickupAnim, throwAnim, shakeEventRef, enemyMoveAnim, boxMoveAnims = [], highlightedTiles = [], highlightedEntityId = null,
+    pickupAnim, pickupAnimRef, throwAnim, throwAnimRef, shakeEventRef, enemyMoveAnim, enemyMoveAnimRef, boxMoveAnims = [], boxMoveAnimsRef, highlightedTiles = [], highlightedEntityId = null,
     activeAttackerId, damagedEnemyIds = [], debugTextures = true, showFps = false, animationDuration = 160,
-    muzzleFlashIntensity, muzzleFlashIntensityRef, enemyFlashes = [], enemyFlashesRef, playerDamageSource, enemies, isCombatActive = false,
-    combatEnemies = [], animations, playSound, explosions = [], explosionsRef, activeDialogueNPCId = null, lootAnims = [], roamingAnims = [],
+    muzzleFlashIntensity, muzzleFlashIntensityRef, enemyFlashes = [], enemyFlashesRef, playerDamageSource, enemies, enemiesRef, isCombatActive = false,
+    combatEnemies = [], animations, playSound, explosions = [], explosionsRef, activeDialogueNPCId = null, lootAnims = [], roamingAnims = [], roamingAnimsRef,
     aiDebug = false, pitLineVis = false, customWallBuffers, customFloorBuffers, onParticleHit, onShardLanded, onParticleBounce,
-    playerReflectionSprite, flashlightActive = false, flashlightBatteryRatio = 1.0, resolutionDivisor = 1, isPaused = false, deathAnimProgress = 0, lookAroundAngleRef, lookAroundPitchRef, renderDistance = 15, raycasterCamera = null,
+    playerReflectionSprite, flashlightActive = false, flashlightBatteryRatio = 1.0, resolutionDivisor = 1, isPaused = false, deathAnimProgress = 0,
+    deathAnimProgressRef, fallAnimProgressRef, scriptedDeathProgressRef, cinematicCameraRef,
+    lookAroundAngleRef, lookAroundPitchRef, renderDistance = 15, raycasterCamera = null,
     onFrameRendered, levelParticles, particlesDb, aimingSys, gameState,
     constructionPalette = [], doorDefinitions = {}, portalsPalette = [],
     forceSoftRenderer = false,
@@ -313,27 +327,27 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
   const propsRef = useRef({
     strings, grid, grids, lightMap, floorLightMaps, dynamicLights, outdoorMap, player, width, height, fov, 
     sprites, wallTexture, floorTexture, doorTexture, skyTexture, ceilingTexture,
-    ceilingType, weather, fogColor, fogDistance, hiddenEnemyIds, pickupAnim, throwAnim, shakeEvent: shakeEventRef, 
-    enemyMoveAnim, boxMoveAnims, highlightedTiles, highlightedEntityId, activeAttackerId, damagedEnemyIds, 
+    ceilingType, weather, fogColor, fogDistance, hiddenEnemyIds, pickupAnim, pickupAnimRef, throwAnim, throwAnimRef, shakeEvent: shakeEventRef, 
+    enemyMoveAnim, enemyMoveAnimRef, boxMoveAnims, boxMoveAnimsRef, highlightedTiles, highlightedEntityId, activeAttackerId, damagedEnemyIds, 
     debugTextures, showFps, animationDuration, muzzleFlashIntensity, muzzleFlashIntensityRef, enemyFlashes, enemyFlashesRef, 
-    playerDamageSource, enemies, isCombatActive, combatEnemies, animations, 
-    playSound, explosions, explosionsRef, activeDialogueNPCId, lootAnims, roamingAnims, aiDebug, pitLineVis, 
+    playerDamageSource, enemies, enemiesRef, isCombatActive, combatEnemies, animations, 
+    playSound, explosions, explosionsRef, activeDialogueNPCId, lootAnims, roamingAnims, roamingAnimsRef, aiDebug, pitLineVis, 
     customWallBuffers, customFloorBuffers, onParticleHit, 
     onShardLanded, onParticleBounce, playerReflectionSprite, flashlightActive, flashlightBatteryRatio, 
-    resolutionDivisor, isPaused, deathAnimProgress, lookAroundAngleRef, lookAroundPitchRef, renderDistance, onFrameRendered, raycasterCamera, levelParticles, particlesDb, aimingSys, gameState,
+    resolutionDivisor, isPaused, deathAnimProgress, deathAnimProgressRef, fallAnimProgressRef, scriptedDeathProgressRef, cinematicCameraRef, lookAroundAngleRef, lookAroundPitchRef, renderDistance, onFrameRendered, raycasterCamera, levelParticles, particlesDb, aimingSys, gameState,
     constructionPalette, doorDefinitions, portalsPalette, forceSoftRenderer, viewportSmoothing, textureFiltering
   });
   propsRef.current = {
     strings, grid, grids, lightMap, floorLightMaps, dynamicLights, outdoorMap, player, width, height, fov, 
     sprites, wallTexture, floorTexture, doorTexture, skyTexture, ceilingTexture,
-    ceilingType, weather, fogColor, fogDistance, hiddenEnemyIds, pickupAnim, throwAnim, shakeEvent: shakeEventRef, 
-    enemyMoveAnim, boxMoveAnims, highlightedTiles, highlightedEntityId, activeAttackerId, damagedEnemyIds, 
+    ceilingType, weather, fogColor, fogDistance, hiddenEnemyIds, pickupAnim, pickupAnimRef, throwAnim, throwAnimRef, shakeEvent: shakeEventRef, 
+    enemyMoveAnim, enemyMoveAnimRef, boxMoveAnims, boxMoveAnimsRef, highlightedTiles, highlightedEntityId, activeAttackerId, damagedEnemyIds, 
     debugTextures, showFps, animationDuration, muzzleFlashIntensity, muzzleFlashIntensityRef, enemyFlashes, enemyFlashesRef, 
-    playerDamageSource, enemies, isCombatActive, combatEnemies, animations, 
-    playSound, explosions, explosionsRef, activeDialogueNPCId, lootAnims, roamingAnims, aiDebug, pitLineVis, 
+    playerDamageSource, enemies, enemiesRef, isCombatActive, combatEnemies, animations, 
+    playSound, explosions, explosionsRef, activeDialogueNPCId, lootAnims, roamingAnims, roamingAnimsRef, aiDebug, pitLineVis, 
     customWallBuffers, customFloorBuffers, onParticleHit, 
     onShardLanded, onParticleBounce, playerReflectionSprite, flashlightActive, flashlightBatteryRatio, 
-    resolutionDivisor, isPaused, deathAnimProgress, lookAroundAngleRef, lookAroundPitchRef, renderDistance, raycasterCamera, onFrameRendered, levelParticles, particlesDb, aimingSys, gameState,
+    resolutionDivisor, isPaused, deathAnimProgress, deathAnimProgressRef, fallAnimProgressRef, scriptedDeathProgressRef, cinematicCameraRef, lookAroundAngleRef, lookAroundPitchRef, renderDistance, raycasterCamera, onFrameRendered, levelParticles, particlesDb, aimingSys, gameState,
     constructionPalette, doorDefinitions, portalsPalette, forceSoftRenderer, viewportSmoothing, textureFiltering
   };
   
@@ -788,7 +802,41 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
       lastC4GridRef.current = grid;
   }, [grid]);
 
+  const groundFlaresRef = useRef<{ x: number; y: number; item: any }[]>([]);
+  const lastFlareGridRef = useRef<Tile[][] | null>(null);
+
+  useMemo(() => {
+      if (!grid) {
+          groundFlaresRef.current = [];
+          lastFlareGridRef.current = null;
+          return;
+      }
+      if (grid === lastFlareGridRef.current) return;
+      
+      const flares: { x: number; y: number; item: any }[] = [];
+      const height = grid.length;
+      for (let y = 0; y < height; y++) {
+          const row = grid[y];
+          if (!row) continue;
+          const width = row.length;
+          for (let x = 0; x < width; x++) {
+              const cell = row[x];
+              if (cell && cell.items && cell.items.length > 0) {
+                  for (let i = 0; i < cell.items.length; i++) {
+                      const item = cell.items[i];
+                      if (item && (item.type === 'FLARE' || (item as any).flareDuration !== undefined) && ((item as any).isLit === true || (item as any).placedAsThrown === true) && (item as any).flareDuration !== undefined && (item as any).flareDuration > 0) {
+                          flares.push({ x, y, item });
+                      }
+                  }
+              }
+          }
+      }
+      groundFlaresRef.current = flares;
+      lastFlareGridRef.current = grid;
+  }, [grid]);
+
   const lightningMapRef = useRef<Float32Array | null>(null);
+  const prevFlareLightsRef = useRef<any[]>([]);
   const prevGeometryHash = useRef<number | string>('');
   const lastLightningGridRef = useRef<Tile[][] | null>(null);
   const cachedDoorCoordsRef = useRef<{x: number, y: number}[]>([]);
@@ -873,16 +921,29 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
   const renderFrame = useCallback((currX: number, currY: number, currAngle: number, animProgress: number) => {
     waterVisibleRef.current = false;
     const p = propsRef.current;
-    if (p.raycasterCamera) {
-      currX = p.raycasterCamera.x;
-      currY = p.raycasterCamera.y;
-      currAngle = p.raycasterCamera.dir;
+    const cam = p.cinematicCameraRef?.current || p.raycasterCamera;
+    if (cam) {
+      currX = cam.x;
+      currY = cam.y;
+      currAngle = cam.dir;
     }
     const s = stateRef.current;
-    const { width, height, fov, sprites, hiddenEnemyIds, grid, grids, pickupAnim, throwAnim, highlightedTiles, enemyMoveAnim, boxMoveAnims, activeAttackerId, damagedEnemyIds, debugTextures, weather, enemies, isCombatActive, combatEnemies, animations, activeDialogueNPCId, lootAnims, roamingAnims, aiDebug, pitLineVis, customWallBuffers, customFloorBuffers, onParticleHit, onShardLanded, onParticleBounce, playerReflectionSprite, flashlightActive, flashlightBatteryRatio, deathAnimProgress, shakeEvent, player, ceilingType } = p;
+    const { width, height, fov, sprites, hiddenEnemyIds, grid, grids, pickupAnim, throwAnim, highlightedTiles, enemyMoveAnim, boxMoveAnims, activeAttackerId, damagedEnemyIds, debugTextures, weather, enemies: propEnemies, isCombatActive, combatEnemies, animations, activeDialogueNPCId, lootAnims, roamingAnims, aiDebug, pitLineVis, customWallBuffers, customFloorBuffers, onParticleHit, onShardLanded, onParticleBounce, playerReflectionSprite, flashlightActive, flashlightBatteryRatio, deathAnimProgress: propDeathAnimProgress, shakeEvent, player, ceilingType } = p;
+    const deathAnimProgress = Math.max(
+      p.deathAnimProgressRef?.current ?? 0,
+      p.fallAnimProgressRef?.current ?? 0,
+      p.scriptedDeathProgressRef?.current ?? 0,
+      propDeathAnimProgress ?? 0
+    );
+    const enemies = p.enemiesRef?.current || propEnemies;
     const { wallBuffer, doorBuffer, floorBuffer, ceilingBuffer, skyBuffer, auxBuffers, lightningIntensity } = s;
     const lightningMap = lightningMapRef.current;
 
+    const currentPickupAnim = p.pickupAnimRef?.current || p.pickupAnim;
+    const currentThrowAnim = p.throwAnimRef?.current || p.throwAnim;
+    const currentEnemyMoveAnim = p.enemyMoveAnimRef?.current || p.enemyMoveAnim;
+    const currentBoxMoveAnims = p.boxMoveAnimsRef?.current || p.boxMoveAnims || [];
+    const currentRoamingAnims = p.roamingAnimsRef?.current || p.roamingAnims || [];
     const currentEnemyFlashes = p.enemyFlashesRef?.current || p.enemyFlashes || [];
     const currentExplosions = p.explosionsRef?.current || p.explosions || [];
     const currentMuzzleFlashIntensity = p.muzzleFlashIntensityRef?.current ?? p.muzzleFlashIntensity ?? 0;
@@ -904,7 +965,10 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     const hasDynamicLights = p.dynamicLights && p.dynamicLights.length > 0;
     const hasC4Tiles = c4TilesRef.current.length > 0;
     const hasC4Resets = c4CellsResetRef.current.length > 0;
-    const needsLightMapModification = !!(hasDynamicLights || hasC4Tiles || hasC4Resets);
+    const isFlyingFlare = !!(currentThrowAnim && currentThrowAnim.item && (currentThrowAnim.item.type === 'FLARE' || (currentThrowAnim.item as any).flareDuration !== undefined) && !(currentThrowAnim.item as any).isSafeDrop);
+    const hasGroundFlares = groundFlaresRef.current.length > 0;
+    const hasPrevFlareLights = prevFlareLightsRef.current.length > 0;
+    const needsLightMapModification = !!(hasDynamicLights || hasC4Tiles || hasC4Resets || isFlyingFlare || hasGroundFlares || hasPrevFlareLights);
 
     // Ensure animated light map matches current light map before proceeding ONLY if modification is needed
     if (needsLightMapModification && p.lightMap) {
@@ -954,11 +1018,100 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
             c4Resets.length = 0; // Clear the array but retain reference
         }
 
-        if (p.dynamicLights && p.dynamicLights.length > 0) {
+        // --- COLLECT FLARE DYNAMIC LIGHTS & PARTICLES ---
+        const activeFlareLights: any[] = [];
+        // 1. Flying Flare
+        if (currentThrowAnim && currentThrowAnim.item && (currentThrowAnim.item.type === 'FLARE' || (currentThrowAnim.item as any).flareDuration !== undefined) && !(currentThrowAnim.item as any).isSafeDrop) {
+            const nowPerf = performance.now();
+            const elapsed = nowPerf - currentThrowAnim.startTime;
+            const t = Math.min(1.0, Math.max(0, elapsed / 450));
+            const curX = lerp(player.pos.x + 0.5, currentThrowAnim.x + 0.5, t);
+            const curY = lerp(player.pos.y + 0.5, currentThrowAnim.y + 0.5, t);
+            const curTileX = Math.floor(curX);
+            const curTileY = Math.floor(curY);
+            const tile = grid?.[curTileY]?.[curTileX];
+            const floorHeight = (tile && tile.height !== undefined) ? tile.height : 0.0;
+            const throwZ = floorHeight + Math.sin(t * Math.PI) * 0.4 + 0.15;
+            const flareSpread = getFlareLightSpread(curX, curY, {
+                color: (currentThrowAnim.item as any).flareColor,
+                radius: (currentThrowAnim.item as any).flareRadius,
+                brightness: (currentThrowAnim.item as any).flareBrightness,
+            }, grid);
+            activeFlareLights.push(flareSpread);
+
+            const smokeCol = (currentThrowAnim.item as any).smokeColor || (currentThrowAnim.item as any).flareColor || '#ff5a28';
+            const smokeParticle = createFlareSmokeParticle(curX, curY, smokeCol, throwZ, floorHeight);
+            particlesRef.current.push(smokeParticle);
+        }
+
+        // 2. Active Ground Flares
+        if (groundFlaresRef.current.length > 0) {
+            const gFlares = groundFlaresRef.current;
+            for (let idx = 0; idx < gFlares.length; idx++) {
+                const { x, y, item } = gFlares[idx];
+                const curDur = (item as any).flareDuration ?? 15;
+                const initDur = (item as any).initialFlareDuration || 15;
+                const fadeFactor = Math.max(0.12, Math.min(1.0, curDur / initDur));
+
+                const tile = grid?.[y]?.[x];
+                const floorHeight = (tile && tile.height !== undefined) ? tile.height : 0.0;
+
+                const flareSpread = getFlareLightSpread(x + 0.5, y + 0.5, {
+                    color: (item as any).flareColor,
+                    radius: (item as any).flareRadius,
+                    brightness: ((item as any).flareBrightness ?? 2.2) * fadeFactor,
+                }, grid);
+                activeFlareLights.push(flareSpread);
+
+                const smokeCol = (item as any).smokeColor || (item as any).flareColor;
+                const smokeParticle = createFlareSmokeParticle(x + 0.5, y + 0.5, smokeCol, floorHeight, floorHeight);
+                particlesRef.current.push(smokeParticle);
+                if (Math.random() < 0.6) {
+                    const smokeParticle2 = createFlareSmokeParticle(x + 0.5, y + 0.5, smokeCol, floorHeight, floorHeight);
+                    particlesRef.current.push(smokeParticle2);
+                }
+            }
+        }
+
+        const effectiveDynamicLights = p.dynamicLights && p.dynamicLights.length > 0
+            ? [...p.dynamicLights, ...activeFlareLights]
+            : activeFlareLights;
+
+        // Reset cells from previous dynamic lights to base light so expired/moving flares don't leave permanent light
+        if (prevFlareLightsRef.current.length > 0) {
             modified = true;
-            // 1. Reset ONLY affected cells to base light
-            for (let i = 0; i < p.dynamicLights.length; i++) {
-                const dl = p.dynamicLights[i];
+            for (let i = 0; i < prevFlareLightsRef.current.length; i++) {
+                const dl = prevFlareLightsRef.current[i];
+                if (!dl || !dl.spread) continue;
+                for (let j = 0; j < dl.spread.length; j++) {
+                    const cell = dl.spread[j];
+                    const baseCell = p.lightMap[cell.y]?.[cell.x];
+                    if (baseCell && aMap[cell.y] && aMap[cell.y][cell.x]) {
+                        aMap[cell.y][cell.x].r = baseCell.r;
+                        aMap[cell.y][cell.x].g = baseCell.g;
+                        aMap[cell.y][cell.x].b = baseCell.b;
+                    }
+
+                    if (afMaps && p.floorLightMaps) {
+                        for (let fl = 0; fl < afMaps.length; fl++) {
+                            const fBaseCell = p.floorLightMaps[fl]?.[cell.y]?.[cell.x];
+                            if (fBaseCell && afMaps[fl]?.[cell.y]?.[cell.x]) {
+                                afMaps[fl][cell.y][cell.x].r = fBaseCell.r;
+                                afMaps[fl][cell.y][cell.x].g = fBaseCell.g;
+                                afMaps[fl][cell.y][cell.x].b = fBaseCell.b;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        prevFlareLightsRef.current = effectiveDynamicLights;
+
+        if (effectiveDynamicLights.length > 0) {
+            modified = true;
+            // 1. Reset current affected cells to base light
+            for (let i = 0; i < effectiveDynamicLights.length; i++) {
+                const dl = effectiveDynamicLights[i];
                 for (let j = 0; j < dl.spread.length; j++) {
                     const cell = dl.spread[j];
                     const baseCell = p.lightMap[cell.y]?.[cell.x];
@@ -982,8 +1135,8 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
             }
             
             // 2. Add dynamic light
-            for (let i = 0; i < p.dynamicLights.length; i++) {
-                const dl = p.dynamicLights[i];
+            for (let i = 0; i < effectiveDynamicLights.length; i++) {
+                const dl = effectiveDynamicLights[i];
                 let multiplier = 1.0;
                 if (dl.mode === 'FLICKERING') {
                     const alwaysOn = dl.flickerAlwaysOn ?? true;
@@ -1598,25 +1751,30 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
         }
     }
 
-    // 1. RENDER BACKGROUND & FLOOR (Writes to currentScreenData)
-    renderBackground({
-        width: renderWidth, height: renderHeight, fov: currentFov, posX, posY, dirX, dirY, planeX, planeY, horizon, cameraZ,
-        playerFloorHeight: activeFloorHeight,
-        ceilingType: ceilingType as 'INDOOR' | 'OUTDOOR', 
-        lightningIntensity, muzzleFlashIntensity: currentMuzzleFlashIntensity, 
-        skyBuffer, floorBuffer, ceilingBuffer, lightMap: currentLightMap, outdoorMap: p.outdoorMap, lightningMap, debugTextures, highlightedTiles,
-        activeFlashes, grid, grids, aiVisionSet, customFloorBuffers, 
-        screenBuffer: currentScreenData,
-        reusableHighlightSet: highlightSetRef.current,
-        auxBuffers, // Pass auxiliary buffers for custom floor textures
-        resolutionDivisor: effectiveResolutionDivisor,
-        flashlightActive: currentFlashlightActive,
-        flashlightBatteryRatio: p.flashlightBatteryRatio,
-        renderDistance: shadingDist,
-        onWaterVisible: () => { waterVisibleRef.current = true; }
-    });
+    // 1. RENDER BACKGROUND & FLOOR (Writes to currentScreenData - only needed for CPU software renderer)
+    if (!isWebGLActive) {
+        renderBackground({
+            width: renderWidth, height: renderHeight, fov: currentFov, posX, posY, dirX, dirY, planeX, planeY, horizon, cameraZ,
+            playerFloorHeight: activeFloorHeight,
+            ceilingType: ceilingType as 'INDOOR' | 'OUTDOOR', 
+            lightningIntensity, muzzleFlashIntensity: currentMuzzleFlashIntensity, 
+            skyBuffer, floorBuffer, ceilingBuffer, lightMap: currentLightMap, outdoorMap: p.outdoorMap, lightningMap, debugTextures, highlightedTiles,
+            activeFlashes, grid, grids, aiVisionSet, customFloorBuffers, 
+            screenBuffer: currentScreenData,
+            reusableHighlightSet: highlightSetRef.current,
+            auxBuffers, // Pass auxiliary buffers for custom floor textures
+            resolutionDivisor: effectiveResolutionDivisor,
+            flashlightActive: currentFlashlightActive,
+            flashlightBatteryRatio: p.flashlightBatteryRatio,
+            renderDistance: shadingDist,
+            onWaterVisible: () => { waterVisibleRef.current = true; }
+        });
+    }
 
-    // 2. RENDER WALLS (Writes to currentScreenData)
+    // 2. COLLECT POLYOBJECTS (BEFORE WALLS & MIRRORS)
+    const polyObjectsList = collectPolyObjectsFromGrid(grid, posX, posY, shadingDist, currentLightMap, p.highlightedEntityId, p.onParticleBounce);
+
+    // 3. RENDER WALLS & MIRRORS (Writes to currentScreenData)
     // Pass reusable buffers
     renderWalls({
         width: renderWidth, height: renderHeight, grid, grids, posX, posY, dirX, dirY, planeX, planeY, horizon,
@@ -1641,10 +1799,23 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
         flashlightActive: currentFlashlightActive,
         flashlightBatteryRatio: p.flashlightBatteryRatio,
         renderDistance: shadingDist,
-        reusableHighlightSet: p.gameState === 'AIMING' ? emptyHighlightSet : highlightSetRef.current
+        reusableHighlightSet: highlightSetRef.current,
+        polyObjectsList
     });
 
-    // 3. FLUSH BUFFER TO CANVAS (Base Geometry Complete)
+    // 4. GENERATE REFLECTED POLYOBJECTS (FOR MIRROR INTERIORS)
+    const reflectedPolyObjects = generateReflectedPolyObjects(
+        polyObjectsList,
+        mirrorReflectionsRef.current!,
+        renderWidth,
+        posX,
+        posY,
+        shadingDist
+    );
+    const allPolyObjectsList = reflectedPolyObjects.length > 0 
+        ? [...polyObjectsList, ...reflectedPolyObjects]
+        : polyObjectsList;
+
     if (isWebGLActive && webglRendererRef.current) {
         webglRendererRef.current.render(
             renderWidth,
@@ -1682,7 +1853,11 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
             activeFlashes,
             currentFlashlightActive,
             flashlightBatteryRatio,
-            grids
+            grids,
+            allPolyObjectsList,
+            wallZBufferRef.current as any,
+            currentFloorLightMaps,
+            debugTextures
         );
         ctx.drawImage(webglCanvasRef.current!, 0, 0);
 
@@ -1742,7 +1917,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
         passThroughWalls: wallPassWallsRef.current!,
         mirrorReflections: mirrorReflectionsRef.current!,
         player,
-        pickupAnim, throwAnim, enemyMoveAnim, boxMoveAnims, activeAttackerId, activeAttackerStartTime: activeAttackerStartTimeRef.current, damagedEnemyIds, highlightedEntityId: p.highlightedEntityId, hiddenEnemyIds,
+        pickupAnim: currentPickupAnim, throwAnim: currentThrowAnim, enemyMoveAnim: currentEnemyMoveAnim, boxMoveAnims: currentBoxMoveAnims, activeAttackerId, activeAttackerStartTime: activeAttackerStartTimeRef.current, damagedEnemyIds, highlightedEntityId: p.highlightedEntityId, hiddenEnemyIds,
         spriteTintCache: spriteTintCache.current, lightningIntensity, muzzleFlashIntensity: currentMuzzleFlashIntensity,
         particlesRef, rainRef, fliesRef, lastProcessedDamageIds,
         activeFlashes, enemies, isCombatActive, combatEnemies,
@@ -1750,7 +1925,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
         explosions: currentExplosions,
         activeDialogueNPCId,
         lootAnims,
-        roamingAnims,
+        roamingAnims: currentRoamingAnims,
         aiDebug,
         pitLineVis,
         strings: p.strings,
@@ -1809,8 +1984,8 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     }
 
     // 5. RENDER SPECIAL ANIMATIONS
-    if (pickupAnim) {
-        renderPickupAnimation(ctx, renderWidth, renderHeight, horizon, posX, posY, dirX, dirY, planeX, planeY, pickupAnim, player, currentLightMap, sprites, animations, spriteTintCache.current);
+    if (currentPickupAnim) {
+        renderPickupAnimation(ctx, renderWidth, renderHeight, horizon, posX, posY, dirX, dirY, planeX, planeY, currentPickupAnim, player, currentLightMap, sprites, animations, spriteTintCache.current);
     }
 
     // 6. RENDER PARTICLES
@@ -2158,7 +2333,18 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
           
           const hasDynamicLights = p.dynamicLights && p.dynamicLights.length > 0;
           const hasC4 = c4TilesRef.current.length > 0;
-          if (hasVisibleEmitters || hasAnimations || hasAnimatingDoors || isHeightInterpolatingRef.current || hasDynamicLights || hasC4 || (p.muzzleFlashIntensityRef?.current || 0) > 0 || s.lightningIntensity > 0 || p.pickupAnim || p.throwAnim || p.enemyMoveAnim || p.boxMoveAnims?.length > 0 || p.activeAttackerId || (p.damagedEnemyIds && p.damagedEnemyIds.length > 0) || particlesRef.current.length > 0 || rainRef.current.length > 0 || fliesRef.current.size > 0 || hasActiveAmbientParticles() || p.showFps || (p.enemyFlashesRef?.current?.length || p.enemyFlashes?.length || 0) > 0 || (p.explosionsRef?.current?.length || p.explosions?.length || 0) > 0 || p.lootAnims.length > 0 || p.roamingAnims.length > 0 || p.deathAnimProgress > 0 || (p.shakeEvent?.current && performance.now() < p.shakeEvent.current.startTime + p.shakeEvent.current.duration) || p.raycasterCamera || p.highlightedEntityId) {
+          const curPickup = p.pickupAnimRef?.current || p.pickupAnim;
+          const curThrow = p.throwAnimRef?.current || p.throwAnim;
+          const curEnemyMove = p.enemyMoveAnimRef?.current || p.enemyMoveAnim;
+          const curBoxAnims = p.boxMoveAnimsRef?.current || p.boxMoveAnims || [];
+          const curRoaming = p.roamingAnimsRef?.current || p.roamingAnims || [];
+          const curFlashes = p.enemyFlashesRef?.current || p.enemyFlashes || [];
+          const curExplosions = p.explosionsRef?.current || p.explosions || [];
+
+          const hasActiveDeathAnim = (p.deathAnimProgressRef?.current || 0) > 0 || (p.fallAnimProgressRef?.current || 0) > 0 || (p.scriptedDeathProgressRef?.current || 0) > 0 || (p.deathAnimProgress || 0) > 0;
+          const hasCinematicCam = p.cinematicCameraRef?.current !== null || p.raycasterCamera !== null;
+
+          if (hasVisibleEmitters || hasAnimations || hasAnimatingDoors || isHeightInterpolatingRef.current || hasDynamicLights || hasC4 || (p.muzzleFlashIntensityRef?.current || 0) > 0 || s.lightningIntensity > 0 || curPickup || curThrow || curEnemyMove || curBoxAnims.length > 0 || p.activeAttackerId || (p.damagedEnemyIds && p.damagedEnemyIds.length > 0) || particlesRef.current.length > 0 || rainRef.current.length > 0 || fliesRef.current.size > 0 || hasActiveAmbientParticles() || p.showFps || curFlashes.length > 0 || curExplosions.length > 0 || p.lootAnims.length > 0 || curRoaming.length > 0 || hasActiveDeathAnim || (p.shakeEvent?.current && performance.now() < p.shakeEvent.current.startTime + p.shakeEvent.current.duration) || hasCinematicCam || p.highlightedEntityId || (p.highlightedTiles?.length || 0) > 0) {
               animationFrameId.current = requestAnimationFrame(loop);
           } else {
               isLoopRunning.current = false;
@@ -2169,8 +2355,18 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
       const hasDynamicLights = p.dynamicLights && p.dynamicLights.length > 0;
       const hasC4 = c4TilesRef.current.length > 0;
       const isWaterAnimActive = !p.isPaused && waterVisibleRef.current;
+      const curPickup = p.pickupAnimRef?.current || p.pickupAnim;
+      const curThrow = p.throwAnimRef?.current || p.throwAnim;
+      const curEnemyMove = p.enemyMoveAnimRef?.current || p.enemyMoveAnim;
+      const curBoxAnims = p.boxMoveAnimsRef?.current || p.boxMoveAnims || [];
+      const curRoaming = p.roamingAnimsRef?.current || p.roamingAnims || [];
+      const curFlashes = p.enemyFlashesRef?.current || p.enemyFlashes || [];
+      const curExplosions = p.explosionsRef?.current || p.explosions || [];
 
-      if (isWaterAnimActive || hasVisibleEmitters || t < 1.0 || isHeightInterpolatingRef.current || hasAnimations || hasAnimatingDoors || hasDynamicLights || hasC4 || (p.muzzleFlashIntensityRef?.current || 0) > 0 || s.lightningIntensity > 0 || p.pickupAnim || p.throwAnim || p.enemyMoveAnim || p.boxMoveAnims?.length > 0 || p.activeAttackerId || (p.damagedEnemyIds && p.damagedEnemyIds.length > 0) || particlesRef.current.length > 0 || rainRef.current.length > 0 || fliesRef.current.size > 0 || hasActiveAmbientParticles() || p.showFps || (p.enemyFlashesRef?.current?.length || p.enemyFlashes?.length || 0) > 0 || (p.explosionsRef?.current?.length || p.explosions?.length || 0) > 0 || p.lootAnims.length > 0 || p.roamingAnims.length > 0 || p.deathAnimProgress > 0 || (p.shakeEvent?.current && performance.now() < p.shakeEvent.current.startTime + p.shakeEvent.current.duration) || p.raycasterCamera || p.highlightedEntityId) {
+      const hasActiveDeathAnim = (p.deathAnimProgressRef?.current || 0) > 0 || (p.fallAnimProgressRef?.current || 0) > 0 || (p.scriptedDeathProgressRef?.current || 0) > 0 || (p.deathAnimProgress || 0) > 0;
+      const hasCinematicCam = p.cinematicCameraRef?.current !== null || p.raycasterCamera !== null;
+
+      if (isWaterAnimActive || hasVisibleEmitters || t < 1.0 || isHeightInterpolatingRef.current || hasAnimations || hasAnimatingDoors || hasDynamicLights || hasC4 || (p.muzzleFlashIntensityRef?.current || 0) > 0 || s.lightningIntensity > 0 || curPickup || curThrow || curEnemyMove || curBoxAnims.length > 0 || p.activeAttackerId || (p.damagedEnemyIds && p.damagedEnemyIds.length > 0) || particlesRef.current.length > 0 || rainRef.current.length > 0 || fliesRef.current.size > 0 || hasActiveAmbientParticles() || p.showFps || curFlashes.length > 0 || curExplosions.length > 0 || p.lootAnims.length > 0 || curRoaming.length > 0 || hasActiveDeathAnim || (p.shakeEvent?.current && performance.now() < p.shakeEvent.current.startTime + p.shakeEvent.current.duration) || hasCinematicCam || p.highlightedEntityId || (p.highlightedTiles?.length || 0) > 0) {
           animationFrameId.current = requestAnimationFrame(loop);
       } else { 
           isLoopRunning.current = false;
@@ -2250,11 +2446,8 @@ export default React.memo(Raycaster, (prev, next) => {
     if (prev.ceilingTexture !== next.ceilingTexture) return false;
     if (prev.ceilingType !== next.ceilingType) return false;
     if (prev.weather !== next.weather) return false;
-    if (prev.pickupAnim !== next.pickupAnim) return false;
-    if (prev.throwAnim !== next.throwAnim) return false;
     if (prev.shakeEventRef !== next.shakeEventRef) return false;
-    if (prev.enemyMoveAnim !== next.enemyMoveAnim) return false;
-    if (prev.boxMoveAnims !== next.boxMoveAnims) return false;
+    if (!prev.enemyMoveAnimRef && prev.enemyMoveAnim !== next.enemyMoveAnim) return false;
     if (prev.highlightedTiles !== next.highlightedTiles) return false;
     if (prev.highlightedEntityId !== next.highlightedEntityId) return false;
     if (prev.activeAttackerId !== next.activeAttackerId) return false;
@@ -2264,16 +2457,12 @@ export default React.memo(Raycaster, (prev, next) => {
     if (prev.animationDuration !== next.animationDuration) return false;
     if (prev.muzzleFlashIntensity !== next.muzzleFlashIntensity) return false;
     if (prev.muzzleFlashIntensityRef !== next.muzzleFlashIntensityRef) return false;
-    if (prev.enemyFlashes !== next.enemyFlashes) return false;
     if (prev.playerDamageSource !== next.playerDamageSource) return false;
-    if (prev.enemies !== next.enemies) return false;
     if (prev.isCombatActive !== next.isCombatActive) return false;
     if (prev.combatEnemies !== next.combatEnemies) return false;
     if (prev.animations !== next.animations) return false;
-    if (prev.explosions !== next.explosions) return false;
     if (prev.activeDialogueNPCId !== next.activeDialogueNPCId) return false;
     if (prev.lootAnims !== next.lootAnims) return false;
-    if (prev.roamingAnims !== next.roamingAnims) return false;
     if (prev.aiDebug !== next.aiDebug) return false;
     if (prev.pitLineVis !== next.pitLineVis) return false;
     if (prev.customWallBuffers !== next.customWallBuffers) return false;
@@ -2281,7 +2470,7 @@ export default React.memo(Raycaster, (prev, next) => {
     if (prev.playerReflectionSprite !== next.playerReflectionSprite) return false;
     if (prev.flashlightActive !== next.flashlightActive) return false;
     if (prev.resolutionDivisor !== next.resolutionDivisor) return false;
-    if (prev.deathAnimProgress !== next.deathAnimProgress) return false;
+    if (!prev.deathAnimProgressRef && prev.deathAnimProgress !== next.deathAnimProgress) return false;
     if (prev.isPaused !== next.isPaused) return false;
     if (prev.raycasterCamera !== next.raycasterCamera) return false;
     

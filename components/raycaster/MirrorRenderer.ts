@@ -189,7 +189,10 @@ export function getBilinearFloorLight(
   y: number,
   lightMap: LightColor[][] | undefined,
   mapWidth: number,
-  mapHeight: number
+  mapHeight: number,
+  grid?: any[][],
+  activeGrids?: any[][][],
+  layer: number = 0
 ): LightColor {
   if (!lightMap) return DEFAULT_LIGHT_COLOR;
 
@@ -210,10 +213,29 @@ export function getBilinearFloorLight(
   const row1 = lightMap[y1];
   if (!row0 || !row1) return DEFAULT_LIGHT_COLOR;
 
-  const c00 = row0[x0] || DEFAULT_LIGHT_COLOR;
-  const c10 = row0[x1] || DEFAULT_LIGHT_COLOR;
-  const c01 = row1[x0] || DEFAULT_LIGHT_COLOR;
-  const c11 = row1[x1] || DEFAULT_LIGHT_COLOR;
+  const cx = Math.floor(x);
+  const cy = Math.floor(y);
+  const centerLight = (lightMap[cy] && lightMap[cy][cx]) || DEFAULT_LIGHT_COLOR;
+
+  let activeLayer: any[][] | null = null;
+  if (activeGrids && layer >= 0 && layer < activeGrids.length) {
+    activeLayer = activeGrids[layer];
+  } else if (grid) {
+    activeLayer = grid;
+  }
+
+  const isOpaque = (gx: number, gy: number) => {
+    if (!activeLayer) return false;
+    const row = activeLayer[gy];
+    if (!row) return false;
+    const tile = row[gx];
+    return !!(tile && (tile.type === 'WALL' || (tile.type === 'DOOR' && tile.door?.state !== 'OPEN' && !tile.door?.maskId && !tile.door?.broken)));
+  };
+
+  const c00 = isOpaque(x0, y0) ? centerLight : (row0[x0] || DEFAULT_LIGHT_COLOR);
+  const c10 = isOpaque(x1, y0) ? centerLight : (row0[x1] || DEFAULT_LIGHT_COLOR);
+  const c01 = isOpaque(x0, y1) ? centerLight : (row1[x0] || DEFAULT_LIGHT_COLOR);
+  const c11 = isOpaque(x1, y1) ? centerLight : (row1[x1] || DEFAULT_LIGHT_COLOR);
 
   const tx = u - Math.floor(u);
   const ty = v - Math.floor(v);

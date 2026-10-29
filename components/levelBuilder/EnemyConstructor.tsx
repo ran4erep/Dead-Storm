@@ -21,6 +21,7 @@ import itemsData from "../../data/items.json";
 import animationsData from "../../data/animations.json";
 import { CustomSelect } from "./CustomSelect";
 import { AssetPicker } from "./AssetPicker";
+import { getEntityPreviewUrl } from "./levelBuilderUtils";
 
 interface EnemyConstructorProps {
   data: Record<string, any>;
@@ -330,7 +331,7 @@ export const EnemyConstructor: React.FC<EnemyConstructorProps> = ({
     }
   };
 
-  const soundOptions = useMemo(() => Object.keys(soundsData), []);
+  const soundOptions = useMemo(() => Object.keys(soundsData).filter(key => !(soundsData as any)[key]?.alias), []);
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full min-h-0 text-gray-200 max-w-full overflow-x-hidden">
@@ -1393,9 +1394,23 @@ export const EnemyConstructor: React.FC<EnemyConstructorProps> = ({
                           {Object.keys(itemsData).map(itemId => {
                             const itemDataObj = (itemsData as any)[itemId];
                             const itemLabel = itemDataObj?.name?.split("/")[0] || itemId;
+                            const previewUrl = getEntityPreviewUrl('item', itemId);
                             return (
                               <option key={itemId} value={itemId}>
-                                {itemLabel} ({itemId})
+                                <span className="inline-flex items-center gap-2">
+                                  {previewUrl ? (
+                                    <img
+                                      src={previewUrl}
+                                      className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700"
+                                      style={{ imageRendering: 'pixelated' }}
+                                      alt=""
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  ) : (
+                                    <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />
+                                  )}
+                                  <span>{itemLabel} ({itemId})</span>
+                                </span>
                               </option>
                             );
                           })}

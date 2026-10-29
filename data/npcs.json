@@ -491,6 +491,19 @@
       }
     },
     "hp": 1,
+    "dialogueId": "cashier",
+    "tradeItems": [
+      {
+        "id": "bottle_of_water",
+        "price": 15
+      }
+    ],
+    "tradeResponses": {
+      "success": "Спасибо за покупку, приходите ещё!/Thank you for your purchase, come again!",
+      "sell_success": "Спасибо, принимаю./Thanks, I'll take it.",
+      "no_money": "Милок{Девушка}, у вас денег не хватает!/Young man{Lady}, you don't have enough money!",
+      "no_space": "У вас карманы трещат, разгрузитесь сначала!/Your pockets are full, unload first!"
+    },
     "voice": {
       "pitch": 0.9,
       "rate": 1,

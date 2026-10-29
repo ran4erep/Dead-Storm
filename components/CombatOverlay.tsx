@@ -367,8 +367,17 @@ const CombatOverlay: React.FC<CombatOverlayProps> = ({
               // Линейный прогресс от 0 до 1 по мере удаления до максимальной дистанции
               const progress = Math.min(1.0, Math.max(0.0, (dist - 1) / (r - 1)));
               
-              // Равномерное (линейное) уменьшение ширины без магических лимитов-заглушек
-              const widthMultiplier = 1.0 - progress * (1.0 - scaleAtMaxRange);
+              let widthMultiplier: number;
+              if (weaponShootType === 'rifle') {
+                  // Для винтовки: чем дальше враг, тем БОЛЬШЕ зона попадания (на близких дистанциях оружие неэффективно).
+                  // На дистанции dist = 1 (progress = 0) мультипликатор минимален (scaleAtMaxRange).
+                  // На максимальной дистанции dist = r (progress = 1) мультипликатор максимален (1.0).
+                  widthMultiplier = scaleAtMaxRange + progress * (1.0 - scaleAtMaxRange);
+              } else {
+                  // Для обычного оружия: чем дальше враг, тем МЕНЬШЕ зона попадания.
+                  // Равномерное (линейное) уменьшение ширины от 1.0 до scaleAtMaxRange
+                  widthMultiplier = 1.0 - progress * (1.0 - scaleAtMaxRange);
+              }
               
               finalWidth = Math.max(0.5, MAX_ZONE_WIDTH * widthMultiplier);
           }
@@ -381,7 +390,7 @@ const CombatOverlay: React.FC<CombatOverlayProps> = ({
       });
 
       return newZones;
-  }, [enemies, weaponAccuracy, weaponRange, mode, isDebugMode]);
+  }, [enemies, weaponAccuracy, weaponRange, weaponShootType, mode, isDebugMode]);
 
   // Optimization: Pre-calculate closest enemies per alignment slot.
   // This avoids O(N^2) filtering inside the render loop and keeps Hooks rules clean!

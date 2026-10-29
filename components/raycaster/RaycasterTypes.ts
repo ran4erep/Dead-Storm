@@ -50,6 +50,9 @@ export interface PassThroughWall {
     topTextureId?: string;
     clipBottom?: number;
     isOccluderOnly?: boolean;
+    isPolyOccluder?: boolean;
+    wallTop?: number;
+    wallBottom?: number;
     isStepDown?: boolean;
     isCutoutColumn?: boolean;
 }
@@ -127,6 +130,7 @@ export interface WallRenderProps {
     flashlightBatteryRatio?: number;
     renderDistance: number;
     reusableHighlightSet?: Set<number>;
+    polyObjectsList?: any[];
 }
 
 export interface SpriteShadow {

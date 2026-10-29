@@ -23,7 +23,7 @@ export const isBlocked = (
     // Windows block movement
     if (tile.type === 'WALL' && tile.blocking !== false) return true;
     if (tile.type === 'DOOR' && tile.door && tile.door.state !== 'OPEN') return true;
-    if (tile.decoration && tile.decoration.blocking) return true;
+    if (tile.decorations && tile.decorations.length > 0 ? tile.decorations.some((d: any) => d.blocking) : (tile.decoration && tile.decoration.blocking)) return true;
     if (tile.items && tile.items.some((i: any) => i.blocking)) return true;
     
     // Blocked by enemy (unless it's the one we are ignoring, i.e., ourselves moving)
@@ -113,7 +113,8 @@ export const isLaneBlocked = (
         if (!isEnemyTile) {
             if (isGeometryBlocked(tx, ty, grid, width, height, isCenterLane)) return true;
             const tile = grid[ty]?.[tx];
-            if (tile && (tile.decoration?.blocking)) return true;
+            const isDecoBlocking = tile.decorations && tile.decorations.length > 0 ? tile.decorations.some((d: any) => d.blocking) : !!tile.decoration?.blocking;
+            if (tile && isDecoBlocking) return true;
         }
 
         // 3. CENTRAL LANE CHECK (Corner Cutting prevention)
@@ -253,7 +254,8 @@ export const getIntersectingWindows = (
     while (true) {
         if (x0 >= 0 && x0 < width && y0 >= 0 && y0 < height) {
             const tile = grid[y0]?.[x0];
-            if (tile) {
+            const isDiagonalCloseToStart = Math.abs(x0 - Math.round(start.x)) === 1 && Math.abs(y0 - Math.round(start.y)) === 1;
+            if (tile && !isDiagonalCloseToStart) {
                 if (tile.isWindow && tile.canBeDestroyed !== false && !tile.isGlassBroken && tile.glassAssetId) {
                     windows.push({ x: x0, y: y0 });
                 } else if (tile.type === 'DOOR' && tile.door && tile.door.maskId && !tile.door.broken && tile.door.state !== 'OPEN') {
@@ -907,7 +909,8 @@ export const calculateNextEnemyMove = (
 
                 const tile = grid[ny]?.[nx];
                 if (!tile) continue;
-                if ((tile.type === 'WALL' && tile.blocking !== false) || (tile.type === 'DOOR' && tile.door?.state !== 'OPEN') || tile.decoration?.blocking || (tile.items && tile.items.some((i: any) => i.blocking))) {
+                const isDecoBlocking = tile.decorations && tile.decorations.length > 0 ? tile.decorations.some((d: any) => d.blocking) : !!tile.decoration?.blocking;
+                if ((tile.type === 'WALL' && tile.blocking !== false) || (tile.type === 'DOOR' && tile.door?.state !== 'OPEN') || isDecoBlocking || (tile.items && tile.items.some((i: any) => i.blocking))) {
                     continue;
                 }
 

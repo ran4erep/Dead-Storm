@@ -538,6 +538,14 @@ export function useGameLifecycle({
         clearCasingParticles();
         localStorage.removeItem("editor_test_level");
         setPlayer(prev => ({ ...prev, hp: prev.maxHp > 0 ? prev.maxHp : 100, concussionLevel: 0 }));
+        if (setEnemies) setEnemies(new Map());
+        if (setCombat) setCombat({ isActive: false, activeGroup: [], log: [], lastPlayerHit: 0, isProcessingTurn: false, activeAttackerId: null, startTime: 0 });
+        if (setLevelData) setLevelData(null);
+        if (setRoamingAnims) setRoamingAnims([]);
+        if (clearExploredTiles) clearExploredTiles();
+        if (sectorStatesRef && sectorStatesRef.current) sectorStatesRef.current.clear();
+        if (globalScriptFlagsRef && globalScriptFlagsRef.current) globalScriptFlagsRef.current = {};
+        if (mapSnapshotsRef && mapSnapshotsRef.current) mapSnapshotsRef.current.clear();
         setGameState(GameState.MENU); 
         setViewportFade(1); 
         setShowPauseMenu(false); 

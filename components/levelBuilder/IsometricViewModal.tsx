@@ -4,6 +4,8 @@ import { LevelDefinition } from '../../types';
 import { ASSETS } from '../../assets';
 import { getPreviewSrc } from './levelBuilderUtils';
 import animationsData from '../../data/animations.json';
+import { getPolyModelById } from '../../data/polyModels';
+import { drawPolyObjectIsometricCanvas } from '../../utils/polyObjectIsoRenderer';
 
 interface IsometricViewModalProps {
   isOpen: boolean;
@@ -183,6 +185,7 @@ export const IsometricViewModal: React.FC<IsometricViewModalProps> = ({
          let meshWidth = undefined;
          let isBox = false;
          let boxSize = 1.0;
+         let polyModelId: string | undefined = undefined;
          
          const itemDef = itemMap.get(ent);
          const enemyDef = enemyMap.get(ent);
@@ -235,6 +238,7 @@ export const IsometricViewModal: React.FC<IsometricViewModalProps> = ({
                
                const meshAxis = decDef.meshAxis || gbDef?.meshAxis || 'AUTO';
                const meshOffset = decDef.meshOffset !== undefined ? decDef.meshOffset : gbDef?.meshOffset;
+               const preserveAspect = decDef.preserveAspect || gbDef?.preserveAspect;
 
                if (renderMode === 'mesh') {
                    let finalAxis = meshAxis;
@@ -264,10 +268,17 @@ export const IsometricViewModal: React.FC<IsometricViewModalProps> = ({
                     offsetY = 0;
                     wallSide = 'E';
                 }
-                meshWidth = decDef.meshWidth || gbDef?.meshWidth || (finalAxis === 'Y' ? scale : 1.0);
+
+                const img = getImg(assetId, true);
+                if (preserveAspect && img && img.width && img.height) {
+                    meshWidth = scale * (img.width / img.height);
+                } else {
+                    meshWidth = decDef.meshWidth || gbDef?.meshWidth || (finalAxis === 'Y' ? scale : 1.0);
+                }
                }
               isBox = decDef.isBox || gbDef?.isBox || false;
               boxSize = decDef.boxSize || gbDef?.boxSize || 1.0;
+              polyModelId = (decDef as any)?.polyModelId || (gbDef as any)?.polyModelId;
          }
 
          if (assetId && typeof assetId === 'string' && (animationsData as any)[assetId]) {
@@ -280,7 +291,7 @@ export const IsometricViewModal: React.FC<IsometricViewModalProps> = ({
               }
          }
 
-         return { assetId, scale, fallBackColor, renderMode, wallSide, offsetX, offsetY, meshWidth, isBox, boxSize };
+         return { assetId, scale, fallBackColor, renderMode, wallSide, offsetX, offsetY, meshWidth, isBox, boxSize, polyModelId };
     };
 
     const floorImg = getImg('FLOOR');
@@ -637,14 +648,27 @@ export const IsometricViewModal: React.FC<IsometricViewModalProps> = ({
                         } else if (portMap.has(ent)) {
                              drawSpriteObj(rx, ry, x, y, undefined, '#9f7aea', 1.0, false); 
                         } else {
-                             const { assetId, scale, fallBackColor, renderMode, wallSide, offsetX, offsetY, meshWidth, isBox, boxSize } = getScaleInfo(ent);
+                             const { assetId, scale, fallBackColor, renderMode, wallSide, offsetX, offsetY, meshWidth, isBox, boxSize, polyModelId } = getScaleInfo(ent);
                              
                              const dirIndex: Record<string, number> = { N: 0, E: 1, S: 2, W: 3 };
                              const dirs = ['N', 'E', 'S', 'W'];
                              const newWallSide = wallSide ? dirs[(dirIndex[wallSide] + rotation) % 4] : undefined;
                              const { rox, roy } = rotateOffset(offsetX || 0, offsetY || 0, rotation);
 
-                             if (isBox) {
+                             if (renderMode === 'polyObject' || polyModelId) {
+                                  const polyModel = getPolyModelById(polyModelId || 'chair');
+                                  if (polyModel) {
+                                       const sx = (rx + rox - (ry + roy)) * (TILE_W / 2);
+                                       const sy = (rx + rox + (ry + roy)) * (TILE_H / 2) + TILE_H / 2;
+                                       drawPolyObjectIsometricCanvas(ctx, sx, sy, polyModel, {
+                                            tileW: TILE_W,
+                                            tileH: TILE_H,
+                                            wallH: WALL_H,
+                                            scale,
+                                            rotation,
+                                       });
+                                  }
+                             } else if (isBox) {
                                   const cImg = getImg(assetId);
                                   drawWallTextured(rx, ry, x, y, cols, rows, rotation, cImg, cImg, '#a0aec0', '#cbd5e0', '#e2e8f0', false, boxSize, rox, roy);
                              } else {

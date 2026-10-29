@@ -165,13 +165,37 @@ export const useEffectSystem = (
         });
     }, [player.activeEffects, player.concussionLevel, player.flashDuration, strings, addLog, triggerDamageEffect, language, setGameState, onBleed]);
 
-    const getActiveEffectDefinitions = () => {
-        if (!player.activeEffects) return [];
-        return player.activeEffects.map(e => ({
+    const getActiveEffectDefinitions = useCallback((grid?: any[][], playerPos?: { x: number; y: number }) => {
+        const base = (!player.activeEffects ? [] : player.activeEffects.map(e => ({
             active: e,
             def: effectsDbRef.current[e.definitionId]
-        })).filter(item => item.def !== undefined);
-    };
+        })).filter(item => item.def !== undefined));
+
+        if (grid && playerPos) {
+            const px = Math.round(playerPos.x);
+            const py = Math.round(playerPos.y);
+            if (grid[py] && grid[py][px]) {
+                const t = grid[py][px];
+                if (t.decoration && (t.decoration.id === 'fire' || t.decoration.type === 'fire' || t.decoration.isScorching)) {
+                    return [...base, {
+                        active: { id: 'virt_fire', definitionId: 'on_fire', duration: -1 },
+                        def: {
+                            id: "on_fire",
+                            name: "Подожжён/On fire",
+                            description: "Вы стоите в огне./You are standing in fire.",
+                            type: "DEBUFF",
+                            icon: "M17.66 11.2C17.66 16.5 13.16 20 8 20C2.84 20 2 15.5 2 11.2C2 7.7 5.59 4.6 7.54 0C8.5 2.1 11.16 4.3 11.16 7.2C11.16 8.5 10.3 9.7 9.16 10.2C10.73 10.5 12.16 11.5 12.16 13.2C12.16 14.5 11.3 15.7 10.16 16.2C13.5 15.5 15.16 12.7 15.16 10.2C16.5 10.5 17.66 11.5 17.66 11.2Z",
+                            iconType: "SVG_PATH",
+                            color: "text-orange-500",
+                            duration: -1
+                        }
+                    }];
+                }
+            }
+        }
+
+        return base;
+    }, [player.activeEffects]);
 
     return {
         applyEffect,

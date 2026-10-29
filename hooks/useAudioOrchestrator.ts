@@ -12,7 +12,7 @@ interface AudioOrchestratorProps {
     player: Player;
     settings: Settings;
     activeModal: string | null;
-    playSound: (name: string, pos?: {x: number, y: number}, uniqueId?: string, delayMs?: number, reverbPos?: {x: number, y: number}, maxDistance?: number, loopOverride?: boolean) => void;
+    playSound: (name: string, pos?: {x: number, y: number}, uniqueId?: string, delayMs?: number, reverbPos?: {x: number, y: number}, maxDistance?: number, loopOverride?: boolean, nonPositionalOverride?: boolean) => void;
     stopSound: (id: string) => void;
     stopAllSounds: () => void;
     playMusic: (track: string | null, opts?: any) => void;
@@ -120,13 +120,13 @@ export const useAudioOrchestrator = ({
     };
 
     // --- DECORATION (POSITIONAL) SOUNDS ---
-    const getDecorationSoundSources = (limit: number) => {
+    const getDecorationSoundSources = () => {
         const { levelData, player, cinematicMode, cinematicCamera } = depsRef.current;
         if (!levelData || !levelData.grid) return [];
         const useCam = cinematicMode && cinematicCamera;
         const refPos = useCam ? cinematicCamera : player.pos;
 
-        const range = 6;
+        const range = 20;
         const px = Math.floor(refPos.x);
         const py = Math.floor(refPos.y);
         const yMin = Math.max(0, py - range);
@@ -138,18 +138,23 @@ export const useAudioOrchestrator = ({
 
         for (let y = yMin; y <= yMax; y++) {
             for (let x = xMin; x <= xMax; x++) {
-                const dec = levelData.grid[y][x].decoration;
-                if (dec && dec.soundId) {
-                    const distSq = (x - refPos.x)**2 + (y - refPos.y)**2;
-                    if (distSq <= range * range) {
-                        sources.push({ x, y, distSq, soundId: dec.soundId });
+                const tile = levelData.grid[y][x];
+                if (!tile) continue;
+                const decs = tile.decorations && tile.decorations.length > 0
+                    ? tile.decorations
+                    : (tile.decoration ? [tile.decoration] : []);
+                for (const dec of decs) {
+                    if (dec && dec.soundId) {
+                        const distSq = (x - refPos.x)**2 + (y - refPos.y)**2;
+                        if (distSq <= range * range) {
+                            sources.push({ x, y, distSq, soundId: dec.soundId });
+                        }
                     }
                 }
             }
         }
         
-        sources.sort((a, b) => a.distSq - b.distSq);
-        return sources.slice(0, limit);
+        return sources;
     };
 
     // --- TICKER THREAD ---
@@ -194,8 +199,7 @@ export const useAudioOrchestrator = ({
             }
 
             // Decorations update
-            const MAX_DEC_SOURCES = 5;
-            const validDecSources = getDecorationSoundSources(MAX_DEC_SOURCES);
+            const validDecSources = getDecorationSoundSources();
             const currentDecFrameIds = new Set<string>();
 
             validDecSources.forEach(source => {
@@ -204,10 +208,10 @@ export const useAudioOrchestrator = ({
 
                 if (!activeDecorationSoundIds.current.has(uniqueId)) {
                     playSound(source.soundId, { x: source.x, y: source.y }, uniqueId);
-                    updateSoundPosition(uniqueId, { x: source.x, y: source.y }, 6, true);
+                    updateSoundPosition(uniqueId, { x: source.x, y: source.y }, 20, true);
                     activeDecorationSoundIds.current.set(uniqueId, source.soundId);
                 } else {
-                    updateSoundPosition(uniqueId, { x: source.x, y: source.y }, 6, false);
+                    updateSoundPosition(uniqueId, { x: source.x, y: source.y }, 20, false);
                 }
             });
 
@@ -224,12 +228,10 @@ export const useAudioOrchestrator = ({
             // Ambient sounds ticker update
             if (levelData?.ambientSounds) {
                 const playerFloor = (player as any).floor || 0;
-                let ambIndex = 0;
 
                 levelData.ambientSounds.forEach((ambient: any) => {
                     if (ambient.x !== undefined && ambient.y !== undefined) {
-                        const uniqueId = `AMBIENT_${ambient.id}_${ambIndex}_${ambient.x}_${ambient.y}`;
-                        ambIndex++;
+                        const uniqueId = `AMBIENT_${ambient.id}_${ambient.symbol || 'ABS'}_${ambient.x}_${ambient.y}`;
                         if (activeAmbientSoundTimeouts.current.has(uniqueId)) {
                             updateSoundPosition(uniqueId, { x: ambient.x, y: ambient.y }, ambient.radius || 20, false);
                         }
@@ -245,8 +247,7 @@ export const useAudioOrchestrator = ({
                                 if (char !== '.' && char !== ' ') {
                                     const def = levelData.ambientSounds?.find((s: any) => s.symbol === char);
                                     if (def) {
-                                        const uniqueId = `AMBIENT_${def.id}_${ambIndex}_${x}_${y}`;
-                                        ambIndex++;
+                                        const uniqueId = `AMBIENT_${def.id}_${char}_${x}_${y}`;
                                         if (activeAmbientSoundTimeouts.current.has(uniqueId)) {
                                             updateSoundPosition(uniqueId, { x, y }, def.radius || 20, false);
                                         }
@@ -512,7 +513,7 @@ export const useAudioOrchestrator = ({
                            if (char !== '.' && char !== ' ') {
                                const def = levelData.ambientSounds?.find((s:any) => s.symbol === char);
                                if (def) {
-                                   validAmbientSoundInstances.push({ ...def, x, y });
+                                   validAmbientSoundInstances.push({ ...def, x, y, symbol: char });
                                }
                            }
                        }
@@ -523,22 +524,22 @@ export const useAudioOrchestrator = ({
 
         const currentIds = new Set<string>();
 
-        validAmbientSoundInstances.forEach((ambient: any, index: number) => {
-            const uniqueId = `AMBIENT_${ambient.id}_${index}_${ambient.x}_${ambient.y}`;
+        validAmbientSoundInstances.forEach((ambient: any) => {
+            const uniqueId = `AMBIENT_${ambient.id}_${ambient.symbol || 'ABS'}_${ambient.x}_${ambient.y}`;
             currentIds.add(uniqueId);
 
             if (!activeAmbientSoundTimeouts.current.has(uniqueId)) {
                 if (ambient.loop) {
                     // Constant looping sound, no timeout scheduling needed!
                     activeAmbientSoundTimeouts.current.set(uniqueId, -1 as any);
-                    playSound(ambient.id, { x: ambient.x, y: ambient.y }, uniqueId, 0, undefined, ambient.radius || 20, true);
+                    playSound(ambient.id, { x: ambient.x, y: ambient.y }, uniqueId, 0, undefined, ambient.radius || 20, true, ambient.nonPositional);
                     updateSoundPosition(uniqueId, { x: ambient.x, y: ambient.y }, ambient.radius || 20, true);
                 } else {
                     const scheduleNext = () => {
                         if (!activeAmbientSoundTimeouts.current.has(uniqueId)) return;
 
                         // Play the sound
-                        playSound(ambient.id, { x: ambient.x, y: ambient.y }, uniqueId, 0, undefined, ambient.radius || 20);
+                        playSound(ambient.id, { x: ambient.x, y: ambient.y }, uniqueId, 0, undefined, ambient.radius || 20, undefined, ambient.nonPositional);
 
                         const min = ambient.minInterval || 1000;
                         const max = ambient.maxInterval || 5000;

@@ -29,9 +29,9 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
       gameState, settings, setSettings, activeModal, setActiveModal,
       aimingSys,
       showPauseMenu, setShowPauseMenu, showSettings, setShowSettings, showDebug, setShowDebug,
-      showVolume, setShowVolume, lootData, enemies,
-      enemyFlashes, playerDamageSource, explosions,
-      raycasterRef, roamingAnims, raycasterWidth, raycasterHeight, resolutionDivisor, pickupAnim, throwAnim,
+      showVolume, setShowVolume, lootData,
+      playerDamageSource,
+      raycasterRef, raycasterWidth, raycasterHeight, resolutionDivisor,
       isLandscape, headerHeight, player, setPlayer, inventoryStats, totalAmmoInInventory, gainLevel,
       toasts, lootAnims, addLog, isTransitionLoading,
       strings, loading, loadingMessage, loadingProgress, loadingLogs,
@@ -41,15 +41,15 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
       viewportFade, playSound, showLevelUpText, shakeEventRef, muzzleFlashIntensityRef,
       isLowHealth, activeWeapon, weaponStyle,
       currentNode, selectedOptionIndex, localize, getDisplayText, lastNpcText,
-      effectSys, combat, enemyMoveAnim, boxMoveAnims, visualHitIds, handleVisualHit,
-      activeCombatEnemies, escapeDirection, deathAnimProgress, fallAnimProgress,
+      effectSys, combat, visualHitIds, handleVisualHit,
+      activeCombatEnemies, escapeDirection,
       currentMovementSys, inventorySys, throwingSys,
       handleTouchStart, handleTouchMove, handleTouchEnd, canAim,
       handlePointerDown, handlePointerMove, handlePointerUp, handleContextMenu,
       handleAimInputWithAnim, handleThrowInputWithAnim, handleShootWrapper,
       handleSkipTurn, finalizeLevelLoad, returnToMenu, toggleModal,
       dialogueNPCName, dialogueNPCAsset, dialogueNPCInstanceId, dialogueNPCDefinitionId, dialogueNPCVoice, isRadioDialogue,
-      mainHandContainerRef, akimboHandContainerRef, mapContainerRef, consoleContainerRef, mainHandImgRef, mainHandImgShadowRef, akimboHandImgRef, akimboHandImgShadowRef,
+      mainHandContainerRef, akimboHandContainerRef, mapContainerRef, consoleContainerRef, mainHandImgRef, mainHandImgShadowRef, akimboHandImgRef, akimboHandImgShadowRef, mainMuzzleImgRef, akimboMuzzleImgRef,
       currentHandSprite, akimboHandSprite, getTintMatrix, mainTintId, akimboTintId, handStyleFinal, akimboHandStyleFinal, brokenTransform, akimboBrokenTransform,
       brokenTransition, showWeaponHand, isWeaponBroken, isAkimboWeaponBroken, isMapView, activeMapItem,
       currentHighlightedTiles, handleEscapeResult, handleCombatTimeout, handleReloadResult,
@@ -58,50 +58,21 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
       cinematicMode, cinematicCamera, activeTutorial, setActiveTutorial,
       displayedWeapon, displayedAkimboWeapon,
       screamer,
-      checkTriggers
+      checkTriggers,
+      activeEffects,
+      synchronizedGrids,
+      hasCompass,
+      hasDigitalMap,
+      hasConsoleItem,
+      consoleItem,
+      displayedActiveWeapon,
+      activeKeypadInfo
   } = engine;
 
   const playerPortrait = player.portraits?.[player.characterId]?.static || (player.characterId === 'female' ? 'FEMALE_PORTRAIT1' : 'MALE_PORTRAIT1');
   const playerRawName = player.characterId === 'female' ? "Лилит/Lilith" : "Джон/John";
   
   const [isConsoleGameActive, setIsConsoleGameActive] = React.useState(false);
-  
-  const baseEffects = React.useMemo(() => effectSys.getActiveEffectDefinitions(), [player.activeEffects, effectSys]);
-
-  const pPosXRound = Math.round(player.pos.x);
-  const pPosYRound = Math.round(player.pos.y);
-
-  const isStandingOnFire = React.useMemo(() => {
-      let tempStandingOnFire = false;
-      if (levelData && levelData.grid) {
-          if (levelData.grid[pPosYRound] && levelData.grid[pPosYRound][pPosXRound]) {
-              const t = levelData.grid[pPosYRound][pPosXRound];
-              if (t.decoration && (t.decoration.id === 'fire' || t.decoration.type === 'fire' || t.decoration.isScorching)) {
-                  tempStandingOnFire = true;
-              }
-          }
-      }
-      return tempStandingOnFire;
-  }, [levelData?.grid, pPosXRound, pPosYRound]);
-
-  const activeEffects = React.useMemo(() => {
-      if (isStandingOnFire) {
-          return [...baseEffects, {
-              active: { id: 'virt_fire', definitionId: 'on_fire', duration: -1 },
-              def: {
-                  id: "on_fire",
-                  name: "Подожжён/On fire",
-                  description: "Вы стоите в огне./You are standing in fire.",
-                  type: "DEBUFF",
-                  icon: "M17.66 11.2C17.66 16.5 13.16 20 8 20C2.84 20 2 15.5 2 11.2C2 7.7 5.59 4.6 7.54 0C8.5 2.1 11.16 4.3 11.16 7.2C11.16 8.5 10.3 9.7 9.16 10.2C10.73 10.5 12.16 11.5 12.16 13.2C12.16 14.5 11.3 15.7 10.16 16.2C13.5 15.5 15.16 12.7 15.16 10.2C16.5 10.5 17.66 11.5 17.66 11.2Z",
-                  iconType: "SVG_PATH",
-                  color: "text-orange-500",
-                  duration: -1
-              }
-          }];
-      }
-      return baseEffects;
-  }, [baseEffects, isStandingOnFire]);
 
   const zoomContainerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -124,11 +95,6 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
       }
   }, [cinematicMode, cinematicCamera, engine.inspectZoom]);
 
-  const synchronizedGrids = React.useMemo(() => {
-      if (!levelData?.grids) return undefined;
-      return [levelData.grid, ...levelData.grids.slice(1)];
-  }, [levelData?.grid, levelData?.grids]);
-
   const engineRef = useRef(engine);
   engineRef.current = engine;
 
@@ -141,7 +107,7 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
   }, []);
 
   const onParticleBounceMemo = React.useCallback((p: any) => {
-      if ((p.type === 'casing' || p.type === 'brick' || p.type === 'gib' || p.type === 'deco_gib') && p.soundId) {
+      if ((p.type === 'casing' || p.type === 'brick' || p.type === 'gib' || p.type === 'deco_gib' || p.type === 'poly_debris') && p.soundId) {
           engineRef.current.playSound(p.soundId, { x: p.worldX, y: p.worldY });
       }
   }, []);
@@ -222,8 +188,8 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
       if (engineRef.current.triggerMuzzleFlash) engineRef.current.triggerMuzzleFlash();
   }, []);
 
-  const playSoundMemo = React.useCallback((soundId: string, pos?: { x: number, y: number }, id?: string, delayMs?: number, reverbPos?: { x: number, y: number }, maxDistance?: number) => {
-      if (engineRef.current.playSound) engineRef.current.playSound(soundId, pos, id, delayMs, reverbPos, maxDistance);
+  const playSoundMemo = React.useCallback((soundId: string, pos?: { x: number, y: number }, id?: string, delayMs?: number, reverbPos?: { x: number, y: number }, maxDistance?: number, loopOverride?: boolean, nonPositionalOverride?: boolean) => {
+      if (engineRef.current.playSound) engineRef.current.playSound(soundId, pos, id, delayMs, reverbPos, maxDistance, loopOverride, nonPositionalOverride);
   }, []);
 
   const touchHandlersMemo = React.useMemo(() => {
@@ -295,19 +261,12 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
           {!cinematicMode && (
               <TopRightBadges 
                   almostBrokenSlots={almostBrokenSlots} 
-                  activeWeapon={
-                      (activeWeapon && (activeWeapon.type === 'MAP' || activeWeapon.type === 'CONSOLE' || activeWeapon.type === 'NOTE' || activeWeapon.type === 'RADIO'))
-                          ? (player.equipment.weapon || null)
-                          : activeWeapon
-                  } 
+                  activeWeapon={displayedActiveWeapon} 
                   weaponAkimbo={player.equipment.weaponAkimbo}
-                  hasCompass={player?.inventory?.some((item: any) => item.type === 'COMPASS') || Object.values(player?.equipment || {}).some((item: any) => item?.type === 'COMPASS')}
+                  hasCompass={hasCompass}
                   dir360={player.dir360}
                   totalAmmoInInventory={totalAmmoInInventory} 
-                  hasDigitalMap={
-                      player?.inventory?.some((item: any) => item.type === 'DIGITAL_MAP' && item.isActive && (item.currentAmmo ?? 0) > 0 && item.hasBattery !== false) || 
-                      Object.values(player?.equipment || {}).some((item: any) => item?.type === 'DIGITAL_MAP' && item.isActive && (item.currentAmmo ?? 0) > 0 && item.hasBattery !== false)
-                  }
+                  hasDigitalMap={hasDigitalMap}
                   playerX={player.pos.x}
                   playerY={player.pos.y}
                   playerDir={player.dir}
@@ -405,11 +364,11 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
                   fogDistance={levelData.fogDistance}
                   levelParticles={levelData.particles}
                   particlesDb={engine.particlesDb}
-                  pickupAnim={pickupAnim} 
-                  throwAnim={throwAnim} 
+                  pickupAnimRef={engine.pickupAnimRef}
+                  throwAnimRef={engine.throwAnimRef}
                   shakeEventRef={shakeEventRef}
-                  enemyMoveAnim={enemyMoveAnim} 
-                  boxMoveAnims={boxMoveAnims}
+                  enemyMoveAnimRef={engine.enemyMoveAnimRef || engine.combatSystem?.enemyMoveAnimRef}
+                  boxMoveAnimsRef={engine.boxMoveAnimsRef}
                   highlightedTiles={currentHighlightedTiles} 
                   highlightedEntityId={gameState === GameState.INSPECTING ? engine.inspectingSys?.inspectTargets[engine.inspectingSys?.inspectTargetIndex]?.id : null}
                   activeAttackerId={combat.activeAttackerId} 
@@ -420,7 +379,7 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
                   muzzleFlashIntensityRef={muzzleFlashIntensityRef} 
                   enemyFlashesRef={engine.enemyFlashesRef} 
                   playerDamageSource={playerDamageSource} 
-                  enemies={enemies} 
+                  enemiesRef={engine.enemiesRef}
                   isCombatActive={combat.isActive} 
                   combatEnemies={activeCombatEnemies} 
                   animations={animations} 
@@ -428,7 +387,7 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
                   explosionsRef={engine.explosionsRef} 
                   activeDialogueNPCId={dialogueNPCInstanceId} 
                   lootAnims={lootAnims} 
-                  roamingAnims={roamingAnims} 
+                  roamingAnimsRef={engine.roamingAnimsRef} 
                   aiDebug={settings.debug.aiDebug} 
                   pitLineVis={settings.debug.pitLineVis} 
                   customWallBuffers={engine.customWallBuffers}
@@ -437,9 +396,12 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
                   flashlightActive={isFlashlightOn}
                   flashlightBatteryRatio={engine.flashlightBatteryRatio}
                   resolutionDivisor={engine.resolutionDivisor}
-                  deathAnimProgress={Math.max(deathAnimProgress, fallAnimProgress || 0)}
+                  deathAnimProgressRef={engine.deathAnimProgressRef}
+                  fallAnimProgressRef={engine.fallAnimProgressRef}
+                  scriptedDeathProgressRef={engine.scriptedDeathProgressRef}
                   renderDistance={settings.renderDistance ?? 15}
                   raycasterCamera={cinematicMode ? cinematicCamera : null}
+                  cinematicCameraRef={engine.cinematicCameraRef}
                   onParticleHit={onParticleHitMemo} 
                   onShardLanded={onShardLandedMemo}
                   onParticleBounce={onParticleBounceMemo}
@@ -510,8 +472,10 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
                   consoleContainerRef={consoleContainerRef}
                   mainHandImgRef={mainHandImgRef}
                   mainHandImgShadowRef={mainHandImgShadowRef}
+                  mainMuzzleImgRef={mainMuzzleImgRef}
                   akimboHandImgRef={akimboHandImgRef}
                   akimboHandImgShadowRef={akimboHandImgShadowRef}
+                  akimboMuzzleImgRef={akimboMuzzleImgRef}
                   akimboHandSprite={akimboHandSprite}
                   currentHandSprite={currentHandSprite}
                   akimboHandStyleFinal={akimboHandStyleFinal}
@@ -537,10 +501,11 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
                   handleAimInputWithAnim={handleAimInputWithAnimMemo}
                   handleThrowInputWithAnim={handleThrowInputWithAnimMemo}
                   handleInspectInputWithAnim={handleInspectInputWithAnimMemo}
-                  throwAnim={throwAnim}
+                  throwAnim={engine.throwAnim}
+                  throwAnimRef={engine.throwAnimRef}
                   combat={combat}
                   activeCombatEnemies={activeCombatEnemies}
-                  enemies={enemies}
+                  enemies={engine.enemies}
                   player={player}
                   setPlayer={setPlayerMemo}
                   addLog={addLog}
@@ -589,7 +554,7 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
                   isRadioDialogue={isRadioDialogue}
                   handleDirectChoice={handleDirectChoiceMemo}
               />
-              <DeathCurtain deathAnimProgress={deathAnimProgress} />
+              <DeathCurtain deathAnimProgress={engine.deathAnimProgress} />
           </div>
 
           {/* CINEMATIC CURTAINS OVERLAY */}
@@ -620,12 +585,12 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
               />
           )}
 
-          {(gameState === GameState.CONSOLE_VIEW || player.inventory.some(i => i.type === 'CONSOLE') || player.equippedWeapon?.type === 'CONSOLE') && (
+          {(gameState === GameState.CONSOLE_VIEW || hasConsoleItem) && (
               <ConsoleOverlay 
                   player={player}
                   sprites={spriteMap}
                   onClose={() => inventorySys.toggleConsoleMode(null)}
-                  item={player.equippedWeapon || player.inventory.find(i => i.type === 'CONSOLE') || null}
+                  item={consoleItem}
                   visible={gameState === GameState.CONSOLE_VIEW && player.equippedWeapon?.type === 'CONSOLE'}
                   mapContainerRef={consoleContainerRef}
                   handStyleFinal={handStyleFinal}
@@ -643,7 +608,7 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
               <DebugMap 
                   player={player} 
                   levelData={levelData} 
-                  enemies={enemies} 
+                  enemies={engine.enemies} 
                   onClose={() => setActiveModal(null)} 
                   settings={settings}
                   onUpdateSettings={setSettings}
@@ -651,76 +616,112 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
               />
           )}
 
-          {activeModal === 'keypad' && !showPauseMenu && !showSettings && !showDebug && !showVolume && currentMovementSys.frontTile && (
-              <KeypadModal
-                  strings={strings}
-                  spriteMap={spriteMap}
-                  assetId={currentMovementSys.frontTile.keypadAssetId}
-                  maskAssetId={currentMovementSys.frontTile.keypadMaskAssetId}
-                  password={currentMovementSys.frontTile.password}
-                  onClose={() => toggleModal(null)}
-                  onKeyPress={() => engine.playSound(currentMovementSys.frontTile.keypadSound || 'BEEP')}
-                  onSuccess={() => { if (currentMovementSys.frontTile.keypadSuccessSound) engine.playSound(currentMovementSys.frontTile.keypadSuccessSound); }}
-                  onFail={() => { if (currentMovementSys.frontTile.keypadFailSound) engine.playSound(currentMovementSys.frontTile.keypadFailSound); }}
-                  onUnlock={() => {
-                      engine.setLevelData((prev: any) => {
-                          const newGrid = prev.grid.map((row: any) => [...row]);
-                          
-                          // Remove the keypad properties from the wall we are interacting with
-                          const dx = [0, 1, 0, -1][Math.round(player.dir)];
-                          const dy = [-1, 0, 1, 0][Math.round(player.dir)];
-                          const fx = player.pos.x + dx;
-                          const fy = player.pos.y + dy;
-                          
-                          if (newGrid[fy] && newGrid[fy][fx]) {
-                              newGrid[fy][fx] = {
-                                  ...newGrid[fy][fx],
-                                  keylock: undefined,
-                                  keypadDirection: undefined,
-                                  keypadAssetId: undefined,
-                                  keypadMaskAssetId: undefined,
-                                  password: undefined,
-                                  keypadSound: undefined,
-                                  keypadSuccessSound: undefined,
-                                  keypadFailSound: undefined,
-                                  targetId: undefined
-                              };
-                          }
+          {activeModal === 'keypad' && !showPauseMenu && !showSettings && !showDebug && !showVolume && (() => {
+              if (!activeKeypadInfo) return null;
 
-                          let doorPos: {x: number, y: number} | null = null;
-                          let doorSound: string | undefined = undefined;
-                          if (currentMovementSys.frontTile.targetId) {
-                              const targetId = currentMovementSys.frontTile.targetId;
-                              for (let y = 0; y < newGrid.length; y++) {
-                                  for (let x = 0; x < newGrid[y].length; x++) {
-                                      if (newGrid[y][x].door && newGrid[y][x].door.id === targetId) {
-                                          if (newGrid[y][x].door!.openSound) {
-                                              doorSound = newGrid[y][x].door!.openSound;
+              const tile = activeKeypadInfo.tile;
+              const keypadDecor = activeKeypadInfo.decoration;
+
+              const assetId = keypadDecor ? (keypadDecor.panelAsset || keypadDecor.keypadAssetId || keypadDecor.assetId || tile.keypadAssetId) : tile.keypadAssetId;
+              const maskAssetId = keypadDecor ? (keypadDecor.panelMaskAsset || keypadDecor.keypadMaskAssetId || tile.keypadMaskAssetId) : tile.keypadMaskAssetId;
+              const password = keypadDecor ? (keypadDecor.password || tile.password) : tile.password;
+              const targetId = keypadDecor ? (keypadDecor.targetId || tile.targetId) : tile.targetId;
+
+              const sounds = keypadDecor && Array.isArray(keypadDecor.sounds) ? keypadDecor.sounds : undefined;
+              const keypadSound = (sounds && sounds[0]) || keypadDecor?.keypadSound || tile.keypadSound || 'KEYPAD_BUTTON';
+              const keypadSuccessSound = (sounds && sounds[1]) || keypadDecor?.keypadSuccessSound || tile.keypadSuccessSound || 'KEYPAD_SUCCESS';
+              const keypadFailSound = (sounds && sounds[2]) || keypadDecor?.keypadFailSound || tile.keypadFailSound || 'KEYPAD_FAILED';
+
+              return (
+                  <KeypadModal
+                      strings={strings}
+                      spriteMap={spriteMap}
+                      assetId={assetId}
+                      maskAssetId={maskAssetId}
+                      password={password}
+                      onClose={() => toggleModal(null)}
+                      onKeyPress={() => engine.playSound(keypadSound)}
+                      onSuccess={() => { if (keypadSuccessSound) engine.playSound(keypadSuccessSound); }}
+                      onFail={() => { if (keypadFailSound) engine.playSound(keypadFailSound); }}
+                      onUnlock={() => {
+                          engine.setLevelData((prev: any) => {
+                              if (!prev || !prev.grid) return prev;
+                              const newGrid = prev.grid.map((row: any) => [...row]);
+                              
+                              let tx = player.pos.x;
+                              let ty = player.pos.y;
+                              if (!activeKeypadInfo.isCurrentTile) {
+                                  const pDirNum = ((Math.round(player.dir) % 4) + 4) % 4;
+                                  const dx = [0, 1, 0, -1][pDirNum];
+                                  const dy = [-1, 0, 1, 0][pDirNum];
+                                  tx = player.pos.x + dx;
+                                  ty = player.pos.y + dy;
+                              }
+                              
+                              if (newGrid[ty] && newGrid[ty][tx]) {
+                                  const targetTile = newGrid[ty][tx];
+                                  const updatedTile = {
+                                      ...targetTile,
+                                      keylock: undefined,
+                                      keypadDirection: undefined,
+                                      keypadAssetId: undefined,
+                                      keypadMaskAssetId: undefined,
+                                      password: undefined,
+                                      keypadSound: undefined,
+                                      keypadSuccessSound: undefined,
+                                      keypadFailSound: undefined,
+                                      targetId: undefined
+                                  };
+
+                                  if (updatedTile.decoration?.type === 'KEYPAD') {
+                                      updatedTile.decoration = {
+                                          ...updatedTile.decoration,
+                                          password: undefined,
+                                          targetId: undefined
+                                      };
+                                  }
+                                  if (updatedTile.decorations) {
+                                      updatedTile.decorations = updatedTile.decorations.map((d: any) => 
+                                          d.type === 'KEYPAD' ? { ...d, password: undefined, targetId: undefined } : d
+                                      );
+                                  }
+
+                                  newGrid[ty][tx] = updatedTile;
+                              }
+
+                              let doorPos: {x: number, y: number} | null = null;
+                              let doorSound: string | undefined = undefined;
+                              if (targetId) {
+                                  for (let y = 0; y < newGrid.length; y++) {
+                                      for (let x = 0; x < newGrid[y].length; x++) {
+                                          if (newGrid[y][x].door && newGrid[y][x].door.id === targetId) {
+                                              if (newGrid[y][x].door!.openSound) {
+                                                  doorSound = newGrid[y][x].door!.openSound;
+                                              }
+                                              newGrid[y][x].door = { 
+                                                  ...newGrid[y][x].door!, 
+                                                  isLocked: false,
+                                                  state: newGrid[y][x].door!.state === 'CLOSED' ? 'OPENING' : newGrid[y][x].door!.state
+                                              };
+                                              doorPos = { x, y };
                                           }
-                                          newGrid[y][x].door = { 
-                                              ...newGrid[y][x].door!, 
-                                              isLocked: false,
-                                              state: newGrid[y][x].door!.state === 'CLOSED' ? 'OPENING' : newGrid[y][x].door!.state
-                                          };
-                                          doorPos = { x, y };
-                                          // Note: if multiple doors share targetId, this pos will just be the last one, which is probably fine.
                                       }
                                   }
                               }
-                          }
-                          if (doorSound) {
-                              if (doorPos) {
-                                  engine.playSound(doorSound, doorPos);
-                              } else {
-                                  engine.playSound(doorSound);
+                              if (doorSound) {
+                                  if (doorPos) {
+                                      engine.playSound(doorSound, doorPos);
+                                  } else {
+                                      engine.playSound(doorSound);
+                                  }
                               }
-                          }
-                          return { ...prev, grid: newGrid };
-                      });
-                      addLog(strings.logs.door_unlocked_electronic || "The door was unlocked electronically.", "SUCCESS");
-                  }}
-              />
-          )}
+                              return { ...prev, grid: newGrid };
+                          });
+                          addLog(strings.logs.door_unlocked_electronic || "The door was unlocked electronically.", "SUCCESS");
+                      }}
+                  />
+              );
+          })()}
           {isLandscape && (
               <>
                   <AchievementNotificationOverlay strings={strings} />
@@ -865,10 +866,10 @@ const GameScreenComponent: React.FC<{ engine: any }> = ({ engine }) => {
            setLookAroundPitch={engine.setLookAroundPitch}
        />
        )}
-       {gameState === GameState.DYING && deathAnimProgress > 0.7 && (
+       {gameState === GameState.DYING && engine.deathAnimProgress > 0.7 && (
            <div 
                className="fixed inset-0 bg-black z-[99999] pointer-events-none" 
-               style={{ opacity: (deathAnimProgress - 0.7) / 0.3 }} 
+               style={{ opacity: (engine.deathAnimProgress - 0.7) / 0.3 }} 
            />
        )}
        
@@ -997,10 +998,8 @@ export const GameScreen = React.memo(GameScreenComponent, (prevProps, nextProps)
     if (prev.settings !== next.settings) return false;
     if (prev.strings !== next.strings) return false;
     if (prev.lootData !== next.lootData) return false;
-    if (prev.enemies !== next.enemies) return false;
     if (prev.activeCombatEnemies !== next.activeCombatEnemies) return false;
     if (prev.lootAnims !== next.lootAnims) return false;
-    if (prev.boxMoveAnims !== next.boxMoveAnims) return false;
     if (prev.currentHighlightedTiles !== next.currentHighlightedTiles) return false;
     if (prev.escapeDirection !== next.escapeDirection) return false;
     if (prev.cinematicCamera !== next.cinematicCamera) return false;

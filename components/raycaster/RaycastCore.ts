@@ -1,6 +1,7 @@
 
 import { Tile } from '../../types';
 import { calculateHingeIntersection, calculateSlideIntersection } from './DoorUtils';
+import { invalidateLightingSolidMapCache } from './Lighting';
 import { PassThroughDoor, PassThroughWall } from './RaycasterTypes';
 import { isFogWeather } from './DepthEffect';
 
@@ -259,6 +260,58 @@ export const getRenderableWallLayersCache = (grid: Tile[][], grids: Tile[][][]):
     return cache;
 };
 
+// --- EXPOSED CAP CACHE ---
+// Static per-cell bitmask of wall layers whose underside is not covered by any
+// solid lower wall. This is computed when level geometry changes, never per ray.
+let exposedCapLayersCache = new WeakMap<Tile[][], Uint32Array>();
+
+const getExposedCapLayersCache = (grid: Tile[][], grids: Tile[][][]): Uint32Array => {
+    const cached = exposedCapLayersCache.get(grid);
+    if (cached) return cached;
+
+    const mapHeight = grid.length;
+    const mapWidth = grid[0]?.length || 0;
+    const activeGrids = grids || [grid];
+    const result = new Uint32Array(mapWidth * mapHeight);
+    const layerCount = Math.min(activeGrids.length, 31);
+
+    for (let y = 0; y < mapHeight; y++) {
+        for (let x = 0; x < mapWidth; x++) {
+            let mask = 0;
+            for (let layer = 0; layer < layerCount; layer++) {
+                const tile = activeGrids[layer]?.[y]?.[x];
+                if (!tile || tile.type !== 'WALL' || tile.isWindow) continue;
+
+                let elev = tile.elevation !== undefined ? tile.elevation : 0;
+                let h = tile.height !== undefined ? Math.abs(tile.height) : 1.0;
+                if (tile.height !== undefined && tile.height < 0) elev = 1.0 - h;
+                const bottomZ = layer + elev;
+
+                let covered = false;
+                for (let below = layer - 1; below >= 0; below--) {
+                    const lower = activeGrids[below]?.[y]?.[x];
+                    if (!lower || lower.type !== 'WALL' || lower.isWindow) continue;
+
+                    let lowerElev = lower.elevation !== undefined ? lower.elevation : 0;
+                    let lowerH = lower.height !== undefined ? Math.abs(lower.height) : 1.0;
+                    if (lower.height !== undefined && lower.height < 0) lowerElev = 1.0 - lowerH;
+                    const lowerTop = below + lowerElev + lowerH;
+                    if (lowerTop >= bottomZ - 0.001) {
+                        covered = true;
+                        break;
+                    }
+                }
+
+                if (!covered) mask |= (1 << layer);
+            }
+            result[y * mapWidth + x] = mask;
+        }
+    }
+
+    exposedCapLayersCache.set(grid, result);
+    return result;
+};
+
 // --- SOLID SEGMENTS CACHE (for occlusion calculation in RaycastCore.ts) ---
 let solidWallLayersCache = new WeakMap<Tile[][], PrecalculatedSolidLayer[][][]>();
 
@@ -362,7 +415,9 @@ export const clearRaycastCache = () => {
     flatObstacleCache = new WeakMap<Tile[][], Uint8Array>();
     upperGeometryLayersCache = new WeakMap<Tile[][], PrecalculatedUpperLayer[][][]>();
     renderableWallLayersCache = new WeakMap<Tile[][], number[][][]>();
+    exposedCapLayersCache = new WeakMap<Tile[][], Uint32Array>();
     solidWallLayersCache = new WeakMap<Tile[][], PrecalculatedSolidLayer[][][]>();
+    invalidateLightingSolidMapCache();
 };
 
 export const getDistanceField = (grid: Tile[][], grids: Tile[][][]): Uint8Array[] => {
@@ -491,6 +546,10 @@ export interface RaycastResult {
     hitInsideHinge: boolean;
     geometryHitSide: number;
     hitDepthLimit: boolean;
+    /** Bitmask of wall/floor layers at the hit cell that actually intersected the ray visibility interval. */
+    visibleLayerMask: number;
+    /** Bitmask of exposed bottom-cap layers at the hit cell. */
+    visibleCapMask: number;
 }
 
 const outHit1 = { hit: false, t: Infinity, side: 0, tFar: Infinity, tFarX: Infinity, tFarY: Infinity };
@@ -700,6 +759,7 @@ export const performRaycast = (
     const distanceField = precalcDistanceField || getDistanceField(grid, activeGrids);
     const upperGeometryCache = precalcUpperGeometry || getUpperGeometryLayersCache(grid, activeGrids);
     const solidWallCache = precalcSolidWall || getSolidWallLayersCache(grid, activeGrids);
+    const exposedCapCache = getExposedCapLayersCache(grid, activeGrids);
 
 
     // --- CHECK START TILE FOR DOOR (Visuals inside doorway) ---
@@ -1687,6 +1747,43 @@ export const performRaycast = (
     outResult.isTextureFlipped = isTextureFlipped;
     outResult.hitInsideHinge = hitInsideHinge;
     outResult.geometryHitSide = geometryHitSide;
+
+    // The raycaster already performs interval-based occlusion while traversing
+    // the map. Reuse that information instead of making WallRenderer rescan
+    // every floor at the hit cell. Layer 0 is the primary hit; upper layers
+    // are represented by pass-through walls only when their projected span was
+    // visible at this ray.
+    let visibleLayerMask = 0;
+    let visibleCapMask = 0;
+    if (hit && mapY >= 0 && mapY < mapHeight && mapX >= 0 && mapX < mapWidth) {
+        const baseTile = grid[mapY]?.[mapX];
+        if (baseTile && (baseTile.type === 'WALL' || (baseTile.type === 'FLOOR' && (baseTile.height ?? 0) > 0))) {
+            visibleLayerMask |= 1;
+        }
+        const rayWalls = passThroughWalls[x];
+        if (rayWalls && rayWalls.length) {
+            // passThroughWalls is ordered by ray traversal. Once the hit cell
+            // has been reached, its upper layers are contiguous; stop as soon
+            // as traversal moves beyond that cell instead of scanning the rest
+            // of the ray's pass-through list.
+            let hitCellStarted = false;
+            for (let i = 0; i < rayWalls.length; i++) {
+                const w = rayWalls[i];
+                if (w.mapX === mapX && w.mapY === mapY) {
+                    hitCellStarted = true;
+                    if (w.layer >= 0 && w.layer <= 30) visibleLayerMask |= (1 << w.layer);
+                } else if (hitCellStarted) {
+                    break;
+                }
+            }
+        }
+
+        // Exposure is precomputed per map cell. The per-ray operation is now
+        // just a bitwise intersection with the already visibility-culled layers.
+        visibleCapMask = visibleLayerMask & exposedCapCache[mapY * mapWidth + mapX];
+    }
+    outResult.visibleLayerMask = visibleLayerMask;
+    outResult.visibleCapMask = visibleCapMask;
 
     return outResult;
 };

@@ -13,6 +13,7 @@ interface GameOverlaysProps {
     handleThrowInputWithAnim: (action: string) => void;
     handleInspectInputWithAnim: (action: string) => void;
     throwAnim: any;
+    throwAnimRef?: any;
     combat: any;
     activeCombatEnemies: any;
     enemies: any;
@@ -66,7 +67,7 @@ interface GameOverlaysProps {
 }
 
 const GameOverlays: React.FC<GameOverlaysProps> = ({
-    gameState, strings, handleAimInputWithAnim, handleThrowInputWithAnim, handleInspectInputWithAnim, throwAnim,
+    gameState, strings, handleAimInputWithAnim, handleThrowInputWithAnim, handleInspectInputWithAnim, throwAnim, throwAnimRef,
     combat, activeCombatEnemies, enemies, player, activeWeapon, settings, escapeDirection,
     combatTimerBonus, handlePlayerAttack, handleVisualHit, handleEscapeResult,
     handleReloadResult, handleCombatTimeout, activeModal, showPauseMenu, showSettings,
@@ -140,7 +141,10 @@ const GameOverlays: React.FC<GameOverlaysProps> = ({
                     onTimeout={handleCombatTimeout} 
                     isPaused={(activeModal !== null && activeModal !== 'actions' && activeModal !== 'loot') || showPauseMenu || showSettings || showDebug || showVolume || gameState === GameState.THROWING} 
                     onAttackStart={preparePlayerAttack} 
-                    onFlashImmediate={() => { if(activeWeapon?.muzzleFlash) triggerMuzzleFlash(); }} 
+                    onFlashImmediate={() => { 
+                        const isDelayed = activeWeapon?.muzzleFrame && activeWeapon.muzzleFrame > 1;
+                        if(activeWeapon?.muzzleFlash && !isDelayed) triggerMuzzleFlash(); 
+                    }} 
                     currentAmmo={activeWeapon?.currentAmmo} 
                     magazineMax={activeWeapon?.magazineMax} 
                     akimboAmmo={activeAkimboWeapon?.currentAmmo} 
@@ -159,10 +163,11 @@ const GameOverlays: React.FC<GameOverlaysProps> = ({
                     invertContextButtons={settings?.invertContextButtons}
                 />
             )}
-            {throwAnim && (
+            {(throwAnimRef?.current || throwAnim) && (
                 <ThrowOverlay 
                     player={player} 
                     throwAnim={throwAnim} 
+                    throwAnimRef={throwAnimRef}
                     width={RAYCASTER_WIDTH} 
                     height={RAYCASTER_HEIGHT} 
                     sprites={spriteMap} 

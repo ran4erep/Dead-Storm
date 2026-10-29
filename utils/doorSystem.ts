@@ -213,10 +213,15 @@ export const resolveDoorInteraction = (
     }
 
     if (door.keyId && (door.state === 'CLOSED' || door.state === 'CLOSING')) {
-        const keyItem = inventory.find(i => i.type === 'KEY' && i.keyId === door.keyId);
+        // Find matching item in inventory (by item id, definitionId, or keyId)
+        // Item type does not matter - any item defined as the key requirement will unlock the door.
+        const keyItem = inventory.find(i => 
+            i.id === door.keyId || 
+            i.definitionId === door.keyId || 
+            (i.keyId && i.keyId === door.keyId)
+        );
         
         if (keyItem) {
-            const isHinge = door.type === 'HINGE';
             const openSound = door.openSound;
 
             return {
@@ -226,10 +231,19 @@ export const resolveDoorInteraction = (
                 secondarySound: openSound,
                 keyToConsume: keyItem,
                 shouldUnlock: true,
-                nextState: 'OPENING' // Unlock usually opens the door
+                nextState: 'OPENING'
             };
         } else {
-            const requiredKeyName = (keyMap && keyMap[door.keyId]) ? keyMap[door.keyId] : door.keyId;
+            let requiredKeyName = (keyMap && keyMap[door.keyId]) ? keyMap[door.keyId] : '';
+            if (!requiredKeyName) {
+                if (door.keyId.includes('/')) {
+                    const parts = door.keyId.split('/');
+                    requiredKeyName = parts[0].trim();
+                } else {
+                    requiredKeyName = door.keyId;
+                }
+            }
+
             return {
                 action: 'LOCKED',
                 message: t(strings.logs.key_needed, { key: requiredKeyName }),

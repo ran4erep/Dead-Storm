@@ -10,6 +10,7 @@ import PauseMenu from './PauseMenu';
 import SettingsModal from './SettingsModal';
 import SaveModal from './SaveModal';
 import LoadModal from './LoadModal';
+import ChessModal from './ChessModal';
 import { GameState } from '../types';
 
 interface GameModalsProps {
@@ -74,7 +75,7 @@ const GameModals: React.FC<GameModalsProps> = ({
     const frontTilePos = player ? getFrontTile(player.pos.x, player.pos.y, player.dir) : null;
     const frontTile = frontTilePos && levelData?.grid ? levelData.grid[frontTilePos.y]?.[frontTilePos.x] : null;
 
-    const handledModals = ['actions', 'loot', 'stats', 'inventory', 'equipment', 'location', 'crafting', 'save', 'load', 'inspect'];
+    const handledModals = ['actions', 'loot', 'stats', 'inventory', 'equipment', 'location', 'crafting', 'save', 'load', 'inspect', 'chess'];
     const hasAnyModal = (activeModal && handledModals.includes(activeModal)) || showPauseMenu || showSettings || showDebug || showVolume;
 
     if (!hasAnyModal) return null;
@@ -174,7 +175,7 @@ const GameModals: React.FC<GameModalsProps> = ({
                     onClose={() => toggleModal(null)} 
                     onEquip={(item, feedback) => inventorySys.handleEquipItem(item, feedback)} 
                     onUse={(item, feedback) => inventorySys.handleInventoryAction(item, 'USE', throwingSys.initiateThrow, feedback)} 
-                    onThrow={(item, count) => inventorySys.handleInventoryAction(item, 'THROW', throwingSys.initiateThrow, undefined, count)} 
+                    onThrow={(item, count, isSafe) => inventorySys.handleInventoryAction(item, 'THROW', throwingSys.initiateThrow, undefined, count, isSafe)} 
                     onUnload={(item, feedback) => inventorySys.handleUnloadAction(item, feedback)} 
                     onExtractBattery={(item, feedback, selectedBatteryId) => inventorySys.handleExtractBattery(item, feedback, selectedBatteryId)}
                     onPreCheckC4={() => inventorySys.canPlantC4()}
@@ -193,7 +194,7 @@ const GameModals: React.FC<GameModalsProps> = ({
                     onClose={() => toggleModal(null)} 
                     onEquip={(item, feedback) => inventorySys.handleEquipItem(item, feedback)} 
                     onUnequip={(item, feedback) => inventorySys.handleUnequipItem(item, feedback)} 
-                    onThrow={(item, count) => inventorySys.handleInventoryAction(item, 'THROW', throwingSys.initiateThrow, undefined, count)} 
+                    onThrow={(item, count, isSafe) => inventorySys.handleInventoryAction(item, 'THROW', throwingSys.initiateThrow, undefined, count, isSafe)} 
                     onUnload={(item, feedback) => inventorySys.handleUnloadAction(item, feedback)} 
                     onExtractBattery={(item, feedback, selectedBatteryId) => inventorySys.handleExtractBattery(item, feedback, selectedBatteryId)}
                 />
@@ -306,6 +307,13 @@ const GameModals: React.FC<GameModalsProps> = ({
                         </button>
                     </div>
                 </div>
+            )}
+            {activeModal === 'chess' && (
+                <ChessModal 
+                    onClose={() => setActiveModal(null)} 
+                    playSound={playSound} 
+                    strings={strings} 
+                />
             )}
         </div>
     );

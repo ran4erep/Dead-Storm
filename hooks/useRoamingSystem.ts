@@ -14,14 +14,16 @@ export const useRoamingSystem = (
     setEnemies: React.Dispatch<React.SetStateAction<Map<string, Enemy>>>,
     player: Player,
     isCombatActive: boolean,
-    setRoamingAnims: React.Dispatch<React.SetStateAction<RoamingEnemyAnim[]>>,
-    roamingAnims: RoamingEnemyAnim[],
-    activeCombatEnemyIds: Set<string>, 
+    setRoamingAnims: (anims: RoamingEnemyAnim[] | ((prev: RoamingEnemyAnim[]) => RoamingEnemyAnim[])) => void,
+    roamingAnims?: RoamingEnemyAnim[],
+    activeCombatEnemyIds?: Set<string>, 
     aiEnabled: boolean = true,
     onEnemyJoinCombat?: (enemyIds: string[]) => void,
     onEnemyStep?: (enemyId: string, x: number, y: number, stepIndex?: number, totalSteps?: number) => void, // NEW CALLBACK
-    playSound?: (soundId: string, options?: any) => void
+    playSound?: (soundId: string, options?: any) => void,
+    enemiesStateRef?: React.MutableRefObject<Map<string, Enemy>>
 ) => {
+    const liveEnemies = enemiesStateRef?.current || enemies;
     const enemyPositionsCacheRef = React.useRef<Map<string, { x: number, y: number }>>(new Map());
     const lastCachedGridRef = React.useRef<Tile[][] | null>(null);
 
@@ -56,9 +58,10 @@ export const useRoamingSystem = (
 
     // --- INITIALIZATION: Pre-calculate paths on level load ---
     useEffect(() => {
-        if (!levelData || !aiEnabled || enemies.size === 0) return;
+        const curEnemies = enemiesStateRef?.current || enemies;
+        if (!levelData || !aiEnabled || !curEnemies || curEnemies.size === 0) return;
 
-        const needsInit = Array.from(enemies.values()).some(e => !e.targetPos && !e.currentPath && e.movementType !== 'patroling');
+        const needsInit = Array.from(curEnemies.values()).some((e: Enemy) => !e.targetPos && !e.currentPath && e.movementType !== 'patroling');
         // Only run if we detect fresh enemies without plans (and we are not in combat)
         if (!needsInit || isCombatActive) return;
 
@@ -69,8 +72,8 @@ export const useRoamingSystem = (
 
         const enemyPositionsOnLoad = getEnemyPositions(grid, width, height);
 
-        enemies.forEach((e) => {
-            if (activeCombatEnemyIds.has(e.id)) return;
+        curEnemies.forEach((e) => {
+            if (activeCombatEnemyIds.has(e.id) || e.isNPC) return;
             // Find position
             const pos = enemyPositionsOnLoad.get(e.id);
             if (!pos) return;
@@ -110,7 +113,8 @@ export const useRoamingSystem = (
 
     // MODIFIED: Accepts gridOverride to handle race conditions where state hasn't updated yet (e.g. Door Opening)
     const triggerRoamingTurn = useCallback((playerPosOverride?: {x: number, y: number}, gridOverride?: Tile[][]) => {
-        if (!levelData || !aiEnabled || enemies.size === 0) return undefined;
+        const curEnemies = enemiesStateRef?.current || enemies;
+        if (!levelData || !aiEnabled || curEnemies.size === 0) return undefined;
 
         const targetPlayerPos = playerPosOverride || player.pos;
         const prevLevel = levelData;
@@ -181,10 +185,8 @@ export const useRoamingSystem = (
 
                 const enemy = enemies.get(eid);
                 if (!activeCombatEnemyIds.has(eid)) {
-                    if (enemy && enemy.isNPC) {
-                        if ((enemy.patrolRange && enemy.patrolRange > 0) || enemy.aiState === 'SCRIPT_MOVE') {
-                            activeNPCs.push({ npc: enemy, x: pos.x, y: pos.y });
-                        }
+                    if (enemy && (enemy.isNPC || enemy.aiState === 'NPC_FOLLOW')) {
+                        activeNPCs.push({ npc: enemy, x: pos.x, y: pos.y });
                     } else {
                         activeEnemies.push(enemyPos);
                     }
@@ -259,9 +261,10 @@ export const useRoamingSystem = (
 
                     if (currentX === targetPos?.x && currentY === targetPos?.y) {
                         updateEnemyState({
-                            aiState: enemy.originalAiState || (enemy.isNPC ? 'IDLE' : 'IDLE'),
+                            aiState: enemy.originalAiState || (enemy.isNPC ? 'PATROL' : 'IDLE'),
                             movementType: enemy.originalMovementType || (enemy.isNPC ? 'patroling' : 'roaming'),
-                            homePos: enemy.originalHomePos || enemy.homePos,
+                            homePos: { x: currentX, y: currentY },
+                            patrolRange: (enemy.patrolRange && enemy.patrolRange > 0) ? enemy.patrolRange : 3,
                             targetPos: undefined,
                             currentPath: undefined,
                             originalAiState: undefined,
@@ -273,10 +276,43 @@ export const useRoamingSystem = (
                         return;
                     }
 
-                    if ((!currentPath || currentPath.length === 0) && targetPos) {
-                        currentPath = findPath(currentX, currentY, targetPos.x, targetPos.y, sourceGrid, width, height, reservedTiles, undefined, pathfindingBudget, enemy.canOpenDoors);
-                        if (currentPath && currentPath.length > 0) {
-                            updateEnemyState({ currentPath });
+                    // Check if path is empty OR if the next step is blocked by an obstacle (player, entity, closed door)
+                    let pathNeedsRecalc = !currentPath || currentPath.length === 0;
+
+                    if (!pathNeedsRecalc && currentPath && currentPath.length > 0) {
+                        const nextStep = currentPath[0];
+                        const nextKey = `${nextStep.x},${nextStep.y}`;
+                        const isReserved = reservedTiles.has(nextKey);
+                        const tile = newGrid[nextStep.y]?.[nextStep.x];
+                        const isBlockedByDoor = tile && tile.type === 'DOOR' && tile.door?.state !== 'OPEN';
+                        const isBlockedByPlayer = Math.round(targetPlayerPos.x) === nextStep.x && Math.round(targetPlayerPos.y) === nextStep.y;
+                        const canOpenThisDoor = tile && tile.type === 'DOOR' && (tile.door?.state === 'CLOSED' || tile.door?.state === 'CLOSING') && 
+                                               enemy.canOpenDoors && tile && tile.door && 
+                                               !tile.door.isLocked && !tile.door.closed && !tile.door.keyId && 
+                                               tile.door.state !== 'OPENING';
+
+                        if (isReserved || isBlockedByPlayer || (isBlockedByDoor && !canOpenThisDoor)) {
+                            pathNeedsRecalc = true;
+                        }
+                    }
+
+                    if (pathNeedsRecalc && targetPos) {
+                        const newPath = findPath(
+                            currentX, currentY,
+                            targetPos.x, targetPos.y,
+                            sourceGrid, width, height,
+                            reservedTiles,
+                            { x: targetPlayerPos.x, y: targetPlayerPos.y },
+                            pathfindingBudget,
+                            enemy.canOpenDoors
+                        );
+
+                        if (newPath && newPath.length > 0) {
+                            currentPath = newPath;
+                            updateEnemyState({ currentPath: newPath });
+                        } else {
+                            currentPath = [];
+                            updateEnemyState({ currentPath: [] });
                         }
                     }
 
@@ -332,6 +368,308 @@ export const useRoamingSystem = (
                         }
                     }
 
+                    // Smart Local Avoidance Fallback:
+                    // If blocked in narrow bottleneck and no full path around, try adjacent unreserved neighbor towards targetPos
+                    if (!stepMoved && targetPos) {
+                        const dirs = [{dx:0,dy:1},{dx:0,dy:-1},{dx:1,dy:0},{dx:-1,dy:0}];
+                        for (let i = dirs.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+                        }
+
+                        let bestNeighbor: {x: number, y: number} | null = null;
+                        let minDistToTarget = Math.abs(currentX - targetPos.x) + Math.abs(currentY - targetPos.y);
+
+                        for (const d of dirs) {
+                            const nx = currentX + d.dx;
+                            const ny = currentY + d.dy;
+                            const nKey = `${nx},${ny}`;
+                            
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height && !reservedTiles.has(nKey) && (nx !== Math.round(targetPlayerPos.x) || ny !== Math.round(targetPlayerPos.y))) {
+                                const nTile = sourceGrid[ny]?.[nx];
+                                if (nTile && nTile.type !== 'WALL' && !(nTile.type === 'DOOR' && nTile.door?.state !== 'OPEN') && !(nTile.decoration && nTile.decoration.blocking) && !(nTile.items && nTile.items.some((i: any) => i.blocking)) && !newGrid[ny]?.[nx]?.enemyId) {
+                                    const dist = Math.abs(nx - targetPos.x) + Math.abs(ny - targetPos.y);
+                                    if (dist < minDistToTarget) {
+                                        minDistToTarget = dist;
+                                        bestNeighbor = { x: nx, y: ny };
+                                    }
+                                }
+                            }
+                        }
+
+                        if (bestNeighbor) {
+                            const nextKey = `${bestNeighbor.x},${bestNeighbor.y}`;
+                            updateTile(currentY, currentX, t => t.enemyId = undefined);
+                            updateTile(bestNeighbor.y, bestNeighbor.x, t => t.enemyId = enemyId);
+                            hasGridChanges = true;
+                            reservedTiles.add(nextKey);
+
+                            const enemyIdx = allEnemies.findIndex(e => e.id === enemyId);
+                            if (enemyIdx !== -1) {
+                                allEnemies[enemyIdx].x = bestNeighbor.x;
+                                allEnemies[enemyIdx].y = bestNeighbor.y;
+                            }
+
+                            stepMoved = true;
+                            nextX = bestNeighbor.x;
+                            nextY = bestNeighbor.y;
+                            updateEnemyState({ currentPath: [] });
+                        } else {
+                            reservedTiles.add(currentKey);
+                        }
+                    }
+
+                    if (stepMoved) {
+                        if (onEnemyStep) onEnemyStep(enemyId, nextX, nextY, action, state.speed);
+                        if (Math.abs(currentX - targetPlayerPos.x) < 20 && Math.abs(currentY - targetPlayerPos.y) < 20) {
+                            const stepDuration = 300 / state.speed;
+                            newAnims.push({
+                                id: enemyId,
+                                startX: currentX, startY: currentY,
+                                endX: nextX, endY: nextY,
+                                startTime: now + (action * stepDuration),
+                                duration: stepDuration
+                            });
+                        }
+                    }
+
+                    state.currentX = nextX;
+                    state.currentY = nextY;
+
+                    if (nextX === targetPos?.x && nextY === targetPos?.y) {
+                        updateEnemyState({
+                            aiState: enemy.originalAiState || (enemy.isNPC ? 'IDLE' : 'IDLE'),
+                            movementType: enemy.originalMovementType || (enemy.isNPC ? 'patroling' : 'roaming'),
+                            homePos: enemy.originalHomePos || enemy.homePos,
+                            targetPos: undefined,
+                            currentPath: undefined,
+                            originalAiState: undefined,
+                            originalMovementType: undefined,
+                            originalHomePos: undefined,
+                        });
+                    }
+
+                    state.finished = true;
+                    return;
+                }
+
+                if (currentState === 'NPC_FOLLOW') {
+                    const currentKey = `${currentX},${currentY}`;
+                    reservedTiles.delete(currentKey);
+
+                    const mode = pendingUpdates.followMode || enemy.followMode || 'NPC_FOLLOWS_PLAYER';
+                    const targetPos = pendingUpdates.targetPos || enemy.targetPos;
+                    let currentPath = pendingUpdates.currentPath !== undefined ? pendingUpdates.currentPath : enemy.currentPath;
+
+                    if (mode === 'STOP') {
+                        updateEnemyState({
+                            aiState: enemy.originalAiState || (enemy.isNPC ? 'PATROL' : 'IDLE'),
+                            movementType: enemy.originalMovementType || (enemy.isNPC ? 'patroling' : 'roaming'),
+                            homePos: { x: currentX, y: currentY },
+                            patrolRange: (enemy.patrolRange && enemy.patrolRange > 0) ? enemy.patrolRange : 3,
+                            targetPos: undefined,
+                            currentPath: undefined,
+                            followMode: undefined,
+                            followMaxDistance: undefined,
+                            originalAiState: undefined,
+                            originalMovementType: undefined,
+                            originalHomePos: undefined,
+                        });
+                        reservedTiles.add(currentKey);
+                        state.finished = true;
+                        return;
+                    }
+
+                    const playerX = Math.round(targetPlayerPos.x);
+                    const playerY = Math.round(targetPlayerPos.y);
+
+                    if (mode === 'NPC_FOLLOWS_PLAYER') {
+                        const dx = playerX - currentX;
+                        const dy = playerY - currentY;
+                        const distSqToPlayer = dx * dx + dy * dy;
+
+                        // If already adjacent to or on player tile (distSq <= 2), stay in place
+                        if (distSqToPlayer <= 2) {
+                            reservedTiles.add(currentKey);
+                            state.finished = true;
+                            return;
+                        }
+
+                        // Refresh path if empty, destination not near player, OR next step is blocked
+                        const lastStep = currentPath && currentPath.length > 0 ? currentPath[currentPath.length - 1] : null;
+                        let pathNeedsRefresh = !currentPath || currentPath.length === 0 || (lastStep && ((lastStep.x - playerX)**2 + (lastStep.y - playerY)**2 > 2));
+
+                        if (!pathNeedsRefresh && currentPath && currentPath.length > 0) {
+                            const nextStep = currentPath[0];
+                            const nextKey = `${nextStep.x},${nextStep.y}`;
+                            if (reservedTiles.has(nextKey) || (playerX === nextStep.x && playerY === nextStep.y)) {
+                                pathNeedsRefresh = true;
+                            }
+                        }
+
+                        if (pathNeedsRefresh) {
+                            currentPath = findPath(currentX, currentY, playerX, playerY, sourceGrid, width, height, reservedTiles, { x: playerX, y: playerY }, pathfindingBudget, enemy.canOpenDoors);
+                            if (currentPath && currentPath.length > 0) {
+                                if (currentPath[currentPath.length - 1].x === playerX && currentPath[currentPath.length - 1].y === playerY) {
+                                    currentPath = currentPath.slice(0, currentPath.length - 1);
+                                }
+                                updateEnemyState({ currentPath });
+                            }
+                        }
+                    } else if (mode === 'PLAYER_FOLLOWS_NPC') {
+                        if (targetPos && currentX === targetPos.x && currentY === targetPos.y) {
+                            updateEnemyState({
+                                aiState: enemy.originalAiState || (enemy.isNPC ? 'PATROL' : 'IDLE'),
+                                movementType: enemy.originalMovementType || (enemy.isNPC ? 'patroling' : 'roaming'),
+                                homePos: { x: currentX, y: currentY },
+                                patrolRange: (enemy.patrolRange && enemy.patrolRange > 0) ? enemy.patrolRange : 3,
+                                targetPos: undefined,
+                                currentPath: undefined,
+                                followMode: undefined,
+                                followMaxDistance: undefined,
+                                originalAiState: undefined,
+                                originalMovementType: undefined,
+                                originalHomePos: undefined,
+                            });
+                            reservedTiles.add(currentKey);
+                            state.finished = true;
+                            return;
+                        }
+
+                        const distSqToPlayer = (currentX - playerX)**2 + (currentY - playerY)**2;
+                        const maxDist = pendingUpdates.followMaxDistance || enemy.followMaxDistance || 4;
+
+                        // If player is too far away, NPC waits
+                        if (distSqToPlayer > maxDist * maxDist) {
+                            reservedTiles.add(currentKey);
+                            state.finished = true;
+                            return;
+                        }
+
+                        let pathNeedsRefresh = !currentPath || currentPath.length === 0;
+                        if (!pathNeedsRefresh && currentPath && currentPath.length > 0) {
+                            const nextStep = currentPath[0];
+                            const nextKey = `${nextStep.x},${nextStep.y}`;
+                            if (reservedTiles.has(nextKey) || (playerX === nextStep.x && playerY === nextStep.y)) {
+                                pathNeedsRefresh = true;
+                            }
+                        }
+
+                        if (pathNeedsRefresh && targetPos) {
+                            currentPath = findPath(currentX, currentY, targetPos.x, targetPos.y, sourceGrid, width, height, reservedTiles, { x: playerX, y: playerY }, pathfindingBudget, enemy.canOpenDoors);
+                            if (currentPath && currentPath.length > 0) {
+                                updateEnemyState({ currentPath });
+                            }
+                        }
+                    }
+
+                    let nextX = currentX;
+                    let nextY = currentY;
+                    let stepMoved = false;
+
+                    if (currentPath && currentPath.length > 0) {
+                        const nextStep = currentPath[0];
+                        const nextKey = `${nextStep.x},${nextStep.y}`;
+                        const isReserved = reservedTiles.has(nextKey);
+                        const tile = newGrid[nextStep.y]?.[nextStep.x];
+                        const isBlockedByDoor = tile && tile.type === 'DOOR' && tile.door?.state !== 'OPEN';
+                        const isBlockedByPlayer = playerX === nextStep.x && playerY === nextStep.y;
+                        const canOpenThisDoor = tile && tile.type === 'DOOR' && (tile.door?.state === 'CLOSED' || tile.door?.state === 'CLOSING') && 
+                                               enemy.canOpenDoors && tile && tile.door && 
+                                               !tile.door.isLocked && !tile.door.closed && !tile.door.keyId && 
+                                               tile.door.state !== 'OPENING';
+
+                        if (!isReserved && !isBlockedByDoor && !isBlockedByPlayer) {
+                            updateTile(currentY, currentX, t => t.enemyId = undefined);
+                            updateTile(nextStep.y, nextStep.x, t => t.enemyId = enemyId);
+                            hasGridChanges = true;
+                            reservedTiles.add(nextKey);
+
+                            const enemyIdx = allEnemies.findIndex(e => e.id === enemyId);
+                            if (enemyIdx !== -1) {
+                                allEnemies[enemyIdx].x = nextStep.x;
+                                allEnemies[enemyIdx].y = nextStep.y;
+                            }
+
+                            stepMoved = true;
+                            nextX = nextStep.x;
+                            nextY = nextStep.y;
+                            updateEnemyState({ currentPath: currentPath.slice(1) });
+                        } else if (canOpenThisDoor) {
+                            updateTile(nextStep.y, nextStep.x, t => {
+                                if (t.door) {
+                                    t.door.state = 'OPENING';
+                                    t.door.progress = 0;
+                                    t.door.lastUpdate = Date.now();
+                                }
+                            });
+                            hasGridChanges = true;
+                            reservedTiles.add(currentKey);
+                            if (playSound) playSound(tile.door?.openSound || 'DOOR_OPEN', { x: nextStep.x, y: nextStep.y });
+                            
+                            updateEnemyState({ currentPath: [], blockedTurns: 0 });
+                            state.currentX = currentX;
+                            state.currentY = currentY;
+                            state.finished = true;
+                            return;
+                        }
+                    }
+
+                    // Local avoidance for NPC_FOLLOW if next step blocked
+                    if (!stepMoved) {
+                        const followTarget = mode === 'NPC_FOLLOWS_PLAYER' ? { x: playerX, y: playerY } : targetPos;
+                        if (followTarget) {
+                            const dirs = [{dx:0,dy:1},{dx:0,dy:-1},{dx:1,dy:0},{dx:-1,dy:0}];
+                            for (let i = dirs.length - 1; i > 0; i--) {
+                                const j = Math.floor(Math.random() * (i + 1));
+                                [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+                            }
+
+                            let bestNeighbor: {x: number, y: number} | null = null;
+                            let minDistToTarget = Math.abs(currentX - followTarget.x) + Math.abs(currentY - followTarget.y);
+
+                            for (const d of dirs) {
+                                const nx = currentX + d.dx;
+                                const ny = currentY + d.dy;
+                                const nKey = `${nx},${ny}`;
+                                
+                                if (nx >= 0 && nx < width && ny >= 0 && ny < height && !reservedTiles.has(nKey) && (nx !== playerX || ny !== playerY)) {
+                                    const nTile = sourceGrid[ny]?.[nx];
+                                    if (nTile && nTile.type !== 'WALL' && !(nTile.type === 'DOOR' && nTile.door?.state !== 'OPEN') && !(nTile.decoration && nTile.decoration.blocking) && !(nTile.items && nTile.items.some((i: any) => i.blocking)) && !newGrid[ny]?.[nx]?.enemyId) {
+                                        const dist = Math.abs(nx - followTarget.x) + Math.abs(ny - followTarget.y);
+                                        if (dist < minDistToTarget) {
+                                            minDistToTarget = dist;
+                                            bestNeighbor = { x: nx, y: ny };
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (bestNeighbor) {
+                                const nextKey = `${bestNeighbor.x},${bestNeighbor.y}`;
+                                updateTile(currentY, currentX, t => t.enemyId = undefined);
+                                updateTile(bestNeighbor.y, bestNeighbor.x, t => t.enemyId = enemyId);
+                                hasGridChanges = true;
+                                reservedTiles.add(nextKey);
+
+                                const enemyIdx = allEnemies.findIndex(e => e.id === enemyId);
+                                if (enemyIdx !== -1) {
+                                    allEnemies[enemyIdx].x = bestNeighbor.x;
+                                    allEnemies[enemyIdx].y = bestNeighbor.y;
+                                }
+
+                                stepMoved = true;
+                                nextX = bestNeighbor.x;
+                                nextY = bestNeighbor.y;
+                                updateEnemyState({ currentPath: [] });
+                            } else {
+                                reservedTiles.add(currentKey);
+                            }
+                        } else {
+                            reservedTiles.add(currentKey);
+                        }
+                    }
+
                     if (stepMoved) {
                         if (onEnemyStep) onEnemyStep(enemyId, nextX, nextY, action, state.speed);
                         if (Math.abs(currentX - targetPlayerPos.x) < 20 && Math.abs(currentY - targetPlayerPos.y) < 20) {
@@ -351,13 +689,15 @@ export const useRoamingSystem = (
                     state.currentX = nextX;
                     state.currentY = nextY;
 
-                    if (nextX === targetPos?.x && nextY === targetPos?.y) {
+                    if (mode === 'PLAYER_FOLLOWS_NPC' && targetPos && nextX === targetPos.x && nextY === targetPos.y) {
                         updateEnemyState({
-                            aiState: enemy.originalAiState || (enemy.isNPC ? 'IDLE' : 'IDLE'),
+                            aiState: enemy.originalAiState || 'IDLE',
                             movementType: enemy.originalMovementType || (enemy.isNPC ? 'patroling' : 'roaming'),
                             homePos: enemy.originalHomePos || enemy.homePos,
                             targetPos: undefined,
                             currentPath: undefined,
+                            followMode: undefined,
+                            followMaxDistance: undefined,
                             originalAiState: undefined,
                             originalMovementType: undefined,
                             originalHomePos: undefined,
@@ -808,7 +1148,9 @@ export const useRoamingSystem = (
                                     const isWall = tile.type === 'WALL';
                                     const isPortal = false;
                                     const isClosedDoor = tile.type === 'DOOR' && tile.door?.state !== 'OPEN';
-                                    const isBlockingDeco = tile.decoration && tile.decoration.blocking;
+                                    const isBlockingDeco = tile.decorations && tile.decorations.length > 0
+                                        ? tile.decorations.some((d: any) => d.blocking)
+                                        : !!(tile.decoration && tile.decoration.blocking);
                                     const isBlockingItem = tile.items && tile.items.some((it: any) => it.blocking);
                                     const isReserved = reservedTiles.has(nextKey);
                                     const hasOtherEnemy = (newGrid[ny]?.[nx]?.enemyId !== undefined) || (sourceGrid[ny]?.[nx]?.enemyId !== undefined);
@@ -971,11 +1313,31 @@ export const useRoamingSystem = (
                     const currentKey = `${x},${y}`;
                     reservedTiles.delete(currentKey);
 
+                    // OPTIMIZATION: If NPC is far from player (>20 tiles) and not in SCRIPT_MOVE, skip roaming step
+                    // to prevent unnecessary grid cloning and React state re-renders for offscreen NPCs.
+                    const distSqToPlayer = (x - targetPlayerPos.x)**2 + (y - targetPlayerPos.y)**2;
+                    if (distSqToPlayer > 400 && npc.aiState !== 'SCRIPT_MOVE' && npc.aiState !== 'NPC_FOLLOW') {
+                        reservedTiles.add(currentKey);
+                        state.finished = true;
+                        return;
+                    }
+
                     if (Math.random() > 0.5) {
                         const dirs = [{dx:0,dy:1},{dx:0,dy:-1},{dx:1,dy:0},{dx:-1,dy:0}];
                         for (let i = dirs.length - 1; i > 0; i--) {
                             const j = Math.floor(Math.random() * (i + 1));
                             [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+                        }
+
+                        let hx = npc.homePos?.x ?? x;
+                        let hy = npc.homePos?.y ?? y;
+                        const range = (npc.patrolRange && npc.patrolRange > 0) ? npc.patrolRange : 3;
+
+                        // Ensure homePos is near current position so NPC doesn't freeze if moved far away by script/follow
+                        if (!npc.homePos || ((x - hx)**2 + (y - hy)**2 > range * range)) {
+                            hx = x;
+                            hy = y;
+                            updateEnemyState({ homePos: { x: hx, y: hy } });
                         }
 
                         let moved = false;
@@ -987,11 +1349,12 @@ export const useRoamingSystem = (
                             if (!reservedTiles.has(nextKey) && nx >= 0 && nx < width && ny >= 0 && ny < height) {
                                 const tile = sourceGrid[ny][nx];
                                 const newTile = newGrid[ny][nx];
-                                if (tile.type !== 'WALL' && !(tile.type === 'DOOR' && tile.door?.state !== 'OPEN') && !(tile.decoration && tile.decoration.blocking) && !(tile.items && tile.items.some((i: any) => i.blocking)) && !newTile.enemyId) {
-                                    const hx = npc.homePos?.x ?? x;
-                                    const hy = npc.homePos?.y ?? y;
+                                const isTileDecoBlocking = tile.decorations && tile.decorations.length > 0
+                                    ? tile.decorations.some((d: any) => d.blocking)
+                                    : !!(tile.decoration && tile.decoration.blocking);
+                                if (tile.type !== 'WALL' && !(tile.type === 'DOOR' && tile.door?.state !== 'OPEN') && !isTileDecoBlocking && !(tile.items && tile.items.some((i: any) => i.blocking)) && !newTile.enemyId) {
                                     const distSq = (nx - hx)**2 + (ny - hy)**2;
-                                    if (distSq <= (npc.patrolRange! * npc.patrolRange!)) {
+                                    if (distSq <= (range * range)) {
                                         updateTile(y, x, t => t.enemyId = undefined);
                                         updateTile(ny, nx, t => t.enemyId = npc.id);
                                         hasGridChanges = true;
@@ -999,6 +1362,8 @@ export const useRoamingSystem = (
                                         moved = true;
                                         state.currentX = nx;
                                         state.currentY = ny;
+                                        
+                                        if (onEnemyStep) onEnemyStep(npc.id, nx, ny, action, state.speed);
                                         
                                         if (Math.abs(x - targetPlayerPos.x) < 20 && Math.abs(y - targetPlayerPos.y) < 20) {
                                             const stepDuration = 300 / state.speed;
@@ -1119,7 +1484,7 @@ export const useRoamingSystem = (
 
         return sourceGrid;
 
-    }, [levelData, player.pos.x, player.pos.y, setLevelData, setRoamingAnims, roamingAnims, enemies, setEnemies, aiEnabled, activeCombatEnemyIds, onEnemyJoinCombat, isCombatActive, onEnemyStep, playSound]);
+    }, [levelData, player.pos.x, player.pos.y, setLevelData, setRoamingAnims, setEnemies, aiEnabled, activeCombatEnemyIds, onEnemyJoinCombat, isCombatActive, onEnemyStep, playSound]);
 
     return { triggerRoamingTurn };
 };

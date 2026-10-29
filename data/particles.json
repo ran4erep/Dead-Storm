@@ -17,6 +17,30 @@
     "spawnRate": 40,
     "zOffset": 0.0
   },
+  "steam_emitter": {
+    "id": "steam_emitter",
+    "name": "Пар над люком (Steam)",
+    "colors": [
+      "rgba(180, 185, 195, 0.22)",
+      "rgba(165, 172, 182, 0.16)",
+      "rgba(150, 158, 168, 0.10)",
+      "rgba(135, 142, 150, 0.02)"
+    ],
+    "startSize": 2.6,
+    "sizeGrowth": 1.01,
+    "life": 2.2,
+    "maxLife": 3.2,
+    "speedXMin": -0.004,
+    "speedXMax": 0.004,
+    "speedYMin": -0.004,
+    "speedYMax": 0.004,
+    "speedZMin": 0.001,
+    "speedZMax": 0.0025,
+    "gravity": -0.0001,
+    "friction": 0.975,
+    "spawnRate": 12,
+    "zOffset": 0.02
+  },
   "smoke_emitter": {
     "id": "smoke_emitter",
     "name": "Smoke",

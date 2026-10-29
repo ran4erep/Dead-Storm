@@ -136,23 +136,39 @@ export const useAssetLoader = (settings: Settings) => {
                 setDecorationsDb(loadedDecor);
                 setParticlesDb(loadedParticles || {});
 
-                // PRELOAD ALL WEAPONS AND WEAPON ATTACK FRAMES ON STARTUP
+                // PRELOAD ALL WEAPONS, THROWABLES AND ATTACK/THROW ANIMATION FRAMES ON STARTUP
                 if (fetchedItems) {
                     const keysToLoad = new Set<string>();
                     Object.values(fetchedItems).forEach((item: any) => {
-                        if (item && (item.type === 'WEAPON' || item.equip === 'WEAPON')) {
-                            if (item.handAsset) keysToLoad.add(item.handAsset);
-                            if (item.handFemaleAsset) keysToLoad.add(item.handFemaleAsset);
-                            if (item.attackAsset) {
-                                keysToLoad.add(item.attackAsset);
-                                const animData = (animationsData as any)[item.attackAsset];
+                        if (item) {
+                            if (item.type === 'WEAPON' || item.equip === 'WEAPON') {
+                                if (item.handAsset) keysToLoad.add(item.handAsset);
+                                if (item.handFemaleAsset) keysToLoad.add(item.handFemaleAsset);
+                                if (item.attackAsset) {
+                                    keysToLoad.add(item.attackAsset);
+                                    const animData = (animationsData as any)[item.attackAsset];
+                                    if (animData && animData.frames) {
+                                        animData.frames.forEach((f: string) => keysToLoad.add(f));
+                                    }
+                                }
+                                if (item.attackAssetFemale) {
+                                    keysToLoad.add(item.attackAssetFemale);
+                                    const animData = (animationsData as any)[item.attackAssetFemale];
+                                    if (animData && animData.frames) {
+                                        animData.frames.forEach((f: string) => keysToLoad.add(f));
+                                    }
+                                }
+                            }
+                            if (item.throwId) {
+                                keysToLoad.add(item.throwId);
+                                const animData = (animationsData as any)[item.throwId];
                                 if (animData && animData.frames) {
                                     animData.frames.forEach((f: string) => keysToLoad.add(f));
                                 }
                             }
-                            if (item.attackAssetFemale) {
-                                keysToLoad.add(item.attackAssetFemale);
-                                const animData = (animationsData as any)[item.attackAssetFemale];
+                            if (item.wallAssetId) {
+                                keysToLoad.add(item.wallAssetId);
+                                const animData = (animationsData as any)[item.wallAssetId];
                                 if (animData && animData.frames) {
                                     animData.frames.forEach((f: string) => keysToLoad.add(f));
                                 }

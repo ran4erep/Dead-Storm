@@ -51,7 +51,7 @@
       "id": "trigger_keycard_pickup",
       "type": "ON_ITEM_PICKUP",
       "params": {
-        "keyId": "BLUE_CARD"
+        "itemId": "keycard"
       },
       "runOnce": true,
       "actions": [
@@ -175,7 +175,7 @@
       "....7TD..EE.T.......T..",
       ".$+3....TEE......T.....",
       ".....|.......5.........",
-      ".S..Р|...P..BBB..ZZZ...",
+      ".Sh.Р|...P..BBB..ZZZ...",
       ".C..!|ZZO........ZZ.ZZ.",
       ".F.0-|.K...3........Z..",
       ".Б.....R............Z..",
@@ -235,7 +235,7 @@
     "4": {
       "type": "LIFT",
       "textureId": "DOOR",
-      "keyId": "BLUE_CARD",
+      "keyId": "keycard",
       "openSound": "DOOR_SLIDE_OPEN",
       "closeSound": "DOOR_SLIDE_CLOSE"
     },
@@ -340,8 +340,7 @@
     },
     {
       "symbol": "K",
-      "id": "keycard",
-      "keyId": "BLUE_CARD"
+      "id": "keycard"
     },
     {
       "symbol": "&",
@@ -396,6 +395,10 @@
     {
       "symbol": "T",
       "id": "tree"
+    },
+    {
+      "symbol": "h",
+      "id": "poly_chair"
     },
     {
       "symbol": "М",

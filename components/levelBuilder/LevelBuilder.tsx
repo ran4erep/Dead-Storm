@@ -34,9 +34,11 @@ import {
   Brain,
   Sparkles,
   MapPin,
-  Pipette
+  Pipette,
+  Eraser
 } from "lucide-react";
 import { ASSETS } from "../../assets";
+import { PolyObjectIsometricIcon } from "../../utils/polyObjectIsoRenderer";
 import soundsData from "../../data/sounds.json";
 import animationsData from "../../data/animations.json";
 import enemiesData from "../../data/enemies.json";
@@ -53,6 +55,7 @@ import stringsEnData from '../../data/strings_en.json';
 import stringsRuData from '../../data/strings_ru.json';
 import playerData from '../../data/player.json';
 import achievementsData from '../../data/achievements.json';
+import { REGISTERED_POLY_MODELS, getPolyModelById } from '../../data/polyModels';
 import { WORLD_MAP_PATHS, START_SECTOR_PATH, setStartSectorPath, TUTORIAL_SECTOR_PATH, setTutorialSectorPath, getGroupedSectorsFromGlob, getAllSectorPathsFromGlob } from '../../data/levels';
 import { CustomIcon } from "../CustomIcons";
 import { SectorSettingsModal } from "./SectorSettingsModal";
@@ -70,6 +73,7 @@ import { IsometricViewModal } from "./IsometricViewModal";
 import { DialogueEditorModal } from "./DialogueEditorModal";
 import { SoundSettingsModal } from "./SoundSettingsModal";
 import { SaveLevelModal } from "./SaveLevelModal";
+import { PolyObjectEditorModal } from "./PolyObjectEditorModal";
 import { VirtualKeyboard } from "./VirtualKeyboard";
 import { clearRaycastCache } from "../raycaster/RaycastCore";
 
@@ -84,6 +88,10 @@ import {
   getPreviewSrc,
   isTextureAsset,
   getAvailableSymbol,
+  deleteCellOverrides,
+  getCellOverrides,
+  getAndClearCellOverrides,
+  applyCellOverrides,
 } from "./levelBuilderUtils";
 
 const CubeIcon = ({ src, className }: { src: string, className?: string }) => (
@@ -138,6 +146,7 @@ interface GridCellProps {
   entityAssetCache_val?: string | null;
   entityIsBoxCache_val?: boolean;
   entityEmptynessCache_val?: boolean;
+  entityPolyModelCache_val?: string | null;
   prevLayerEntityAssetCache_val?: string | null;
   prevLayerEntityIsBoxCache_val?: boolean;
   prevLayerEntityEmptynessCache_val?: boolean;
@@ -152,6 +161,7 @@ interface GridCellProps {
     isEmptyness?: boolean;
     portalInfo?: any;
     doorInfo?: any;
+    polyModelId?: string | null;
   }[];
   
   // Player start metadata
@@ -202,6 +212,7 @@ const areGridCellPropsEqual = (prev: GridCellProps, next: GridCellProps): boolea
     prev.entityAssetCache_val !== next.entityAssetCache_val ||
     prev.entityIsBoxCache_val !== next.entityIsBoxCache_val ||
     prev.entityEmptynessCache_val !== next.entityEmptynessCache_val ||
+    prev.entityPolyModelCache_val !== next.entityPolyModelCache_val ||
     prev.prevLayerEntityAssetCache_val !== next.prevLayerEntityAssetCache_val ||
     prev.prevLayerEntityIsBoxCache_val !== next.prevLayerEntityIsBoxCache_val ||
     prev.prevLayerEntityEmptynessCache_val !== next.prevLayerEntityEmptynessCache_val ||
@@ -328,6 +339,7 @@ const GridCell: React.FC<GridCellProps> = React.memo(({
   entityAssetCache_val,
   entityIsBoxCache_val,
   entityEmptynessCache_val,
+  entityPolyModelCache_val,
   prevLayerEntityAssetCache_val,
   prevLayerEntityIsBoxCache_val,
   prevLayerEntityEmptynessCache_val,
@@ -647,7 +659,7 @@ const GridCell: React.FC<GridCellProps> = React.memo(({
         entityComboDescriptors && entityComboDescriptors.length > 1 ? (
           <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
             {entityComboDescriptors.map((entDesc, idx) => {
-              const { sym, src, isBox, isEmptyness, portalInfo, doorInfo } = entDesc;
+              const { sym, src, isBox, isEmptyness, portalInfo, doorInfo, polyModelId } = entDesc;
               const offsetLeft = idx * 2.5;
               const offsetTop = -idx * 2.5;
               const style = {
@@ -661,7 +673,11 @@ const GridCell: React.FC<GridCellProps> = React.memo(({
                   {isEmptyness && (
                     <div className="absolute inset-0 border-2 border-red-500 z-[25] pointer-events-none" />
                   )}
-                  {src ? (
+                  {polyModelId || (entDesc as any).polyModelObj ? (
+                    <div className="absolute w-[85%] h-[85%] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={style}>
+                      <PolyObjectIsometricIcon modelId={polyModelId} model={(entDesc as any).polyModelObj} className="w-full h-full object-contain" />
+                    </div>
+                  ) : src ? (
                     isBox ? (
                       <div className="absolute w-[80%] h-[80%] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={style}>
                         <CubeIcon src={src} className="w-full h-full" />
@@ -701,7 +717,13 @@ const GridCell: React.FC<GridCellProps> = React.memo(({
             {entityEmptynessCache_val && (
               <div className="absolute inset-0 border-2 border-red-500 z-[25] pointer-events-none" />
             )}
-            {entityAssetCache_val && getPreviewSrc(entityAssetCache_val) ? (
+            {entityPolyModelCache_val ? (
+              <PolyObjectIsometricIcon
+                modelId={typeof entityPolyModelCache_val === 'object' ? entityPolyModelCache_val.modelId : entityPolyModelCache_val}
+                model={typeof entityPolyModelCache_val === 'object' ? entityPolyModelCache_val.model : undefined}
+                className="absolute z-20 w-[90%] h-[90%] object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+              />
+            ) : entityAssetCache_val && getPreviewSrc(entityAssetCache_val) ? (
               entityIsBoxCache_val ? (
                 <CubeIcon src={getPreviewSrc(entityAssetCache_val)!} className="absolute z-20 w-[85%] h-[85%] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
               ) : (
@@ -925,6 +947,7 @@ interface GridRowProps {
   entityAssetCache: Record<string, string | null>;
   entityEmptynessCache: Record<string, boolean>;
   entityIsBoxCache: Record<string, boolean>;
+  entityPolyModelCache: Record<string, string | null>;
   scriptTriggersOnEnterSet: Set<string>;
   scriptTriggersRadiusList: any[];
   resolveCombo: (symbol: string) => string[];
@@ -1012,6 +1035,7 @@ const areGridRowPropsEqual = (prev: GridRowProps, next: GridRowProps) => {
     prev.portalMap !== next.portalMap ||
     prev.soundMap !== next.soundMap ||
     prev.entityAssetCache !== next.entityAssetCache ||
+    prev.entityPolyModelCache !== next.entityPolyModelCache ||
     prev.overriddenCellsSet !== next.overriddenCellsSet
   ) {
     return false;
@@ -1048,6 +1072,7 @@ const GridRow: React.FC<GridRowProps> = React.memo(({
   entityAssetCache,
   entityEmptynessCache,
   entityIsBoxCache,
+  entityPolyModelCache,
   scriptTriggersOnEnterSet,
   scriptTriggersRadiusList,
   resolveCombo,
@@ -1108,25 +1133,24 @@ const GridRow: React.FC<GridRowProps> = React.memo(({
           }
           
           if (isSourceIncluded) {
-            const sGrid = level.grids[currentFloor]?.[sy]?.[sx] || ' ';
             const sEnt = level.entities?.[currentFloor]?.[sy]?.[sx] || '.';
             const sItem = level.itemsGrid?.[currentFloor]?.[sy]?.[sx] || '.';
-            const cInfo = constructionMap.get(sGrid);
-            const isFloorOrEmpty = sGrid === ' ' || sGrid === '.' || cInfo?.type === 'floor';
+            const sLight = level.gridLight?.[sy]?.[sx] || '.';
+            const sSound = level.gridSounds?.[currentFloor]?.[sy]?.[sx] || '.';
             
-            if (!isFloorOrEmpty) displayCell = sGrid;
             if (sEnt !== '.') displayEnt = sEnt;
             if (sItem !== '.') displayItem = sItem;
+            if (sLight !== '.') displayLight = sLight;
+            if (sSound !== '.') displaySound = sSound;
             
-            if (!isFloorOrEmpty || sEnt !== '.' || sItem !== '.') isGhostMoveTarget = true;
+            if (sEnt !== '.' || sItem !== '.' || sLight !== '.' || sSound !== '.') isGhostMoveTarget = true;
           }
           
           if (isThisSource) {
-            const cInfo = constructionMap.get(displayCell);
-            const isFloorOrEmpty = displayCell === ' ' || displayCell === '.' || cInfo?.type === 'floor';
-            if (!isFloorOrEmpty) displayCell = ' ';
             if (displayEnt !== '.') displayEnt = '.';
             if (displayItem !== '.') displayItem = '.';
+            if (displayLight !== '.') displayLight = '.';
+            if (displaySound !== '.') displaySound = '.';
           }
         }
 
@@ -1155,6 +1179,7 @@ const GridRow: React.FC<GridRowProps> = React.memo(({
         const entityAssetCache_val = entityAssetCache[displayEnt];
         const entityIsBoxCache_val = entityIsBoxCache[displayEnt];
         const entityEmptynessCache_val = entityEmptynessCache[displayEnt];
+        const entityPolyModelCache_val = entityPolyModelCache[displayEnt];
 
         const prevLayerEntityAssetCache_val = prevLayerEnt ? entityAssetCache[prevLayerEnt] : null;
         const prevLayerEntityIsBoxCache_val = prevLayerEnt ? entityIsBoxCache[prevLayerEnt] : false;
@@ -1180,9 +1205,12 @@ const GridRow: React.FC<GridRowProps> = React.memo(({
           const src = getPreviewSrc(assetId);
           const isBox = entityIsBoxCache[sym];
           const isEmptyness = entityEmptynessCache[sym];
+          const polyModelVal = entityPolyModelCache[sym];
+          const polyModelId = typeof polyModelVal === 'object' ? polyModelVal?.modelId : polyModelVal;
+          const polyModelObj = typeof polyModelVal === 'object' ? polyModelVal?.model : undefined;
           const portalInfo = portalMap.get(sym);
           const doorInfo = level.doorDefinitions?.[sym];
-          return { sym, assetId, src, isBox, isEmptyness, portalInfo, doorInfo };
+          return { sym, assetId, src, isBox, isEmptyness, portalInfo, doorInfo, polyModelId, polyModelObj };
         });
 
         const editorLightMapColor = (viewLightPreview && editorLightMapRow?.[x]) ? editorLightMapRow[x] : null;
@@ -1239,6 +1267,7 @@ const GridRow: React.FC<GridRowProps> = React.memo(({
             entityAssetCache_val={entityAssetCache_val}
             entityIsBoxCache_val={entityIsBoxCache_val}
             entityEmptynessCache_val={entityEmptynessCache_val}
+            entityPolyModelCache_val={entityPolyModelCache_val}
             prevLayerEntityAssetCache_val={prevLayerEntityAssetCache_val}
             prevLayerEntityIsBoxCache_val={prevLayerEntityIsBoxCache_val}
             prevLayerEntityEmptynessCache_val={prevLayerEntityEmptynessCache_val}
@@ -1570,6 +1599,9 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
   type ToolMode = "construction" | "door" | "spawn" | "erase" | "select" | "light" | "portal" | "entity" | "cursor" | "sound" | "particle" | "move" | "tweak_entity" | "eyedropper";
   const [activeTool, setActiveTool] = useState<ToolMode>("cursor");
   const [isFillMode, setIsFillMode] = useState<boolean>(false);
+  const [eraseSubMode, setEraseSubMode] = useState<'all' | 'geometry' | 'other'>('all');
+  const eraseSubModeRef = React.useRef(eraseSubMode);
+  useEffect(() => { eraseSubModeRef.current = eraseSubMode; }, [eraseSubMode]);
 
   const [moveSource, setMoveSource] = useState<{x: number, y: number} | null>(null);
   const [moveHoveredCell, setMoveHoveredCell] = useState<{x: number, y: number} | null>(null);
@@ -1582,7 +1614,12 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
     y: number;
     clientX: number;
     clientY: number;
-    items: { type: 'grid' | 'entity' | 'light' | 'sound' | 'particle'; char: string; desc: string }[];
+    items: {
+      type: 'grid' | 'entity' | 'item' | 'door' | 'portal' | 'spawn' | 'light' | 'sound' | 'particle';
+      char: string;
+      desc: string;
+      listName?: 'enemies' | 'NPCs' | 'items' | 'decorations';
+    }[];
   }
   const [eraseModalData, setEraseModalData] = useState<EraseModalData | null>(null);
 
@@ -1695,6 +1732,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
   const [assetEditorMode, setAssetEditorMode] = useState<string | null>(null);
   const [showSectorSettings, setShowSectorSettings] = useState(false);
   const [showPlayerSettings, setShowPlayerSettings] = useState(false);
+  const [showPolyObjectEditor, setShowPolyObjectEditor] = useState(false);
   const [showIsometricView, setShowIsometricView] = useState(false);
   const [viewLightPreview, setViewLightPreview] = useState(false);
   const [viewSoundRadius, setViewSoundRadius] = useState(false);
@@ -2049,6 +2087,56 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
     return cache;
   }, [level.decorations]);
 
+  const entityPolyModelCache = React.useMemo(() => {
+    const cache: Record<string, { modelId?: string; model?: any } | null> = {};
+
+    const processEntity = (e: any, defaultData: any) => {
+      if (!e || !e.symbol) return;
+      const def = defaultData?.[e.id];
+      const renderMode = e.renderMode || def?.renderMode;
+      const polyModel = e.polyModel || def?.polyModel || (e.cubes ? { id: e.id, name: e.name || e.id, cubes: e.cubes } : (def?.cubes ? { id: def.id, name: def.name || def.id, cubes: def.cubes } : undefined));
+      const eIdStr = e.id != null ? String(e.id) : '';
+      const defIdStr = def?.id != null ? String(def.id) : '';
+      const polyModelId = e.polyModelId || def?.polyModelId || (REGISTERED_POLY_MODELS[eIdStr] ? eIdStr : (defIdStr && REGISTERED_POLY_MODELS[defIdStr] ? defIdStr : (eIdStr && REGISTERED_POLY_MODELS[eIdStr.replace(/^poly_/, '')] ? eIdStr.replace(/^poly_/, '') : undefined)));
+
+      if (renderMode === 'polyObject' || polyModelId || polyModel) {
+        const resolvedModel = polyModel || (polyModelId ? getPolyModelById(polyModelId) : (e.id != null ? getPolyModelById(e.id) : undefined));
+        const resolvedModelId = polyModelId || (eIdStr ? eIdStr.replace(/^poly_/, '') : undefined) || 'chair';
+        cache[e.symbol] = {
+          modelId: resolvedModelId,
+          model: resolvedModel
+        };
+      }
+    };
+
+    (level.decorations || []).forEach((e: any) => processEntity(e, decorationsData));
+    (level.items || []).forEach((e: any) => processEntity(e, itemsData));
+    (level.enemies || []).forEach((e: any) => processEntity(e, enemiesData));
+    (level.NPCs || []).forEach((e: any) => processEntity(e, npcsData));
+
+    // Fallback scan of decorationsData directly by key / id / symbol
+    Object.entries(decorationsData || {}).forEach(([id, def]: [string, any]) => {
+      if (def) {
+        const idStr = String(id);
+        const renderMode = def.renderMode;
+        const polyModel = def.polyModel || (def.cubes ? { id, name: def.name || id, cubes: def.cubes } : undefined);
+        const polyModelId = def.polyModelId || (REGISTERED_POLY_MODELS[idStr] ? idStr : (REGISTERED_POLY_MODELS[idStr.replace(/^poly_/, '')] ? idStr.replace(/^poly_/, '') : undefined));
+        if (renderMode === 'polyObject' || polyModelId || polyModel) {
+          const resolvedModel = polyModel || (polyModelId ? getPolyModelById(polyModelId) : getPolyModelById(idStr));
+          const resolvedModelId = polyModelId || idStr.replace(/^poly_/, '') || 'chair';
+          const entry = {
+            modelId: resolvedModelId,
+            model: resolvedModel
+          };
+          if (def.symbol && !cache[def.symbol]) cache[def.symbol] = entry;
+          if (!cache[idStr]) cache[idStr] = entry;
+        }
+      }
+    });
+
+    return cache;
+  }, [level.decorations, level.items, level.enemies, level.NPCs]);
+
   const pastRef = React.useRef<LevelDefinition[]>(past);
   const futureRef = React.useRef<LevelDefinition[]>(future);
   const levelRef = React.useRef<LevelDefinition>(level);
@@ -2099,26 +2187,35 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
   useEffect(() => { pickingCoordinateCallbackRef.current = pickingCoordinateCallback; }, [pickingCoordinateCallback]);
 
   const [tempDrawOverlay, setTempDrawOverlay] = useState<Record<number, Record<number, { cell?: string; ent?: string; itemCell?: string; lightChar?: string; soundChar?: string }>> | null>(null);
-  const currentStrokeRef = React.useRef<Array<{ x: number; y: number; shiftKey: boolean; isRightClick: boolean; explicitEraseType?: 'grid' | 'entity' | 'light' | 'sound' | 'particle' | 'all' }>>([]);
+  const currentStrokeRef = React.useRef<Array<{
+    x: number;
+    y: number;
+    shiftKey: boolean;
+    isRightClick: boolean;
+    explicitEraseType?: 'grid' | 'entity' | 'item' | 'door' | 'portal' | 'spawn' | 'light' | 'sound' | 'particle' | 'all' | 'other';
+    targetSymbol?: string;
+    targetListName?: 'enemies' | 'NPCs' | 'items' | 'decorations';
+  }>>([]);
 
   const getPreviewChangesForCoord = React.useCallback((
     x: number,
     y: number,
     tool: string,
     isRightClick: boolean,
-    explicitEraseType?: 'grid' | 'entity' | 'light' | 'sound' | 'particle' | 'all'
+    explicitEraseType?: 'grid' | 'entity' | 'item' | 'door' | 'portal' | 'spawn' | 'light' | 'sound' | 'particle' | 'all' | 'other'
   ) => {
     const effectiveTool = isRightClick ? "erase" : tool;
     const levelVal = levelRef.current;
     
     if (effectiveTool === "erase") {
       const eraseAll = !explicitEraseType || explicitEraseType === 'all';
+      const eraseOther = explicitEraseType === 'other';
       return {
         cell: (eraseAll || explicitEraseType === 'grid') ? ' ' : undefined,
-        ent: (eraseAll || explicitEraseType === 'entity') ? '.' : undefined,
-        itemCell: (eraseAll || explicitEraseType === 'entity') ? '.' : undefined,
-        lightChar: (eraseAll || explicitEraseType === 'light') ? '.' : undefined,
-        soundChar: (eraseAll || explicitEraseType === 'sound') ? '.' : undefined,
+        ent: (eraseAll || eraseOther || explicitEraseType === 'entity' || explicitEraseType === 'door' || explicitEraseType === 'portal' || explicitEraseType === 'spawn') ? '.' : undefined,
+        itemCell: (eraseAll || eraseOther || explicitEraseType === 'item') ? '.' : undefined,
+        lightChar: (eraseAll || eraseOther || explicitEraseType === 'light') ? '.' : undefined,
+        soundChar: (eraseAll || eraseOther || explicitEraseType === 'sound') ? '.' : undefined,
       };
     }
     
@@ -2170,52 +2267,104 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
     y: number,
     shiftKey: boolean,
     isRightClick: boolean,
-    explicitEraseType?: 'grid' | 'entity' | 'light' | 'sound' | 'particle' | 'all',
+    explicitEraseType?: 'grid' | 'entity' | 'item' | 'door' | 'portal' | 'spawn' | 'light' | 'sound' | 'particle' | 'all' | 'other',
     clientX?: number,
-    clientY?: number
+    clientY?: number,
+    targetSymbol?: string,
+    targetListName?: 'enemies' | 'NPCs' | 'items' | 'decorations'
   ) => {
     const effectiveTool = isRightClick ? 'erase' : activeToolRef.current;
     
     if (effectiveTool === 'erase' && !isFillModeRef.current && !shiftKey && !explicitEraseType) {
-      const gridCell = levelRef.current.grids[currentFloorRef.current]?.[y]?.[x] || ' ';
-      const entCell = levelRef.current.entities?.[currentFloorRef.current]?.[y]?.[x] || '.';
-      const lightCell = levelRef.current.gridLight?.[y]?.[x] || '.';
-      const soundCell = levelRef.current.gridSounds?.[currentFloorRef.current]?.[y]?.[x] || '.';
-      const particleExists = levelRef.current.particles?.some((p: any) => Math.floor(p.x) === x && Math.floor(p.y) === y);
+      if (isRightClick) {
+        const gridCell = levelRef.current.grids[currentFloorRef.current]?.[y]?.[x] || ' ';
+        const entCell = levelRef.current.entities?.[currentFloorRef.current]?.[y]?.[x] || '.';
+        const itemCell = levelRef.current.itemsGrid?.[currentFloorRef.current]?.[y]?.[x] || '.';
+        const lightCell = levelRef.current.gridLight?.[y]?.[x] || '.';
+        const soundCell = levelRef.current.gridSounds?.[currentFloorRef.current]?.[y]?.[x] || '.';
+        const particleExists = levelRef.current.particles?.some((p: any) => Math.floor(p.x) === x && Math.floor(p.y) === y);
 
-      const items: { type: 'grid' | 'entity' | 'light' | 'sound' | 'particle'; char: string; desc: string }[] = [];
-      if (gridCell !== ' ') {
-         const cInfo = levelRef.current.construction?.find((c: any) => c.symbol === gridCell);
-         const word = cInfo ? (cInfo.type === 'wall' ? (uiStrings.desc_wall || 'Wall') : (uiStrings.desc_floor || 'Floor')) : 
-                        (gridCell === '.' ? (uiStrings.desc_floor || 'Floor') : (gridCell === '.' ? 'Floor' : 'Grid'));
-         items.push({ type: 'grid', char: gridCell, desc: `${word} (${gridCell})` });
-      }
-      if (entCell !== '.' && entCell !== ' ') {
-         let desc = `${uiStrings.desc_entity || 'Entity'} (${entCell})`;
-         if (entCell === (levelRef.current.playerStart?.symbol || 'S')) desc = `${uiStrings.desc_spawn || 'Spawn'} (${entCell})`;
-         else if (levelRef.current.doorDefinitions?.[entCell]) desc = `${uiStrings.desc_door || 'Door'} (${entCell})`;
-         else if (levelRef.current.portals?.find((p: any) => p.symbol === entCell)) desc = `${uiStrings.desc_portal || 'Portal'} (${entCell})`;
-         else if (levelRef.current.enemies?.find((e: any) => e.symbol === entCell)) desc = `${uiStrings.desc_enemy || 'Enemy'} (${entCell})`;
-         else if (levelRef.current.NPCs?.find((e: any) => e.symbol === entCell)) desc = `${uiStrings.desc_npc || 'NPC'} (${entCell})`;
-         else if (levelRef.current.items?.find((e: any) => e.symbol === entCell)) desc = `${uiStrings.desc_item || 'Item'} (${entCell})`;
-         else if (levelRef.current.decorations?.find((e: any) => e.symbol === entCell)) desc = `${uiStrings.desc_decoration || 'Decoration'} (${entCell})`;
-         items.push({ type: 'entity', char: entCell, desc });
-      }
-      if (lightCell !== '.' && lightCell !== ' ') {
-         items.push({ type: 'light', char: lightCell, desc: `${uiStrings.desc_light || 'Light'} (${lightCell})` });
-      }
-      if (soundCell !== '.' && soundCell !== ' ') {
-         items.push({ type: 'sound', char: soundCell, desc: `${uiStrings.desc_sound || 'Sound'} (${soundCell})` });
-      }
-      if (particleExists) {
-         items.push({ type: 'particle', char: '*', desc: `Particle (*)` });
-      }
+        const items: {
+          type: 'grid' | 'entity' | 'item' | 'door' | 'portal' | 'spawn' | 'light' | 'sound' | 'particle';
+          char: string;
+          desc: string;
+          listName?: 'enemies' | 'NPCs' | 'items' | 'decorations';
+        }[] = [];
 
-      if (items.length > 1) {
-         if (clientX !== undefined && clientY !== undefined) {
-            setEraseModalData({ x, y, items, clientX, clientY });
-            return;
-         }
+        // 1. Grid (Floor / Wall)
+        if (gridCell !== ' ') {
+           const cInfo = levelRef.current.construction?.find((c: any) => c.symbol === gridCell);
+           const word = cInfo ? (cInfo.type === 'wall' ? (uiStrings.desc_wall || 'Wall') : (uiStrings.desc_floor || 'Floor')) : 
+                          (gridCell === '.' ? (uiStrings.desc_floor || 'Floor') : (uiStrings.desc_grid || 'Grid'));
+           items.push({ type: 'grid', char: gridCell, desc: `${word} (${gridCell})` });
+        }
+
+        // 2. Door / Portal / Spawn / Entities in entCell
+        if (entCell !== '.' && entCell !== ' ') {
+           if (entCell === (levelRef.current.playerStart?.symbol || 'S')) {
+             items.push({ type: 'spawn', char: entCell, desc: `${uiStrings.desc_spawn || 'Spawn'} (${entCell})` });
+           } else if (levelRef.current.doorDefinitions?.[entCell]) {
+             items.push({ type: 'door', char: entCell, desc: `${uiStrings.desc_door || 'Door'} (${entCell})` });
+           } else if (levelRef.current.portals?.find((p: any) => p.symbol === entCell)) {
+             items.push({ type: 'portal', char: entCell, desc: `${uiStrings.desc_portal || 'Portal'} (${entCell})` });
+           } else {
+             const resolved = resolveCombo(entCell);
+             for (const sym of resolved) {
+               let desc = `${uiStrings.desc_entity || 'Entity'} (${sym})`;
+               let listName: 'enemies' | 'NPCs' | 'items' | 'decorations' | undefined;
+               const lists = ['enemies', 'NPCs', 'items', 'decorations'] as const;
+               for (const l of lists) {
+                 const found = (levelRef.current as any)[l]?.find((e: any) => e.symbol === sym);
+                 if (found) {
+                   listName = l;
+                   const lLabel = l === 'enemies' ? (uiStrings.desc_enemy || 'Enemy') :
+                                  l === 'NPCs' ? (uiStrings.desc_npc || 'NPC') :
+                                  l === 'items' ? (uiStrings.desc_item || 'Item') : (uiStrings.desc_decoration || 'Decoration');
+                   desc = `${lLabel}: ${found.id || found.name || sym} (${sym})`;
+                   break;
+                 }
+               }
+               items.push({ type: 'entity', char: sym, desc, listName });
+             }
+           }
+        }
+
+        // 3. Items in itemCell
+        if (itemCell !== '.' && itemCell !== ' ') {
+           const resolved = resolveCombo(itemCell);
+           for (const sym of resolved) {
+             let desc = `${uiStrings.desc_item || 'Item'} (${sym})`;
+             const found = levelRef.current.items?.find((e: any) => e.symbol === sym);
+             if (found) {
+               desc = `${uiStrings.desc_item || 'Item'}: ${found.id || found.name || sym} (${sym})`;
+             }
+             if (!items.some(i => i.char === sym && (i.type === 'item' || i.type === 'entity'))) {
+               items.push({ type: 'item', char: sym, desc, listName: 'items' });
+             }
+           }
+        }
+
+        // 4. Light
+        if (lightCell !== '.' && lightCell !== ' ') {
+           items.push({ type: 'light', char: lightCell, desc: `${uiStrings.desc_light || 'Light'} (${lightCell})` });
+        }
+
+        // 5. Sound
+        if (soundCell !== '.' && soundCell !== ' ') {
+           items.push({ type: 'sound', char: soundCell, desc: `${uiStrings.desc_sound || 'Sound'} (${soundCell})` });
+        }
+
+        // 6. Particle
+        if (particleExists) {
+           items.push({ type: 'particle', char: '*', desc: `Particle (*)` });
+        }
+
+        if (items.length > 1) {
+           setEraseModalData({ x, y, items, clientX: clientX || 0, clientY: clientY || 0 });
+           return;
+        }
+      } else {
+        explicitEraseType = eraseSubModeRef.current === 'all' ? 'all' : (eraseSubModeRef.current === 'geometry' ? 'grid' : 'other');
       }
     }
 
@@ -2229,6 +2378,8 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
         shiftKey,
         isRightClick,
         explicitEraseType,
+        targetSymbol,
+        targetListName,
       });
     }
 
@@ -2286,7 +2437,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
       }
 
       for (const step of stroke) {
-        const { x, y, isRightClick, explicitEraseType } = step;
+        const { x, y, isRightClick, explicitEraseType, targetSymbol, targetListName } = step;
         const effectiveTool = isRightClick ? "erase" : activeToolRef.current;
 
         let writeSymbol = ".";
@@ -2562,65 +2713,114 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
 
           if (effectiveTool === "erase") {
             const eraseAll = !explicitEraseType || explicitEraseType === 'all';
+            const eraseOther = explicitEraseType === 'other';
+
+            // 1. Entities / Doors / Portals / Spawn
             const newEntities = resultingLevel.entities[currentFloorRef.current];
-            if ((eraseAll || explicitEraseType === 'entity') && newEntities && newEntities[py]) {
-              const entRow = newEntities[py].split("");
-              const currentSymbolOnCell = entRow[px];
-              if (currentSymbolOnCell !== ".") {
-                const currentBaseEnts = resolveCombo(currentSymbolOnCell);
-                if (currentBaseEnts.length > 1) {
-                  const newBaseEnts = currentBaseEnts.slice(0, currentBaseEnts.length - 1);
-                  const newCellSymbol = getComboSymbol(newBaseEnts, resultingLevel);
-                  entRow[px] = newCellSymbol;
-                } else {
-                  entRow[px] = ".";
-                  if (resultingLevel.entityOverrides) {
-                     delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}`];
-                     for (const l of ['items', 'decorations', 'NPCs', 'enemies', 'portals']) {
-                         delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_${l}`];
-                     }
-                  }
-                }
+            if (newEntities && newEntities[py]) {
+              if (eraseAll || eraseOther || explicitEraseType === 'door' || explicitEraseType === 'portal' || explicitEraseType === 'spawn') {
+                const entRow = newEntities[py].split("");
+                entRow[px] = ".";
                 newEntities[py] = entRow.join("");
-              }
-            }
-            if ((eraseAll || explicitEraseType === 'entity') && resultingLevel.itemsGrid && resultingLevel.itemsGrid[currentFloorRef.current] && resultingLevel.itemsGrid[currentFloorRef.current][py]) {
-              const itemRow = resultingLevel.itemsGrid[currentFloorRef.current][py].split("");
-              const currentSymbolOnCell = itemRow[px];
-              if (currentSymbolOnCell !== ".") {
-                const currentBaseItems = resolveCombo(currentSymbolOnCell);
-                if (currentBaseItems.length > 1) {
-                  const newBaseItems = currentBaseItems.slice(0, currentBaseItems.length - 1);
-                  const newCellSymbol = getComboSymbol(newBaseItems, resultingLevel);
-                  itemRow[px] = newCellSymbol;
-                } else {
-                  itemRow[px] = ".";
+
+                if (resultingLevel.entityOverrides) {
+                    delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}`];
+                    for (const l of ['items', 'decorations', 'NPCs', 'enemies', 'portals']) {
+                        delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_${l}`];
+                    }
+                }
+              } else if (explicitEraseType === 'entity') {
+                const entRow = newEntities[py].split("");
+                const currentSymbolOnCell = entRow[px];
+                if (currentSymbolOnCell !== "." && currentSymbolOnCell !== " ") {
+                  if (targetSymbol) {
+                    const currentBase = resolveCombo(currentSymbolOnCell);
+                    const remaining = currentBase.filter(s => s !== targetSymbol);
+                    if (remaining.length > 0) {
+                      entRow[px] = getComboSymbol(remaining, resultingLevel);
+                    } else {
+                      entRow[px] = ".";
+                    }
+                  } else {
+                    entRow[px] = ".";
+                  }
+                  newEntities[py] = entRow.join("");
+
                   if (resultingLevel.entityOverrides) {
-                     delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_items`];
+                    if (targetListName) {
+                      delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_${targetListName}`];
+                    } else {
+                      delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}`];
+                      for (const l of ['items', 'decorations', 'NPCs', 'enemies', 'portals']) {
+                        delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_${l}`];
+                      }
+                    }
                   }
                 }
-                resultingLevel.itemsGrid[currentFloorRef.current][py] = itemRow.join("");
               }
             }
+
+            // 2. ItemsGrid
+            if (resultingLevel.itemsGrid && resultingLevel.itemsGrid[currentFloorRef.current] && resultingLevel.itemsGrid[currentFloorRef.current][py]) {
+              if (eraseAll || eraseOther || explicitEraseType === 'item') {
+                const itemRow = resultingLevel.itemsGrid[currentFloorRef.current][py].split("");
+                const currentSymbolOnCell = itemRow[px];
+                if (currentSymbolOnCell !== ".") {
+                  if (targetSymbol) {
+                    const currentBaseItems = resolveCombo(currentSymbolOnCell);
+                    const remainingItems = currentBaseItems.filter(s => s !== targetSymbol);
+                    if (remainingItems.length > 0) {
+                      itemRow[px] = getComboSymbol(remainingItems, resultingLevel);
+                    } else {
+                      itemRow[px] = ".";
+                      if (resultingLevel.entityOverrides) {
+                        delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_items`];
+                      }
+                    }
+                  } else {
+                    itemRow[px] = ".";
+                    if (resultingLevel.entityOverrides) {
+                      delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_items`];
+                    }
+                  }
+                  resultingLevel.itemsGrid[currentFloorRef.current][py] = itemRow.join("");
+                }
+              }
+            }
+
+            // 3. Grid & Triggers
             if ((eraseAll || explicitEraseType === 'grid') && resultingLevel.triggers) {
                resultingLevel.triggers = resultingLevel.triggers.filter((t: any) => !(t.type === 'ON_ENTER_TILE' && t.params?.x === px && t.params?.y === py));
             }
-            if ((eraseAll || explicitEraseType === 'light') && resultingLevel.gridLight && resultingLevel.gridLight[py]) {
+
+            // 4. Light
+            if ((eraseAll || eraseOther || explicitEraseType === 'light') && resultingLevel.gridLight && resultingLevel.gridLight[py]) {
                  const lRow = resultingLevel.gridLight[py].split("");
                  lRow[px] = ".";
                  resultingLevel.gridLight[py] = lRow.join("");
             }
-            if ((eraseAll || explicitEraseType === 'sound') && resultingLevel.gridSounds && resultingLevel.gridSounds[currentFloorRef.current] && resultingLevel.gridSounds[currentFloorRef.current][py]) {
-                 const sRow = resultingLevel.gridSounds[currentFloorRef.current][py].split("");
-                 sRow[px] = ".";
-                 resultingLevel.gridSounds[currentFloorRef.current][py] = sRow.join("");
+
+            // 5. Sound
+            if ((eraseAll || eraseOther || explicitEraseType === 'sound') && resultingLevel.gridSounds) {
+                 const currentGridSounds = resultingLevel.gridSounds[currentFloorRef.current];
+                 if (currentGridSounds && currentGridSounds[py]) {
+                     const sRow = currentGridSounds[py].split("");
+                     sRow[px] = ".";
+                     currentGridSounds[py] = sRow.join("");
+                 }
             }
-            if ((eraseAll || explicitEraseType === 'particle') && resultingLevel.particles) {
-                 resultingLevel.particles = resultingLevel.particles.filter((p: any) => !(Math.floor(p.x) === px && Math.floor(p.y) === py));
+
+            // 6. Particle
+            if ((eraseAll || eraseOther || explicitEraseType === 'particle') && resultingLevel.particles) {
+               resultingLevel.particles = resultingLevel.particles.filter(
+                   (p: any) => Math.floor(p.x) !== px || Math.floor(p.y) !== py
+               );
             }
+
+            // 7. Floor/Wall symbol on grid
             if (eraseAll || explicitEraseType === 'grid') {
-              row[px] = " ";
-              newGrid[py] = row.join("");
+               row[px] = " ";
+               newGrid[py] = row.join("");
             }
           } else {
             row[px] = writeSymbol;
@@ -2762,16 +2962,6 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
 
        if (dx === 0 && dy === 0) return prevLevel;
 
-       // Move triggers
-       if (newLevel.triggers) {
-           newLevel.triggers.forEach((t: any) => {
-               if (t.params?.x >= x1 && t.params?.x <= x2 && t.params?.y >= y1 && t.params?.y <= y2) {
-                   t.params.x += dx;
-                   t.params.y += dy;
-               }
-           });
-       }
-
        const moveBuffer: any[] = [];
        const width = newLevel.grids?.[f]?.[0]?.length || 0;
        const height = newLevel.grids?.[f]?.length || 0;
@@ -2780,11 +2970,6 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
            for (let cx = x1; cx <= x2; cx++) {
                const newX = cx + dx;
                const newY = cy + dy;
-               
-               const sGrid = newLevel.grids?.[f]?.[cy]?.[cx] || ' ';
-               const cInfo = newLevel.construction?.find((c:any) => c.symbol === sGrid);
-               const isFloorOrEmpty = sGrid === ' ' || sGrid === '.' || cInfo?.type === 'floor';
-               const movedGrid = isFloorOrEmpty ? null : sGrid;
                
                const sEnt = newLevel.entities?.[f]?.[cy]?.[cx] || '.';
                const movedEnt = sEnt !== '.' ? sEnt : null;
@@ -2798,15 +2983,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                const sSound = newLevel.gridSounds?.[f]?.[cy]?.[cx] || '.';
                const movedSound = sSound !== '.' ? sSound : null;
 
-               const overrideKey = `${f}_${cy}_${cx}`;
-               
-               const movedOverride = newLevel.entityOverrides?.[overrideKey];
-               const movedSuffixedOverrides: Record<string, any> = {};
-               for (const l of ['items', 'decorations', 'NPCs', 'enemies', 'portals']) {
-                   if (newLevel.entityOverrides?.[`${overrideKey}_${l}`]) {
-                       movedSuffixedOverrides[`${overrideKey}_${l}`] = newLevel.entityOverrides[`${overrideKey}_${l}`];
-                   }
-               }
+               const movedOverrides = getAndClearCellOverrides(newLevel.entityOverrides, f, cy, cx);
 
                const movedParticles: any[] = [];
                if (newLevel.particles) {
@@ -2816,18 +2993,13 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                    }
                }
 
-               if (movedGrid || movedEnt || movedItem || movedLight || movedSound || movedOverride || Object.keys(movedSuffixedOverrides).length > 0 || movedParticles.length > 0) {
-                   moveBuffer.push({ cx, cy, newX, newY, movedGrid, movedEnt, movedItem, movedLight, movedSound, movedOverride, movedSuffixedOverrides, movedParticles });
+               if (movedEnt || movedItem || movedLight || movedSound || movedOverrides.length > 0 || movedParticles.length > 0) {
+                   moveBuffer.push({ cx, cy, newX, newY, movedEnt, movedItem, movedLight, movedSound, movedOverrides, movedParticles });
                }
 
                // Erase from source
                if (newLevel.particles) {
                    newLevel.particles = newLevel.particles.filter((p: any) => !(Math.floor(p.x) === cx && Math.floor(p.y) === cy));
-               }
-               if (movedGrid) {
-                   const row = newLevel.grids[f][cy].split("");
-                   row[cx] = " ";
-                   newLevel.grids[f][cy] = row.join("");
                }
                if (movedEnt) {
                    const row = newLevel.entities[f][cy].split("");
@@ -2849,41 +3021,20 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                    row[cx] = ".";
                    newLevel.gridSounds[f][cy] = row.join("");
                }
-               if (movedOverride) {
-                   delete newLevel.entityOverrides[overrideKey];
-               }
-               for (const k in movedSuffixedOverrides) {
-                   delete newLevel.entityOverrides[k];
-               }
            }
        }
 
        // Place at target
        for (const item of moveBuffer) {
-           const { newX, newY, movedGrid, movedEnt, movedItem, movedLight, movedSound, movedOverride, movedSuffixedOverrides, movedParticles } = item;
-           // Also grab movedSuffixedOverrides from object when creating moveBuffer or rebuild it via the same logic. Wait! Let me see what's actually passed.
+           const { newX, newY, movedEnt, movedItem, movedLight, movedSound, movedOverrides, movedParticles } = item;
            if (newX < 0 || newX >= width || newY < 0 || newY >= height) continue;
 
-           if (movedGrid) {
-               const tr = newLevel.grids[f][newY].split("");
-               tr[newX] = movedGrid;
-               newLevel.grids[f][newY] = tr.join("");
-           }
+           deleteCellOverrides(newLevel.entityOverrides, f, newY, newX);
+
            if (movedEnt) {
                const tr = newLevel.entities[f][newY].split("");
                tr[newX] = movedEnt;
                newLevel.entities[f][newY] = tr.join("");
-               
-               // Clear target override if we overwrite the entity completely and don't bring one
-               if (!movedOverride && newLevel.entityOverrides && newLevel.entityOverrides[`${f}_${newY}_${newX}`]) {
-                   delete newLevel.entityOverrides[`${f}_${newY}_${newX}`];
-               }
-               for (const l of ['items', 'decorations', 'NPCs', 'enemies', 'portals']) {
-                   const k = `${f}_${newY}_${newX}_${l}`;
-                   if (!movedSuffixedOverrides?.[`${f}_${item.cy}_${item.cx}_${l}`] && newLevel.entityOverrides?.[k]) {
-                       delete newLevel.entityOverrides[k];
-                   }
-               }
            }
            if (movedItem) {
                if (!newLevel.itemsGrid) {
@@ -2915,16 +3066,9 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                tr[newX] = movedSound;
                newLevel.gridSounds[f][newY] = tr.join("");
            }
-           if (movedOverride) {
+           if (movedOverrides && movedOverrides.length > 0) {
                if (!newLevel.entityOverrides) newLevel.entityOverrides = {};
-               newLevel.entityOverrides[`${f}_${newY}_${newX}`] = movedOverride;
-           }
-           if (item.movedSuffixedOverrides) {
-               if (!newLevel.entityOverrides) newLevel.entityOverrides = {};
-               for (const k in item.movedSuffixedOverrides) {
-                   const l = k.split('_').pop();
-                   newLevel.entityOverrides[`${f}_${newY}_${newX}_${l}`] = item.movedSuffixedOverrides[k];
-               }
+               applyCellOverrides(newLevel.entityOverrides, f, newY, newX, movedOverrides);
            }
            if (item.movedParticles && item.movedParticles.length > 0) {
                if (!newLevel.particles) newLevel.particles = [];
@@ -3675,58 +3819,76 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
     if (activeToolRef.current === 'eyedropper') {
       const gridCell = levelRef.current.grids[currentFloorRef.current]?.[y]?.[x] || ' ';
       const entCell = levelRef.current.entities?.[currentFloorRef.current]?.[y]?.[x] || '.';
+      const itemCell = levelRef.current.itemsGrid?.[currentFloorRef.current]?.[y]?.[x] || '.';
       const lightCell = levelRef.current.gridLight?.[y]?.[x] || '.';
       const soundCell = levelRef.current.gridSounds?.[currentFloorRef.current]?.[y]?.[x] || '.';
       const particleDef = levelRef.current.particles?.find((p: any) => Math.floor(p.x) === x && Math.floor(p.y) === y);
 
       const items: { type: 'grid' | 'door' | 'portal' | 'entity' | 'light' | 'sound' | 'particle'; char: string; desc: string; data: any }[] = [];
       
-      if (gridCell !== ' ' && gridCell !== '.') {
+      // 1. Grid (Floor / Wall / Construction)
+      if (gridCell !== ' ') {
          const cInfo = levelRef.current.construction?.find((c: any) => c.symbol === gridCell);
-         const word = cInfo ? (cInfo.type === 'wall' ? (uiStrings.desc_wall || 'Wall') : (uiStrings.desc_floor || 'Floor')) : (uiStrings.desc_grid || 'Grid');
+         const word = cInfo ? (cInfo.type === 'wall' ? (uiStrings.desc_wall || 'Wall') : cInfo.type === 'window' ? 'Window' : (uiStrings.desc_floor || 'Floor')) :
+                        (gridCell === '.' ? (uiStrings.desc_floor || 'Floor') : (uiStrings.desc_grid || 'Grid'));
          items.push({ 
             type: 'grid', 
             char: gridCell, 
             desc: `${word} (${gridCell})`,
-            data: cInfo || { symbol: gridCell, type: 'floor' }
+            data: cInfo || { symbol: gridCell, type: gridCell === '.' ? 'floor' : 'wall' }
          });
       }
       
+      // 2. Spawn / Door / Portal
       if (entCell !== '.' && entCell !== ' ') {
-         let desc = `${uiStrings.desc_entity || 'Entity'} (${entCell})`;
          if (entCell === (levelRef.current.playerStart?.symbol || 'S')) {
-            desc = `${uiStrings.desc_spawn || 'Spawn'} (${entCell})`;
             items.push({ 
                type: 'entity', 
                char: entCell, 
-               desc,
+               desc: `${uiStrings.desc_spawn || 'Spawn'} (${entCell})`,
                data: { isSpawn: true }
             });
          } else if (levelRef.current.doorDefinitions?.[entCell]) {
-            desc = `${uiStrings.desc_door || 'Door'} (${entCell})`;
             items.push({ 
                type: 'door', 
                char: entCell, 
-               desc,
+               desc: `${uiStrings.desc_door || 'Door'} (${entCell})`,
                data: { symbol: entCell, ...levelRef.current.doorDefinitions[entCell] }
             });
          } else if (levelRef.current.portals?.find((p: any) => p.symbol === entCell)) {
             const pDef = levelRef.current.portals.find((p: any) => p.symbol === entCell);
-            desc = `${uiStrings.desc_portal || 'Portal'} (${entCell})`;
             items.push({ 
                type: 'portal', 
                char: entCell, 
-               desc,
+               desc: `${uiStrings.desc_portal || 'Portal'} (${entCell})`,
                data: pDef
             });
-         } else {
+         }
+      }
+
+      // 3. Enemies, NPCs, Items, Decorations in entCell and itemCell (including combos)
+      const rawSymbols: string[] = [];
+      if (entCell !== '.' && entCell !== ' ' && entCell !== (levelRef.current.playerStart?.symbol || 'S') && !levelRef.current.doorDefinitions?.[entCell] && !levelRef.current.portals?.find((p: any) => p.symbol === entCell)) {
+         rawSymbols.push(entCell);
+      }
+      if (itemCell !== '.' && itemCell !== ' ') {
+         rawSymbols.push(itemCell);
+      }
+
+      const addedSyms = new Set<string>();
+      for (const rawSym of rawSymbols) {
+         const resolved = resolveCombo(rawSym);
+         for (const sym of resolved) {
+            if (addedSyms.has(sym)) continue;
+            addedSyms.add(sym);
+
             const lists = ['enemies', 'NPCs', 'items', 'decorations'] as const;
             let foundConfig = null;
             let lName = '';
             for (const list of lists) {
                const listVals = (levelRef.current as any)[list];
                if (listVals) {
-                  const config = listVals.find((c: any) => c.symbol === entCell);
+                  const config = listVals.find((c: any) => c.symbol === sym);
                   if (config) {
                      foundConfig = config;
                      lName = list;
@@ -3735,13 +3897,15 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                }
             }
             if (foundConfig) {
-               if (lName === 'enemies') desc = `${uiStrings.desc_enemy || 'Enemy'} (${entCell})`;
-               else if (lName === 'NPCs') desc = `${uiStrings.desc_npc || 'NPC'} (${entCell})`;
-               else if (lName === 'items') desc = `${uiStrings.desc_item || 'Item'} (${entCell})`;
-               else if (lName === 'decorations') desc = `${uiStrings.desc_decoration || 'Decoration'} (${entCell})`;
+               let desc = `${uiStrings.desc_entity || 'Entity'} (${sym})`;
+               if (lName === 'enemies') desc = `${uiStrings.desc_enemy || 'Enemy'}: ${foundConfig.id || foundConfig.name || sym} (${sym})`;
+               else if (lName === 'NPCs') desc = `${uiStrings.desc_npc || 'NPC'}: ${foundConfig.id || foundConfig.name || sym} (${sym})`;
+               else if (lName === 'items') desc = `${uiStrings.desc_item || 'Item'}: ${foundConfig.id || foundConfig.name || sym} (${sym})`;
+               else if (lName === 'decorations') desc = `${uiStrings.desc_decoration || 'Decoration'}: ${foundConfig.id || foundConfig.name || sym} (${sym})`;
+
                items.push({ 
                   type: 'entity', 
-                  char: entCell, 
+                  char: sym, 
                   desc,
                   data: { ...foundConfig, listName: lName }
                });
@@ -3749,6 +3913,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
          }
       }
       
+      // 4. Light
       if (lightCell !== '.' && lightCell !== ' ') {
          const def = levelRef.current.lightDefinitions?.[lightCell];
          items.push({ 
@@ -3759,6 +3924,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
          });
       }
       
+      // 5. Sound
       if (soundCell !== '.' && soundCell !== ' ') {
          const def = levelRef.current.ambientSounds?.find((s: any) => s.symbol === soundCell);
          items.push({ 
@@ -3769,6 +3935,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
          });
       }
       
+      // 6. Particle
       if (particleDef) {
          items.push({ 
             type: 'particle', 
@@ -4157,74 +4324,126 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
     handleCellEnter(x, y, e.shiftKey, effectiveButtons, e.isPrimary);
   }, [handleCellEnter]);
 
-  const handleCellDraw = React.useCallback((x: number, y: number, shiftKey: boolean = false, isRightClick: boolean = false, explicitEraseType?: 'grid' | 'entity' | 'light' | 'sound' | 'particle' | 'all', isPointerEnter: boolean = false, clientX?: number, clientY?: number) => {
+  const handleCellDraw = React.useCallback((
+    x: number,
+    y: number,
+    shiftKey: boolean = false,
+    isRightClick: boolean = false,
+    explicitEraseType?: 'grid' | 'entity' | 'item' | 'door' | 'portal' | 'spawn' | 'light' | 'sound' | 'particle' | 'all' | 'other',
+    isPointerEnter: boolean = false,
+    clientX?: number,
+    clientY?: number,
+    targetSymbol?: string,
+    targetListName?: 'enemies' | 'NPCs' | 'items' | 'decorations'
+  ) => {
     if (activeToolRef.current === 'cursor' && !isRightClick) return;
     if (activeToolRef.current === 'tweak_entity' && !isRightClick) return;
 
     const effectiveTool = isRightClick ? "erase" : activeToolRef.current;
 
-    console.log("handleCellDraw start", {x, y, currentFloor: currentFloorRef.current, grids: !!levelRef.current.grids, gridFloor: !!levelRef.current.grids?.[currentFloorRef.current], entities: !!levelRef.current.entities, entFloor: !!levelRef.current.entities?.[currentFloorRef.current]});
-
     if (
       !levelRef.current.grids ||
       !levelRef.current.grids[currentFloorRef.current]
     ) {
-      console.warn("bailing out early because something is undefined");
       return;
     }
 
-    // On touch, tap triggers pointerenter (first) then pointerdown. 
-    // If we only show the modal on !isPointerEnter, tapping on mobile might erase via pointerenter.
-    // Instead of completely skipping on isPointerEnter, we should skip ONLY if we are legitimately dragging.
-    // But since it's tricky to distinguish tap-enter from drag-enter without tracking, 
-    // we just use the touch pointer behavior which requires us to NOT erase implicitly on pointerenter if items > 1.
     if (effectiveTool === 'erase' && !isFillModeRef.current && !shiftKey && !explicitEraseType) {
-      const gridCell = levelRef.current.grids[currentFloorRef.current][y]?.[x] || ' ';
-      const entCell = levelRef.current.entities?.[currentFloorRef.current]?.[y]?.[x] || '.';
-      const lightCell = levelRef.current.gridLight?.[y]?.[x] || '.';
-      const soundCell = levelRef.current.gridSounds?.[currentFloorRef.current]?.[y]?.[x] || '.';
-      const particleExists = levelRef.current.particles?.some((p: any) => Math.floor(p.x) === x && Math.floor(p.y) === y);
+      if (isRightClick) {
+        const gridCell = levelRef.current.grids[currentFloorRef.current][y]?.[x] || ' ';
+        const entCell = levelRef.current.entities?.[currentFloorRef.current]?.[y]?.[x] || '.';
+        const itemCell = levelRef.current.itemsGrid?.[currentFloorRef.current]?.[y]?.[x] || '.';
+        const lightCell = levelRef.current.gridLight?.[y]?.[x] || '.';
+        const soundCell = levelRef.current.gridSounds?.[currentFloorRef.current]?.[y]?.[x] || '.';
+        const particleExists = levelRef.current.particles?.some((p: any) => Math.floor(p.x) === x && Math.floor(p.y) === y);
 
-      const items: { type: 'grid' | 'entity' | 'light' | 'sound' | 'particle'; char: string; desc: string }[] = [];
-      if (gridCell !== ' ') {
-         const cInfo = levelRef.current.construction?.find((c: any) => c.symbol === gridCell);
-         const word = cInfo ? (cInfo.type === 'wall' ? (uiStrings.desc_wall || 'Wall') : (uiStrings.desc_floor || 'Floor')) : 
-                        (gridCell === '.' ? (uiStrings.desc_floor || 'Floor') : (uiStrings.desc_grid || 'Grid'));
-         items.push({ type: 'grid', char: gridCell, desc: `${word} (${gridCell})` });
-      }
-      if (entCell !== '.' && entCell !== ' ') {
-         let desc = `${uiStrings.desc_entity || 'Entity'} (${entCell})`;
-         if (entCell === (levelRef.current.playerStart?.symbol || 'S')) desc = `${uiStrings.desc_spawn || 'Spawn'} (${entCell})`;
-         else if (levelRef.current.doorDefinitions?.[entCell]) desc = `${uiStrings.desc_door || 'Door'} (${entCell})`;
-         else if (levelRef.current.portals?.find((p: any) => p.symbol === entCell)) desc = `${uiStrings.desc_portal || 'Portal'} (${entCell})`;
-         else if (levelRef.current.enemies?.find((e: any) => e.symbol === entCell)) desc = `${uiStrings.desc_enemy || 'Enemy'} (${entCell})`;
-         else if (levelRef.current.NPCs?.find((e: any) => e.symbol === entCell)) desc = `${uiStrings.desc_npc || 'NPC'} (${entCell})`;
-         else if (levelRef.current.items?.find((e: any) => e.symbol === entCell)) desc = `${uiStrings.desc_item || 'Item'} (${entCell})`;
-         else if (levelRef.current.decorations?.find((e: any) => e.symbol === entCell)) desc = `${uiStrings.desc_decoration || 'Decoration'} (${entCell})`;
-         items.push({ type: 'entity', char: entCell, desc });
-      }
-      if (lightCell !== '.' && lightCell !== ' ') {
-         items.push({ type: 'light', char: lightCell, desc: `${uiStrings.desc_light || 'Light'} (${lightCell})` });
-      }
-      if (soundCell !== '.' && soundCell !== ' ') {
-         items.push({ type: 'sound', char: soundCell, desc: `${uiStrings.desc_sound || 'Sound'} (${soundCell})` });
-      }
-      if (particleExists) {
-         items.push({ type: 'particle', char: '*', desc: `Particle (*)` });
-      }
+        const items: {
+          type: 'grid' | 'entity' | 'item' | 'door' | 'portal' | 'spawn' | 'light' | 'sound' | 'particle';
+          char: string;
+          desc: string;
+          listName?: 'enemies' | 'NPCs' | 'items' | 'decorations';
+        }[] = [];
 
-      if (items.length > 1) {
-         if (isPointerEnter && touchPointersRef.current.size > 0) {
-            // Dragging over multiple items. Erase them all without modal to be convenient.
-         } else if (isPointerEnter && touchPointersRef.current.size === 0) {
-            // This is the pointerEnter event fired right before pointerDown during a mobile tap.
-            // Do NOT do anything, wait for pointerDown.
-            return;
-         } else {
-            // Not pointer enter, so it's a down event. Show modal!
-            setEraseModalData({ x, y, items, clientX: clientX || 0, clientY: clientY || 0 });
-            return;
-         }
+        // 1. Grid (Floor / Wall)
+        if (gridCell !== ' ') {
+           const cInfo = levelRef.current.construction?.find((c: any) => c.symbol === gridCell);
+           const word = cInfo ? (cInfo.type === 'wall' ? (uiStrings.desc_wall || 'Wall') : (uiStrings.desc_floor || 'Floor')) : 
+                          (gridCell === '.' ? (uiStrings.desc_floor || 'Floor') : (uiStrings.desc_grid || 'Grid'));
+           items.push({ type: 'grid', char: gridCell, desc: `${word} (${gridCell})` });
+        }
+
+        // 2. Door / Portal / Spawn / Entities in entCell
+        if (entCell !== '.' && entCell !== ' ') {
+           if (entCell === (levelRef.current.playerStart?.symbol || 'S')) {
+             items.push({ type: 'spawn', char: entCell, desc: `${uiStrings.desc_spawn || 'Spawn'} (${entCell})` });
+           } else if (levelRef.current.doorDefinitions?.[entCell]) {
+             items.push({ type: 'door', char: entCell, desc: `${uiStrings.desc_door || 'Door'} (${entCell})` });
+           } else if (levelRef.current.portals?.find((p: any) => p.symbol === entCell)) {
+             items.push({ type: 'portal', char: entCell, desc: `${uiStrings.desc_portal || 'Portal'} (${entCell})` });
+           } else {
+             const resolved = resolveCombo(entCell);
+             for (const sym of resolved) {
+               let desc = `${uiStrings.desc_entity || 'Entity'} (${sym})`;
+               let listName: 'enemies' | 'NPCs' | 'items' | 'decorations' | undefined;
+               const lists = ['enemies', 'NPCs', 'items', 'decorations'] as const;
+               for (const l of lists) {
+                 const found = (levelRef.current as any)[l]?.find((e: any) => e.symbol === sym);
+                 if (found) {
+                   listName = l;
+                   const lLabel = l === 'enemies' ? (uiStrings.desc_enemy || 'Enemy') :
+                                  l === 'NPCs' ? (uiStrings.desc_npc || 'NPC') :
+                                  l === 'items' ? (uiStrings.desc_item || 'Item') : (uiStrings.desc_decoration || 'Decoration');
+                   desc = `${lLabel}: ${found.id || found.name || sym} (${sym})`;
+                   break;
+                 }
+               }
+               items.push({ type: 'entity', char: sym, desc, listName });
+             }
+           }
+        }
+
+        // 3. Items in itemCell
+        if (itemCell !== '.' && itemCell !== ' ') {
+           const resolved = resolveCombo(itemCell);
+           for (const sym of resolved) {
+             let desc = `${uiStrings.desc_item || 'Item'} (${sym})`;
+             const found = levelRef.current.items?.find((e: any) => e.symbol === sym);
+             if (found) {
+               desc = `${uiStrings.desc_item || 'Item'}: ${found.id || found.name || sym} (${sym})`;
+             }
+             if (!items.some(i => i.char === sym && (i.type === 'item' || i.type === 'entity'))) {
+               items.push({ type: 'item', char: sym, desc, listName: 'items' });
+             }
+           }
+        }
+
+        // 4. Light
+        if (lightCell !== '.' && lightCell !== ' ') {
+           items.push({ type: 'light', char: lightCell, desc: `${uiStrings.desc_light || 'Light'} (${lightCell})` });
+        }
+
+        // 5. Sound
+        if (soundCell !== '.' && soundCell !== ' ') {
+           items.push({ type: 'sound', char: soundCell, desc: `${uiStrings.desc_sound || 'Sound'} (${soundCell})` });
+        }
+
+        // 6. Particle
+        if (particleExists) {
+           items.push({ type: 'particle', char: '*', desc: `Particle (*)` });
+        }
+
+        if (items.length > 1) {
+           if (isPointerEnter && touchPointersRef.current.size > 0) {
+              // Dragging over multiple items.
+           } else if (isPointerEnter && touchPointersRef.current.size === 0) {
+              return;
+           } else {
+              setEraseModalData({ x, y, items, clientX: clientX || 0, clientY: clientY || 0 });
+              return;
+           }
+        }
+      } else {
+        explicitEraseType = eraseSubModeRef.current === 'all' ? 'all' : (eraseSubModeRef.current === 'geometry' ? 'grid' : 'other');
       }
     }
 
@@ -4555,46 +4774,95 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
 
           if (effectiveTool === "erase") {
             const eraseAll = !explicitEraseType || explicitEraseType === 'all';
-            const newEntities = resultingLevel.entities[currentFloorRef.current];
-            if ((eraseAll || explicitEraseType === 'entity') && newEntities && newEntities[py]) {
-              const entRow = newEntities[py].split("");
-              entRow[px] = ".";
-              newEntities[py] = entRow.join("");
+            const eraseOther = explicitEraseType === 'other';
 
-              if (resultingLevel.entityOverrides) {
-                  delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}`];
-                  for (const l of ['items', 'decorations', 'NPCs', 'enemies', 'portals']) {
-                      delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_${l}`];
+            // 1. Entities / Doors / Portals / Spawn
+            const newEntities = resultingLevel.entities[currentFloorRef.current];
+            if (newEntities && newEntities[py]) {
+              if (eraseAll || eraseOther || explicitEraseType === 'door' || explicitEraseType === 'portal' || explicitEraseType === 'spawn') {
+                const entRow = newEntities[py].split("");
+                entRow[px] = ".";
+                newEntities[py] = entRow.join("");
+
+                if (resultingLevel.entityOverrides) {
+                    delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}`];
+                    for (const l of ['items', 'decorations', 'NPCs', 'enemies', 'portals']) {
+                        delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_${l}`];
+                    }
+                }
+              } else if (explicitEraseType === 'entity') {
+                const entRow = newEntities[py].split("");
+                const currentSymbolOnCell = entRow[px];
+                if (currentSymbolOnCell !== "." && currentSymbolOnCell !== " ") {
+                  if (targetSymbol) {
+                    const currentBase = resolveCombo(currentSymbolOnCell);
+                    const remaining = currentBase.filter(s => s !== targetSymbol);
+                    if (remaining.length > 0) {
+                      entRow[px] = getComboSymbol(remaining, resultingLevel);
+                    } else {
+                      entRow[px] = ".";
+                    }
+                  } else {
+                    entRow[px] = ".";
                   }
-              }
-            }
-            if ((eraseAll || explicitEraseType === 'entity') && resultingLevel.itemsGrid && resultingLevel.itemsGrid[currentFloorRef.current] && resultingLevel.itemsGrid[currentFloorRef.current][py]) {
-              const itemRow = resultingLevel.itemsGrid[currentFloorRef.current][py].split("");
-              const currentSymbolOnCell = itemRow[px];
-              if (currentSymbolOnCell !== ".") {
-                const currentBaseItems = resolveCombo(currentSymbolOnCell);
-                if (currentBaseItems.length > 1) {
-                  const newBaseItems = currentBaseItems.slice(0, currentBaseItems.length - 1);
-                  const newCellSymbol = getComboSymbol(newBaseItems, resultingLevel);
-                  itemRow[px] = newCellSymbol;
-                } else {
-                  itemRow[px] = ".";
+                  newEntities[py] = entRow.join("");
+
                   if (resultingLevel.entityOverrides) {
-                     delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_items`];
+                    if (targetListName) {
+                      delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_${targetListName}`];
+                    } else {
+                      delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}`];
+                      for (const l of ['items', 'decorations', 'NPCs', 'enemies', 'portals']) {
+                        delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_${l}`];
+                      }
+                    }
                   }
                 }
-                resultingLevel.itemsGrid[currentFloorRef.current][py] = itemRow.join("");
               }
             }
+
+            // 2. ItemsGrid
+            if (resultingLevel.itemsGrid && resultingLevel.itemsGrid[currentFloorRef.current] && resultingLevel.itemsGrid[currentFloorRef.current][py]) {
+              if (eraseAll || eraseOther || explicitEraseType === 'item') {
+                const itemRow = resultingLevel.itemsGrid[currentFloorRef.current][py].split("");
+                const currentSymbolOnCell = itemRow[px];
+                if (currentSymbolOnCell !== ".") {
+                  if (targetSymbol) {
+                    const currentBaseItems = resolveCombo(currentSymbolOnCell);
+                    const remainingItems = currentBaseItems.filter(s => s !== targetSymbol);
+                    if (remainingItems.length > 0) {
+                      itemRow[px] = getComboSymbol(remainingItems, resultingLevel);
+                    } else {
+                      itemRow[px] = ".";
+                      if (resultingLevel.entityOverrides) {
+                        delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_items`];
+                      }
+                    }
+                  } else {
+                    itemRow[px] = ".";
+                    if (resultingLevel.entityOverrides) {
+                      delete resultingLevel.entityOverrides[`${currentFloorRef.current}_${py}_${px}_items`];
+                    }
+                  }
+                  resultingLevel.itemsGrid[currentFloorRef.current][py] = itemRow.join("");
+                }
+              }
+            }
+
+            // 3. Grid & Triggers
             if ((eraseAll || explicitEraseType === 'grid') && resultingLevel.triggers) {
                resultingLevel.triggers = resultingLevel.triggers.filter((t: any) => !(t.type === 'ON_ENTER_TILE' && t.params?.x === px && t.params?.y === py));
             }
-            if ((eraseAll || explicitEraseType === 'light') && resultingLevel.gridLight && resultingLevel.gridLight[py]) {
+
+            // 4. Light
+            if ((eraseAll || eraseOther || explicitEraseType === 'light') && resultingLevel.gridLight && resultingLevel.gridLight[py]) {
                  const lRow = resultingLevel.gridLight[py].split("");
                  lRow[px] = ".";
                  resultingLevel.gridLight[py] = lRow.join("");
             }
-            if ((eraseAll || explicitEraseType === 'sound') && resultingLevel.gridSounds) {
+
+            // 5. Sound
+            if ((eraseAll || eraseOther || explicitEraseType === 'sound') && resultingLevel.gridSounds) {
                  const currentGridSounds = resultingLevel.gridSounds[currentFloorRef.current];
                  if (currentGridSounds && currentGridSounds[py]) {
                      const sRow = currentGridSounds[py].split("");
@@ -4602,12 +4870,15 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                      currentGridSounds[py] = sRow.join("");
                  }
             }
-            if ((eraseAll || explicitEraseType === 'particle') && resultingLevel.particles) {
+
+            // 6. Particle
+            if ((eraseAll || eraseOther || explicitEraseType === 'particle') && resultingLevel.particles) {
                resultingLevel.particles = resultingLevel.particles.filter(
                    (p: any) => Math.floor(p.x) !== px || Math.floor(p.y) !== py
                );
             }
-            
+
+            // 7. Floor/Wall symbol on grid
             if (eraseAll || explicitEraseType === 'grid') {
                row[px] = " ";
             }
@@ -4764,6 +5035,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
             'data/sounds.json': soundsData,
             'data/strings_en.json': stringsEnData,
             'data/strings_ru.json': stringsRuData,
+            'data/polyObjects.json': REGISTERED_POLY_MODELS,
         };
         
         for (const [filename, zipEntry] of Object.entries(zip.files)) {
@@ -4884,6 +5156,26 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                      count++;
                  } catch(e) {
                      console.error('Failed to parse levels.ts from zip', e);
+                 }
+             }
+          } else if (isTs && (filename.endsWith('polyModels.ts') || filename.endsWith('data/polyModels.ts'))) {
+             const text = await zipEntry.async('string');
+             const match = text.match(/REGISTERED_POLY_MODELS[\s\S]*?=\s*(\{[\s\S]*?\});\s*(?:export|function|\n|$)/) ||
+                           text.match(/REGISTERED_POLY_MODELS[\s\S]*?=\s*(\{[\s\S]*?\})/);
+             if (match) {
+                 try {
+                     let parsedObj;
+                     try {
+                         parsedObj = JSON.parse(match[1]);
+                     } catch {
+                         parsedObj = new Function(`return ${match[1]}`)();
+                     }
+                     if (parsedObj && typeof parsedObj === 'object') {
+                         replaceData(REGISTERED_POLY_MODELS, parsedObj);
+                         count++;
+                     }
+                 } catch(e) {
+                     console.error('Failed to parse polyModels.ts from zip', e);
                  }
              }
           }
@@ -5081,6 +5373,9 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
     // Generate levels.ts content
     let levelsTsContent = `export const WORLD_MAP_PATHS = ${JSON.stringify(WORLD_MAP_PATHS, null, 2)};\n\nexport let START_SECTOR_PATH = ${JSON.stringify(START_SECTOR_PATH)};\n\nexport function setStartSectorPath(newPath: string) {\n  START_SECTOR_PATH = newPath;\n}\n\nexport let TUTORIAL_SECTOR_PATH = ${JSON.stringify(TUTORIAL_SECTOR_PATH)};\n\nexport function setTutorialSectorPath(newPath: string) {\n  TUTORIAL_SECTOR_PATH = newPath;\n}`;
     zip.file('data/levels.ts', levelsTsContent);
+
+    // Save 3D polyObjects models database
+    zip.file('data/polyObjects.json', JSON.stringify(REGISTERED_POLY_MODELS, null, 2));
 
     // Add JSON databases
     zip.file('data/achievements.json', JSON.stringify(achievementsData, null, 2));
@@ -5725,7 +6020,9 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
             }}
           >
             <div className="w-8 h-8 rounded bg-gray-800 border border-gray-600 flex flex-col items-center justify-center text-sm font-black overflow-hidden relative shrink-0">
-              {entityAssetCache[entityDef.symbol] && getPreviewSrc(entityAssetCache[entityDef.symbol]!) && (
+              {entityPolyModelCache[entityDef.symbol] ? (
+                <PolyObjectIsometricIcon modelId={entityPolyModelCache[entityDef.symbol]!} className="absolute z-20 w-[90%] h-[90%] object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
+              ) : entityAssetCache[entityDef.symbol] && getPreviewSrc(entityAssetCache[entityDef.symbol]!) && (
                 entityIsBoxCache[entityDef.symbol] ? (
                   <CubeIcon src={getPreviewSrc(entityAssetCache[entityDef.symbol]!)!} className="absolute z-20 w-[85%] h-[85%] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
                 ) : (
@@ -5816,7 +6113,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
           </div>
         ));
     });
-  }, [level.enemies, level.NPCs, level.items, level.decorations, entityBrushConfig.symbol, activeTool, entityAssetCache, entityIsBoxCache]);
+  }, [level.enemies, level.NPCs, level.items, level.decorations, entityBrushConfig.symbol, activeTool, entityAssetCache, entityIsBoxCache, entityPolyModelCache]);
 
   return (
     <div 
@@ -5856,7 +6153,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                 onClick={() => {
                   recordHistory();
                   lastDrawTimeRef.current = { time: Date.now() };
-                  handleCellDraw(eraseModalData.x, eraseModalData.y, false, true, item.type);
+                  handleCellDraw(eraseModalData.x, eraseModalData.y, false, true, item.type, false, eraseModalData.clientX, eraseModalData.clientY, item.char, item.listName);
                   setEraseModalData(null);
                 }}
               >
@@ -6054,6 +6351,14 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
           onClose={() => setShowPlayerSettings(false)}
           uiStrings={uiStrings}
           level={level}
+        />
+      )}
+
+      {showPolyObjectEditor && (
+        <PolyObjectEditorModal
+          isOpen={showPolyObjectEditor}
+          onClose={() => setShowPolyObjectEditor(false)}
+          uiStrings={uiStrings}
         />
       )}
 
@@ -6376,6 +6681,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                     <button className="w-full text-left px-4 py-2 hover:bg-gray-700" onClick={() => { setAssetEditorMode('credits'); setActiveMenu(null); }}>{uiStrings.asset_editor_credits || "Титры"}</button>
                     <button className="w-full text-left px-4 py-2 hover:bg-gray-700" onClick={() => { setAssetEditorMode('buffs'); setActiveMenu(null); }}>{uiStrings.asset_editor_buffs || "Баффы/Дебаффы"}</button>
                     <button className="w-full text-left px-4 py-2 hover:bg-gray-700" onClick={() => { setAssetEditorMode('decorations'); setActiveMenu(null); }}>{uiStrings.asset_editor_decorations || "Декорации"}</button>
+                    <button className="w-full text-left px-4 py-2 hover:bg-gray-700" onClick={() => { setShowPolyObjectEditor(true); setActiveMenu(null); }}>{uiStrings.asset_editor_poly_models || "3D Модели"}</button>
                     <button className="w-full text-left px-4 py-2 hover:bg-gray-700" onClick={() => { setAssetEditorMode('dialogues'); setActiveMenu(null); }}>{uiStrings.asset_editor_dialogues_json || "Диалоги (JSON)"}</button>
                     <button className="w-full text-left px-4 py-2 hover:bg-gray-700" onClick={() => { setAssetEditorMode('enemies'); setActiveMenu(null); }}>{uiStrings.asset_editor_enemies || "Враги"}</button>
                     <button className="w-full text-left px-4 py-2 hover:bg-gray-700" onClick={() => { setAssetEditorMode('items'); setActiveMenu(null); }}>{uiStrings.asset_editor_items || "Предметы"}</button>
@@ -6617,9 +6923,46 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
           </button>
         </div>
 
-        {/* Center Grid Area */}
-        <div
-          ref={gridScrollRef}
+        {/* Center Grid Area Wrapper */}
+        <div className="flex-1 relative flex flex-col min-w-0 min-h-0 overflow-hidden">
+          {activeTool === "erase" && (
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[300] bg-gray-900/90 border border-gray-700 rounded-lg p-1 shadow-lg flex items-center gap-1 select-none pointer-events-auto">
+              <button
+                onClick={() => setEraseSubMode('all')}
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                  eraseSubMode === 'all'
+                    ? 'bg-red-600 text-white font-bold'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                Всё
+              </button>
+              <button
+                onClick={() => setEraseSubMode('geometry')}
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                  eraseSubMode === 'geometry'
+                    ? 'bg-red-600 text-white font-bold'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                Геометрия
+              </button>
+              <button
+                onClick={() => setEraseSubMode('other')}
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                  eraseSubMode === 'other'
+                    ? 'bg-red-600 text-white font-bold'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                Объекты
+              </button>
+            </div>
+          )}
+
+          {/* Center Grid Area */}
+          <div
+            ref={gridScrollRef}
           onPointerDownCapture={handlePointerDownCapture}
           onPointerMove={handlePointerMove}
           onContextMenu={(e) => e.preventDefault()}
@@ -6641,12 +6984,12 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
           ) : (
             <div className="min-w-full min-h-full w-max h-max flex items-center justify-center p-[3px] mx-auto">
             <div
-              className="bg-gray-900 border border-gray-800 shrink-0 origin-center relative"
-              style={{ padding: "1px", zoom: `${zoom}%` }}
+              className="bg-gray-900 border border-gray-800 shrink-0 origin-center relative z-0"
+              style={{ padding: "1px", zoom: `${zoom}%`, isolation: 'isolate' }}
             >
               {viewPortals && portalLinesData.lines.length > 0 && (
                 <svg
-                  className="absolute top-0 left-0 z-[150] pointer-events-none"
+                  className="absolute top-0 left-0 z-[20] pointer-events-none"
                   width={portalLinesData.gridW}
                   height={portalLinesData.gridH}
                   style={{ overflow: 'visible' }}
@@ -6665,7 +7008,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                 </svg>
               )}
               {level.particles && level.particles.length > 0 && (
-                <div className="absolute top-0 left-0 z-[140] pointer-events-none" style={{ width: 0, height: 0 }}>
+                <div className="absolute top-0 left-0 z-[22] pointer-events-none" style={{ width: 0, height: 0 }}>
                    {level.particles.map(p => {
                       let px = Math.floor(p.x);
                       let py = Math.floor(p.y);
@@ -6761,6 +7104,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                       entityAssetCache={entityAssetCache}
                       entityEmptynessCache={entityEmptynessCache}
                       entityIsBoxCache={entityIsBoxCache}
+                      entityPolyModelCache={entityPolyModelCache}
                       scriptTriggersOnEnterSet={scriptTriggersOnEnterSet}
                       scriptTriggersRadiusList={scriptTriggersRadiusList}
                       resolveCombo={resolveCombo}
@@ -6774,6 +7118,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
             </div>
           </div>
           )}
+        </div>
         </div>
 
         {/* Right Palette Area */}
@@ -7003,7 +7348,7 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                           ID: {sndDef.id || 'none'}
                         </div>
                         <div className="text-[10px] text-gray-500 truncate">
-                          Rad: {sndDef.radius} | Min: {sndDef.minInterval}
+                          Rad: {sndDef.radius} | Min: {sndDef.minInterval}{sndDef.nonPositional ? ' | 2D' : ''}
                         </div>
                       </div>
                       <div className="flex items-center gap-0.5 shrink-0 bg-gray-950/25 p-0.5 rounded border border-gray-800/40 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
@@ -7070,7 +7415,8 @@ export const LevelBuilder: React.FC<LevelBuilderProps> = ({
                 <div className="shrink-0 pt-2 border-t border-gray-700 bg-gray-800 mt-2">
                   <button
                     onClick={() => {
-                       setSoundBrushConfig({ id: Object.keys(soundsData)[0] || '', minInterval: 2000, maxInterval: 5000, radius: 10 });
+                       const firstSoundId = Object.keys(soundsData).find(k => !(soundsData as any)[k]?.alias) || '';
+                       setSoundBrushConfig({ id: firstSoundId, minInterval: 2000, maxInterval: 5000, radius: 10 });
                        setActiveTool("sound");
                        setShowSoundModal(true);
                        setIsMobilePaletteOpen(false);

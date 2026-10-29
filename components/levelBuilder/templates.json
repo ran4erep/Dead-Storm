@@ -41,6 +41,7 @@
 	"textOffsetY": 0,
 	"assetId": "",
 	"scale": 0,
+	"yOffset": 0,
     "type": "",
 	"equip": "",
 	"throwDamage": "0d0",
@@ -216,6 +217,7 @@
 	"MESH": "------------",
 	"renderMode": "mesh",
 	"meshWidth": 0,
+	"preserveAspect": false,
     "worldOffsetX": 0,
     "worldOffsetY": 0,
 	"wallSide": ""

@@ -263,6 +263,10 @@ export const renderPassthroughWalls = (
     }
 
     const isFog = isFogWeather();
+    const timePulse = Math.sin(Date.now() / 450) * 0.5 + 0.5;
+    const highlightPulse = 0.25 + 0.75 * timePulse;
+    const highlightRAdd = (60 * highlightPulse) | 0;
+    const highlightGBMult = 1.0 - 0.6 * highlightPulse;
     const fogStart = getFogStart();
     const invFogRange = getInvFogRange();
     const invRenderDistance = getInvRenderDistance();
@@ -478,10 +482,41 @@ export const renderPassthroughWalls = (
                 drawEnd = Math.min(drawEnd, pt.clipBottom);
             }
 
+            const isPixelOccluded = (py: number, pDist: number): boolean => {
+                if (!passThroughWalls || passThroughWalls.length === 0) return false;
+                for (let k = 0; k < passThroughWalls.length; k++) {
+                    if (k === i) continue;
+                    const occ = passThroughWalls[k];
+                    if (!occ) continue;
+                    if (occ.dist >= pDist - 0.02) continue;
+
+                    let occTop: number;
+                    let occBot: number;
+                    if (occ.wallTop !== undefined && occ.wallBottom !== undefined) {
+                        occTop = occ.wallTop;
+                        occBot = occ.wallBottom;
+                    } else {
+                        const occLh = height / occ.dist;
+                        const occAbsTopZ = occ.layer + (occ.topZ !== undefined ? occ.topZ : 1.0);
+                        const occAbsBotZ = occ.layer + (occ.bottomZ !== undefined ? occ.bottomZ : 0.0);
+                        occTop = Math.floor(horizon + occLh * (cameraZ - occAbsTopZ));
+                        occBot = Math.ceil(horizon + occLh * (cameraZ - occAbsBotZ));
+                        if (occ.clipBottom !== undefined) {
+                            occBot = Math.min(occBot, occ.clipBottom);
+                        }
+                    }
+                    if (py >= occTop && py < occBot) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
             const upperTile = activeGrids[pt.layer][pt.mapY][pt.mapX];
             
             const cellKey = pt.mapY * 10000 + pt.mapX;
-            const isHighlighted = reusableHighlightSet ? reusableHighlightSet.has(cellKey) : false;
+            // Vertical walls should not be tinted by floor highlights, especially upper floor (layer > 0) walls
+            const isHighlighted = false;
 
             // OPTIMIZATION: Skip texture mapping for very distant walls
             if (dist > renderDistance) {
@@ -595,12 +630,13 @@ export const renderPassthroughWalls = (
                     let r = (pt.side === 1) ? 0x37 : 0x4b;
                     let g = (pt.side === 1) ? 0x41 : 0x55;
                     let b = (pt.side === 1) ? 0x51 : 0x63;
-                    r += 60; if (r > 255) r = 255;
-                    g = (g * 0.4) | 0; b = (b * 0.4) | 0;
+                    r += highlightRAdd; if (r > 255) r = 255;
+                    g = (g * highlightGBMult) | 0; b = (b * highlightGBMult) | 0;
                     solidColor = (255 << 24) | (b << 16) | (g << 8) | r;
                 }
-                if (drawStart < drawEnd && ((pt.layer !== undefined && pt.layer > 0) || dist <= zBuffer[x] + 1.5)) {
+                if (drawStart < drawEnd && ((pt.layer !== undefined && pt.layer > 0) || dist <= zBuffer[x] + 0.05)) {
                     for (let y = drawStart; y < drawEnd; y++) {
+                        if (isPixelOccluded(y, dist)) continue;
                         screenBuffer[y * width + x] = solidColor;
                         for (let d = 1; d < resolutionDivisor; d++) {
                             if (x + d < width) screenBuffer[y * width + (x + d)] = solidColor;
@@ -688,12 +724,13 @@ export const renderPassthroughWalls = (
                     rayDirX,
                     rayDirY,
                     upperTile,
-                    auxBuffers
+                    auxBuffers,
+                    passThroughWallsCol: passThroughWalls
                 });
                 drawStart = drawEnd; // Skip default drawing below
             }
 
-            if (drawStart < drawEnd && ((pt.layer !== undefined && pt.layer > 0) || dist <= zBuffer[x] + 1.5)) {
+            if (drawStart < drawEnd && ((pt.layer !== undefined && pt.layer > 0) || dist <= zBuffer[x] + 0.05)) {
                 const fogAmtInt = isFogWeather() ? 256 - distFogInt : 0;
                 const fogR = (getFogColorR() * fogAmtInt) >> 8;
                 const fogG = (getFogColorG() * fogAmtInt) >> 8;
@@ -708,6 +745,8 @@ export const renderPassthroughWalls = (
                         if (ty < 0) ty += h;
                         texPosFixed += stepFixed;
                         
+                        if (isPixelOccluded(y, dist)) continue;
+
                         const color = texData[(ty * texW + texX) | 0];
                         let r = color & 0xFF; let g = (color >> 8) & 0xFF; let b = (color >> 16) & 0xFF;
                         
@@ -729,8 +768,8 @@ export const renderPassthroughWalls = (
                         b = Math.min(255, b);
 
                         if (isHighlighted) {
-                            r += 60; if (r > 255) r = 255;
-                            g = (g * 0.4) | 0; b = (b * 0.4) | 0;
+                            r += highlightRAdd; if (r > 255) r = 255;
+                            g = (g * highlightGBMult) | 0; b = (b * highlightGBMult) | 0;
                         }
 
                         const finalColor = (255 << 24) | (b << 16) | (g << 8) | r;
@@ -745,6 +784,8 @@ export const renderPassthroughWalls = (
                         let ty = (texPosFixed >> 16) % h;
                         if (ty < 0) ty += h;
                         texPosFixed += stepFixed;
+
+                        if (isPixelOccluded(y, dist)) continue;
                         
                         const color = texData[(ty * texW + texX) | 0];
                         let r = color & 0xFF; let g = (color >> 8) & 0xFF; let b = (color >> 16) & 0xFF;
@@ -755,8 +796,8 @@ export const renderPassthroughWalls = (
                         b = (b * bMultInt) >> 8;
 
                         if (isHighlighted) {
-                            r += 60; if (r > 255) r = 255;
-                            g = (g * 0.4) | 0; b = (b * 0.4) | 0;
+                            r += highlightRAdd; if (r > 255) r = 255;
+                            g = (g * highlightGBMult) | 0; b = (b * highlightGBMult) | 0;
                         }
                         
                         const finalColor = (255 << 24) | (b << 16) | (g << 8) | r;
@@ -951,7 +992,7 @@ export const renderPassthroughWalls = (
                                     stepsLeft = actualSteps;
                                 }
 
-                                const lightR = currLightR;
+                                 const lightR = currLightR;
                                 const lightG = currLightG;
                                 const lightB = currLightB;
                                 const distFogInt = currFogInt | 0;
@@ -961,6 +1002,8 @@ export const renderPassthroughWalls = (
                                 currLightB += stepLightB;
                                 currFogInt += stepFogInt;
                                 stepsLeft--;
+
+                                if (isPixelOccluded(y, distToP)) continue;
 
                                 const weight = distToP;
                                 const currentFloorX = posX + weight * rayDirX;
@@ -1091,7 +1134,8 @@ export const renderPassthroughWalls = (
                         const capH = topBuf.height;
                         const capData = topBuf.data;
                         
-                        const topLayer = (floorLightMaps && pt.layer + 1 < floorLightMaps.length) ? pt.layer + 1 : pt.layer;
+                        const isUpperFloorCap = (pt.topZ !== undefined ? pt.topZ : 1.0) >= 1.0;
+                        const topLayer = (floorLightMaps && isUpperFloorCap && pt.layer + 1 < floorLightMaps.length) ? pt.layer + 1 : pt.layer;
                         const topLightMap = (floorLightMaps && floorLightMaps[topLayer]) ? floorLightMaps[topLayer] : lightMap;
                         const cellLight = topLightMap ? (topLightMap[pt.mapY]?.[pt.mapX] || { r: 1.0, g: 1.0, b: 1.0 }) : { r: 1.0, g: 1.0, b: 1.0 };
                         const cellLightR = cellLight.r;
@@ -1148,8 +1192,6 @@ export const renderPassthroughWalls = (
                         const fogColorB = getFogColorB();
 
                         const rot = (upperTile?.topTextureRotation || 0) % 360;
-                        const cellKey = pt.mapY * 10000 + pt.mapX;
-                        const isHighlighted = reusableHighlightSet.has(cellKey);
 
                         let currLightR = cellLightR, currLightG = cellLightG, currLightB = cellLightB;
                         let stepLightR = 0, stepLightG = 0, stepLightB = 0;
@@ -1248,7 +1290,7 @@ export const renderPassthroughWalls = (
                                     stepsLeft = actualSteps;
                                 }
 
-                                const lightR = currLightR;
+                                 const lightR = currLightR;
                                 const lightG = currLightG;
                                 const lightB = currLightB;
                                 const distFogInt = currFogInt | 0;
@@ -1258,6 +1300,8 @@ export const renderPassthroughWalls = (
                                 currLightB += stepLightB;
                                 currFogInt += stepFogInt;
                                 stepsLeft--;
+
+                                if (isPixelOccluded(y, distToP)) continue;
 
                                 const weight = distToP;
                                 let texXCoord = posX + weight * rayDirX;
@@ -1314,10 +1358,17 @@ export const renderPassthroughWalls = (
                                     bFinal += (fogColorB * fogAmt) >> 8;
                                 }
 
-                                if (isHighlighted) {
-                                    rFinal += 60;
-                                    gFinal = (gFinal * 0.4) | 0;
-                                    bFinal = (bFinal * 0.4) | 0;
+                                let isPointHighlighted = false;
+                                if (reusableHighlightSet) {
+                                    const sampleCellX = Math.floor(posX + distToP * rayDirX);
+                                    const sampleCellY = Math.floor(posY + distToP * rayDirY);
+                                    isPointHighlighted = reusableHighlightSet.has(sampleCellY * 10000 + sampleCellX);
+                                }
+
+                                if (isPointHighlighted) {
+                                    rFinal += highlightRAdd; if (rFinal > 255) rFinal = 255;
+                                    gFinal = (gFinal * highlightGBMult) | 0;
+                                    bFinal = (bFinal * highlightGBMult) | 0;
                                 }
 
                                 if (activeShadowCount > 0) {
@@ -1433,8 +1484,8 @@ export const renderPassthroughDoors = (
                 const botZ = wall.bottomZ !== undefined ? wall.bottomZ : 0.0;
                 const absTopZ = wall.layer + topZ;
                 const absBotZ = wall.layer + botZ;
-                const levelDrawStart = Math.floor(horizon + lh * (cameraZ - absTopZ));
-                const levelDrawEnd = Math.ceil(horizon + lh * (cameraZ - absBotZ));
+                const levelDrawStart = wall.wallTop !== undefined ? wall.wallTop : Math.floor(horizon + lh * (cameraZ - absTopZ));
+                const levelDrawEnd = wall.wallBottom !== undefined ? wall.wallBottom : Math.ceil(horizon + lh * (cameraZ - absBotZ));
 
                 const cTop = wall.cutoutTop !== undefined ? wall.cutoutTop : 0.25;
                 const cBot = wall.cutoutBottom !== undefined ? wall.cutoutBottom : 0.75;
@@ -1479,8 +1530,8 @@ export const renderPassthroughDoors = (
                 const botZ = wall.bottomZ !== undefined ? wall.bottomZ : 0.0;
                 const absTopZ = wall.layer + topZ;
                 const absBotZ = wall.layer + botZ;
-                const levelDrawStart = Math.floor(horizon + lh * (cameraZ - absTopZ));
-                const levelDrawEnd = Math.ceil(horizon + lh * (cameraZ - absBotZ));
+                const levelDrawStart = wall.wallTop !== undefined ? wall.wallTop : Math.floor(horizon + lh * (cameraZ - absTopZ));
+                const levelDrawEnd = wall.wallBottom !== undefined ? wall.wallBottom : Math.ceil(horizon + lh * (cameraZ - absBotZ));
 
                 const drawStart = Math.max(0, levelDrawStart);
                 let drawEnd = Math.min(height, levelDrawEnd);

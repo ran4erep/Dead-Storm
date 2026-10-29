@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Columns, Play, X, Plus, Trash2 } from 'lucide-react';
 import { LevelDefinition, AmbientSoundDef } from '../../types';
 import { ASSETS } from '../../assets';
@@ -25,7 +25,7 @@ interface SectorSettingsModalProps {
 export const SectorSettingsModal: React.FC<SectorSettingsModalProps> = ({
     show, onClose, width, height, setWidth, setHeight, level, setLevel, handleApplySize, uiStrings
 }) => {
-    const soundOptions = Object.keys(soundsData);
+    const soundOptions = useMemo(() => Object.keys(soundsData).filter(key => !(soundsData as any)[key]?.alias), []);
     const [nameRu, setNameRu] = useState('');
     const [nameEn, setNameEn] = useState('');
     const [descRu, setDescRu] = useState('');

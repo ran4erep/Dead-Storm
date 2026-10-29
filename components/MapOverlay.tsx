@@ -366,7 +366,10 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
                             }
                         }
 
-                        if (tile.decoration && tile.decoration.blocking && !tile.decoration.isEmptyness) {
+                        const isDecoBlocking = tile.decorations && tile.decorations.length > 0
+                            ? tile.decorations.some((d: any) => d.blocking && !d.isEmptyness)
+                            : !!(tile.decoration && tile.decoration.blocking && !tile.decoration.isEmptyness);
+                        if (isDecoBlocking) {
                             const margin = tileSize * 0.3;
                             blockPath.moveTo(px + margin + lineOffset, py + margin + lineOffset); 
                             blockPath.lineTo(px + tileSize - margin + lineOffset, py + tileSize - margin + lineOffset);

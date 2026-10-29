@@ -1,5 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { GameStrings } from '../types';
+import { ASSETS } from '../assets';
+import { loadImage } from '../utils/levelLogic';
 
 interface KeypadModalProps {
     strings: GameStrings;
@@ -37,11 +39,56 @@ const KEYPAD_GRID = [
 ];
 
 const KeypadModal: React.FC<KeypadModalProps> = ({ strings, spriteMap, assetId, maskAssetId, password, onClose, onUnlock, onKeyPress, onSuccess, onFail }) => {
-    const defaultImgElem = spriteMap.get('KEYPAD');
-    const specificImgElem = assetId ? spriteMap.get(assetId) : undefined;
-    const imgElem = specificImgElem || defaultImgElem;
+    const [loadedImg, setLoadedImg] = useState<HTMLImageElement | undefined>(() => {
+        if (!assetId) return undefined;
+        return spriteMap.get(assetId) || spriteMap.get(`TEX_${assetId}`);
+    });
 
-    const maskImageElement = maskAssetId ? spriteMap.get(maskAssetId) : undefined;
+    const [loadedMaskImg, setLoadedMaskImg] = useState<HTMLImageElement | undefined>(() => {
+        if (!maskAssetId) return undefined;
+        return spriteMap.get(maskAssetId) || spriteMap.get(`TEX_${maskAssetId}`);
+    });
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const resolveAsset = async (id?: string): Promise<HTMLImageElement | undefined> => {
+            if (!id) return undefined;
+            const fromMap = spriteMap.get(id) || spriteMap.get(`TEX_${id}`);
+            if (fromMap && fromMap.complete && fromMap.width > 0) return fromMap;
+
+            let url = (ASSETS.SPRITES as any)[id] || (ASSETS.TEXTURES as any)[id];
+            if (!url && typeof id === 'string' && (id.startsWith('local://') || id.startsWith('data:') || id.startsWith('http://') || id.startsWith('https://') || id.startsWith('/'))) {
+                url = id;
+            }
+            if (url && url.startsWith('local://')) {
+                try {
+                    url = localStorage.getItem(url.substring(8)) || url;
+                } catch (e) {}
+            }
+
+            if (url) {
+                try {
+                    const img = await loadImage(url);
+                    return img;
+                } catch (e) {}
+            }
+            return undefined;
+        };
+
+        resolveAsset(assetId).then(img => {
+            if (isMounted && img) setLoadedImg(img);
+        });
+
+        resolveAsset(maskAssetId).then(mask => {
+            if (isMounted && mask) setLoadedMaskImg(mask);
+        });
+
+        return () => { isMounted = false; };
+    }, [assetId, maskAssetId, spriteMap]);
+
+    const imgElem = loadedImg;
+    const maskImageElement = loadedMaskImg;
     
     const canvasRef = useRef<HTMLCanvasElement>(null); // hidden one for picking
     const mainCanvasRef = useRef<HTMLCanvasElement>(null); // visible one
@@ -301,6 +348,27 @@ const KeypadModal: React.FC<KeypadModalProps> = ({ strings, spriteMap, assetId, 
     useEffect(() => {
         handleButtonPressRef.current = handleButtonPress;
     }, [handleButtonPress]);
+
+    // Keyboard support for typing numbers, backspace, and escape
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key >= '0' && e.key <= '9') {
+                if (handleButtonPressRef.current) {
+                    handleButtonPressRef.current(e.key);
+                }
+            } else if (e.key === 'Backspace' || e.key === 'Delete') {
+                setInputBuffer(prev => prev.slice(0, -1));
+            } else if (e.key === 'Escape') {
+                onClose();
+            } else if (e.key === '*' || e.key === '#') {
+                if (handleButtonPressRef.current) {
+                    handleButtonPressRef.current(e.key);
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onClose]);
 
     // Track button A and B release state when the modal mounts, preventing instantly pressing buttons due to a carryover "A" button press
     const gamepadButtonANeedReleaseRef = useRef<boolean>(true);

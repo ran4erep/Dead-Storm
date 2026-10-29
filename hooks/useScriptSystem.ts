@@ -1,7 +1,7 @@
 import { useCallback, useRef, useEffect } from "react";
 import { ScriptTrigger, ScriptAction, GameState } from "../types";
 import { findPath } from "../utils/aiLogic";
-import { calculateLightMap } from "../utils/levelLogic";
+import { calculateLightMap, clearLightMapCache } from "../utils/levelLogic";
 import { ensureEntityAssetsLoaded } from "../utils/assetExtraction";
 import enemiesDb from "../data/enemies.json";
 import itemsDb from "../data/items.json";
@@ -132,6 +132,11 @@ export const useScriptSystem = (
   stopMusic?: any,
   setGameOverType?: (type: 'death' | 'script') => void,
   unlockAchievement?: (key: string) => void,
+  returnToMenu?: () => void,
+  stopAllSounds?: () => void,
+  setViewportFade?: (val: number | ((prev: number) => number)) => void,
+  setActiveModal?: any,
+  gameState?: any,
 ) => {
   const latestPlayerRef = useRef(player);
   const latestLevelDataRef = useRef(levelData);
@@ -162,15 +167,72 @@ export const useScriptSystem = (
   const timerStatesRef = useRef<{ [triggerId: string]: { targetMs: number; elapsedMs: number } }>({});
   const latestTriggerPlayerPosRef = useRef<{ x: number; y: number } | null>(null);
 
+  const scriptExecutionEpochRef = useRef<number>(0);
   const runningTriggersRef = useRef<Set<any>>(new Set());
   const locallyFiredTriggersRef = useRef<Set<any>>(new Set());
+  const stoppedRepeatsRef = useRef<Set<string>>(new Set());
+  const activeRepeatsPerLevelRef = useRef<{ [levelKey: string]: Set<string> }>({});
+  const executeActionsRef = useRef<any>(null);
   const lastLoadedLevelKeyRef = useRef<string>("");
+  const lastGameStateRef = useRef<any>(gameState);
 
-  const levelKey = levelData ? `${levelData.fileName || ""}_${levelData.locationName || ""}_${levelData.playerStart?.symbol || ""}` : "";
-  if (levelKey !== lastLoadedLevelKeyRef.current) {
-    lastLoadedLevelKeyRef.current = levelKey;
+  if (gameState !== undefined && gameState !== lastGameStateRef.current) {
+    lastGameStateRef.current = gameState;
+    scriptExecutionEpochRef.current++;
+    runningTriggersRef.current.clear();
+    locallyFiredTriggersRef.current.clear();
+    stoppedRepeatsRef.current.clear();
+    activeRepeatsPerLevelRef.current = {};
+    timerStatesRef.current = {};
+
+    if (levelData?.triggers && Array.isArray(levelData.triggers)) {
+      for (const t of levelData.triggers) {
+        if (t && typeof t === "object") {
+          delete t.fired;
+        }
+      }
+    }
+  }
+
+  const currentLevelKey = levelData
+    ? (levelData.fileName || levelData.locationName || levelData.name || levelData.rawName || "default_level")
+    : "";
+
+  if (currentLevelKey && currentLevelKey !== lastLoadedLevelKeyRef.current) {
+    const isFirstLoad = !lastLoadedLevelKeyRef.current;
+    lastLoadedLevelKeyRef.current = currentLevelKey;
+
+    scriptExecutionEpochRef.current++;
     locallyFiredTriggersRef.current.clear();
     runningTriggersRef.current.clear();
+    timerStatesRef.current = {};
+
+    if (levelData?.triggers && Array.isArray(levelData.triggers)) {
+      for (const t of levelData.triggers) {
+        if (t && typeof t === "object") {
+          delete t.fired;
+        }
+      }
+    }
+
+    if (!isFirstLoad && levelData?.triggers && Array.isArray(levelData.triggers)) {
+      const activeSet = activeRepeatsPerLevelRef.current[currentLevelKey];
+      if (activeSet && activeSet.size > 0) {
+        const triggersToResume = levelData.triggers.filter((t: any) => {
+          if (!t || !t.id) return false;
+          const normId = String(t.id).trim().toLowerCase();
+          return activeSet.has(normId) && !stoppedRepeatsRef.current.has(normId);
+        });
+
+        if (triggersToResume.length > 0) {
+          setTimeout(() => {
+            if (executeActionsRef.current) {
+              executeActionsRef.current(triggersToResume, {});
+            }
+          }, 50);
+        }
+      }
+    }
   }
 
   latestPlayerRef.current = player;
@@ -200,6 +262,14 @@ export const useScriptSystem = (
   latestSetGameOverTypeRef.current = setGameOverType;
   const latestUnlockAchievementRef = useRef(unlockAchievement);
   latestUnlockAchievementRef.current = unlockAchievement;
+  const latestReturnToMenuRef = useRef(returnToMenu);
+  latestReturnToMenuRef.current = returnToMenu;
+  const latestStopAllSoundsRef = useRef(stopAllSounds);
+  latestStopAllSoundsRef.current = stopAllSounds;
+  const latestSetViewportFadeRef = useRef(setViewportFade);
+  latestSetViewportFadeRef.current = setViewportFade;
+  const latestSetActiveModalRef = useRef(setActiveModal);
+  latestSetActiveModalRef.current = setActiveModal;
 
   const triggerIndicesRef = useRef<{
     triggersByType: Map<string, any[]>;
@@ -338,6 +408,11 @@ export const useScriptSystem = (
 
         if (runningTriggersRef.current.has(t)) return false;
 
+        if (t.id) {
+          const normTId = String(t.id).trim().toLowerCase();
+          if (stoppedRepeatsRef.current.has(normTId)) return false;
+        }
+
         // Legacy trigger support
         if (!t.type) {
           if (triggerType === "ON_ENTER_TILE") {
@@ -475,7 +550,11 @@ export const useScriptSystem = (
             }
           }
           if (p && p.keyId !== undefined) {
-            if (eventParams.keyId !== p.keyId) {
+            if (
+              eventParams.keyId !== p.keyId &&
+              eventParams.itemId !== p.keyId &&
+              eventParams.itemDefinitionId !== p.keyId
+            ) {
               return false;
             }
           }
@@ -511,6 +590,43 @@ export const useScriptSystem = (
           }
         }
 
+        if (triggerType === "ON_COUNTER_VALUE" || triggerType === "ON_COUNTER_CHANGE") {
+          const p = t.params;
+          if (p) {
+            const reqCounter = String(p.counterId || p.id || p.counter || p.flag || p.name || "").trim().toLowerCase();
+            const evtCounter = String(eventParams.counterId || eventParams.id || eventParams.counter || "").trim().toLowerCase();
+
+            if (reqCounter && evtCounter && reqCounter !== evtCounter) {
+              return false;
+            }
+
+            const targetVal = Number(p.value ?? p.targetValue ?? p.count ?? p.target ?? 0);
+            const actualVal = Number(eventParams.value ?? 0);
+            const op = String(p.operator || p.op || p.condition || ">=").trim().toUpperCase();
+
+            let conditionMet = false;
+            if (op === "==" || op === "=" || op === "EQ" || op === "EQUAL") {
+              conditionMet = actualVal === targetVal;
+            } else if (op === ">=" || op === "GTE" || op === "REACHED" || op === "GREATER_EQUAL" || op === "GREATER_OR_EQUAL") {
+              conditionMet = actualVal >= targetVal;
+            } else if (op === ">" || op === "GT" || op === "GREATER") {
+              conditionMet = actualVal > targetVal;
+            } else if (op === "<=" || op === "LTE" || op === "LESS_EQUAL" || op === "LESS_OR_EQUAL") {
+              conditionMet = actualVal <= targetVal;
+            } else if (op === "<" || op === "LT" || op === "LESS") {
+              conditionMet = actualVal < targetVal;
+            } else if (op === "!=" || op === "NE" || op === "NOT_EQUAL") {
+              conditionMet = actualVal !== targetVal;
+            } else {
+              conditionMet = actualVal >= targetVal;
+            }
+
+            if (!conditionMet) {
+              return false;
+            }
+          }
+        }
+
         return true;
       });
 
@@ -528,7 +644,7 @@ export const useScriptSystem = (
         });
 
         const triggersNeedingFiredUpdate = activeTriggers.filter(
-          (t: any) => t.runOnce !== false && !t.fired
+          (t: any) => t.runOnce !== false && !t.fired && !t.actions?.some((a: any) => a?.type === "REPEAT")
         );
 
         if (triggersNeedingFiredUpdate.length > 0) {
@@ -634,7 +750,11 @@ export const useScriptSystem = (
     const player = latestPlayerRef.current;
     const onRadioTrigger = latestOnRadioTriggerRef.current;
     const startDialogue = latestStartDialogueRef.current;
+    const currentEpoch = scriptExecutionEpochRef.current;
+
     for (const t of triggers) {
+      if (scriptExecutionEpochRef.current !== currentEpoch) break;
+
       // Legacy support
       if (!t.type && t.dialogueId) {
         let isRadio = false;
@@ -653,23 +773,113 @@ export const useScriptSystem = (
         continue;
       }
 
-      if (!t.actions) continue;
+      if (!t.actions || t.actions.length === 0) continue;
 
-      if (t.sequentialActions) {
-        for (let i = 0; i < t.actions.length; i++) {
-          const action = t.actions[i];
-          const hasMoreCinematic = t.actions.slice(i + 1).some((act: any) => act.type === "CINEMATIC_STATIC_CAMERA" || act.type === "CINEMATIC_CAMERA");
-          await runAction(action, hasMoreCinematic, true);
+      const triggerId = t.id ? String(t.id).trim() : "";
+      const normTriggerId = triggerId.toLowerCase();
+
+      const hasRepeat = t.actions.some((a: any) => a?.type === "REPEAT");
+      if (hasRepeat && normTriggerId) {
+        if (!activeRepeatsPerLevelRef.current[currentLevelKey]) {
+          activeRepeatsPerLevelRef.current[currentLevelKey] = new Set();
+        }
+        activeRepeatsPerLevelRef.current[currentLevelKey].add(normTriggerId);
+      }
+
+      const isSequential = t.sequentialActions || hasRepeat;
+
+      if (isSequential) {
+        let actionIndex = 0;
+        let loopCount = 0;
+        while (actionIndex < t.actions.length) {
+          if (scriptExecutionEpochRef.current !== currentEpoch) break;
+          if (normTriggerId && stoppedRepeatsRef.current.has(normTriggerId)) break;
+
+          const action = t.actions[actionIndex];
+          if (!action) {
+            actionIndex++;
+            continue;
+          }
+
+          if (action.type === "REPEAT") {
+            if (normTriggerId && stoppedRepeatsRef.current.has(normTriggerId)) break;
+
+            const rawDelay = action.params?.delay ?? action.params?.delayMs ?? action.params?.time ?? action.params?.pause;
+            const delayMs = typeof rawDelay === "number" ? Math.max(0, rawDelay) : 0;
+
+            if (delayMs > 0) {
+              let delayLeft = delayMs;
+              while (delayLeft > 0) {
+                if (scriptExecutionEpochRef.current !== currentEpoch) break;
+                if (normTriggerId && stoppedRepeatsRef.current.has(normTriggerId)) break;
+                await new Promise((resolve) => setTimeout(resolve, Math.min(50, delayLeft)));
+                if (!isPausedRef?.current) {
+                  delayLeft -= 50;
+                }
+              }
+            }
+
+            if (scriptExecutionEpochRef.current !== currentEpoch) break;
+            if (normTriggerId && stoppedRepeatsRef.current.has(normTriggerId)) break;
+
+            actionIndex = 0;
+            loopCount++;
+            if (loopCount % 10 === 0 && delayMs <= 0) {
+              await new Promise((resolve) => setTimeout(resolve, 16));
+            }
+            continue;
+          }
+
+          if (action.type === "STOP_REPEAT") {
+            const targetId = String(action.params?.scriptId || action.params?.id || action.params?.triggerId || "").trim().toLowerCase();
+            const idToStop = targetId || normTriggerId;
+            if (idToStop) {
+              stoppedRepeatsRef.current.add(idToStop);
+              for (const lKey of Object.keys(activeRepeatsPerLevelRef.current)) {
+                activeRepeatsPerLevelRef.current[lKey]?.delete(idToStop);
+              }
+            }
+            actionIndex++;
+            continue;
+          }
+
+          const hasMoreCinematic = t.actions.slice(actionIndex + 1).some((act: any) => act?.type === "CINEMATIC_STATIC_CAMERA" || act?.type === "CINEMATIC_CAMERA");
+          await runAction(action, hasMoreCinematic, true, triggerId, currentEpoch);
+
+          if (scriptExecutionEpochRef.current !== currentEpoch) break;
+          if (normTriggerId && stoppedRepeatsRef.current.has(normTriggerId)) break;
+
+          actionIndex++;
         }
       } else {
         for (const action of t.actions) {
-          runAction(action, false, false);
+          if (!action) continue;
+          if (scriptExecutionEpochRef.current !== currentEpoch) break;
+          if (normTriggerId && stoppedRepeatsRef.current.has(normTriggerId)) break;
+
+          if (action.type === "STOP_REPEAT") {
+            const targetId = String(action.params?.scriptId || action.params?.id || action.params?.triggerId || "").trim().toLowerCase();
+            const idToStop = targetId || normTriggerId;
+            if (idToStop) {
+              stoppedRepeatsRef.current.add(idToStop);
+              for (const lKey of Object.keys(activeRepeatsPerLevelRef.current)) {
+                activeRepeatsPerLevelRef.current[lKey]?.delete(idToStop);
+              }
+            }
+            continue;
+          }
+          if (action.type === "REPEAT") {
+            continue;
+          }
+          runAction(action, false, false, triggerId, currentEpoch);
         }
       }
     }
   };
 
-  const runAction = async (action: ScriptAction, keepCinematic?: boolean, isSequential?: boolean): Promise<void> => {
+  executeActionsRef.current = executeActions;
+
+  const runAction = async (action: ScriptAction, keepCinematic?: boolean, isSequential?: boolean, currentTriggerId?: string, currentEpoch?: number): Promise<void> => {
     const { type, params } = action;
     const player = latestPlayerRef.current;
     const levelData = latestLevelDataRef.current;
@@ -689,6 +899,20 @@ export const useScriptSystem = (
     const setCinematicCamera = latestSetCinematicCameraRef.current;
 
     switch (type) {
+      case "STOP_REPEAT": {
+        const targetId = String(params?.scriptId || params?.id || params?.triggerId || "").trim().toLowerCase();
+        const idToStop = targetId || (currentTriggerId ? currentTriggerId.trim().toLowerCase() : "");
+        if (idToStop) {
+          stoppedRepeatsRef.current.add(idToStop);
+          for (const lKey of Object.keys(activeRepeatsPerLevelRef.current)) {
+            activeRepeatsPerLevelRef.current[lKey]?.delete(idToStop);
+          }
+        }
+        break;
+      }
+      case "REPEAT": {
+        break;
+      }
       case "GAME_OVER": {
         if (latestSetGameOverTypeRef.current) {
           latestSetGameOverTypeRef.current("script");
@@ -798,9 +1022,12 @@ export const useScriptSystem = (
       }
       case "DELAY":
         if (params && params.time) {
-          let timeLeft = params.time;
+          let timeLeft = Number(params.time) || 0;
+          const normId = currentTriggerId ? currentTriggerId.trim().toLowerCase() : "";
           while (timeLeft > 0) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
+            if (currentEpoch !== undefined && scriptExecutionEpochRef.current !== currentEpoch) break;
+            if (normId && stoppedRepeatsRef.current.has(normId)) break;
+            await new Promise((resolve) => setTimeout(resolve, Math.min(50, timeLeft)));
             if (!isPausedRef?.current) {
               timeLeft -= 50;
             }
@@ -919,6 +1146,133 @@ export const useScriptSystem = (
             }
             // Safe fallback if React state never updates to SCRIPT_MOVE after 2 seconds
             if (!hasTransitionedToScriptMove && checkCount > 20) {
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+        }
+        break;
+      }
+      case "NPC_FOLLOW": {
+        const startX = Number(params.startX ?? params.npcX ?? params.x);
+        const startY = Number(params.startY ?? params.npcY ?? params.y);
+        const mode = (params.mode || "NPC_FOLLOWS_PLAYER") as "NPC_FOLLOWS_PLAYER" | "PLAYER_FOLLOWS_NPC" | "STOP";
+        const targetX = Number(params.targetX ?? params.x);
+        const targetY = Number(params.targetY ?? params.y);
+        const maxDistance = Number(params.maxDistance ?? params.distance ?? 4);
+
+        if (isNaN(startX) || isNaN(startY)) {
+          break;
+        }
+
+        // Find NPC/Enemy at start coordinates or by npcId
+        let targetEnemyId: string | null = null;
+        let targetEnemy: any = null;
+
+        if (params.npcId) {
+          targetEnemyId = params.npcId;
+          targetEnemy = latestEnemiesRef.current.get(params.npcId);
+        }
+
+        if (!targetEnemyId || !targetEnemy) {
+          for (const [id, e] of latestEnemiesRef.current.entries()) {
+            if (e.x === startX && e.y === startY) {
+              targetEnemyId = id;
+              targetEnemy = e;
+              break;
+            }
+          }
+        }
+
+        if (!targetEnemyId || !targetEnemy) {
+          const grid = latestLevelDataRef.current?.grid;
+          if (grid && grid[startY]?.[startX]?.enemyId) {
+            targetEnemyId = grid[startY][startX].enemyId;
+            targetEnemy = latestEnemiesRef.current.get(targetEnemyId);
+          }
+        }
+
+        if (!targetEnemyId || !targetEnemy) {
+          break;
+        }
+
+        if (mode === "STOP") {
+          setEnemies((prev: Map<string, any>) => {
+            const next = new Map(prev);
+            const e = next.get(targetEnemyId!);
+            if (e) {
+              next.set(targetEnemyId!, {
+                ...e,
+                aiState: e.originalAiState || (e.isNPC ? "PATROL" : "IDLE"),
+                movementType: e.originalMovementType || (e.isNPC ? "patroling" : "roaming"),
+                homePos: { x: e.x, y: e.y },
+                patrolRange: (e.patrolRange && e.patrolRange > 0) ? e.patrolRange : 3,
+                followMode: undefined,
+                followMaxDistance: undefined,
+                targetPos: undefined,
+                currentPath: undefined,
+                originalAiState: undefined,
+                originalMovementType: undefined,
+                originalHomePos: undefined,
+              });
+            }
+            return next;
+          });
+          break;
+        }
+
+        const grid = latestLevelDataRef.current?.grid;
+        const width = latestLevelDataRef.current?.width || 0;
+        const height = latestLevelDataRef.current?.height || 0;
+        let path: { x: number; y: number }[] = [];
+
+        if (grid) {
+          if (mode === "PLAYER_FOLLOWS_NPC" && !isNaN(targetX) && !isNaN(targetY)) {
+            path = findPath(targetEnemy.x, targetEnemy.y, targetX, targetY, grid, width, height);
+          } else if (mode === "NPC_FOLLOWS_PLAYER") {
+            const playerPos = latestPlayerRef.current?.pos;
+            if (playerPos) {
+              path = findPath(targetEnemy.x, targetEnemy.y, Math.round(playerPos.x), Math.round(playerPos.y), grid, width, height);
+            }
+          }
+        }
+
+        setEnemies((prev: Map<string, any>) => {
+          const next = new Map(prev);
+          const e = next.get(targetEnemyId!);
+          if (e) {
+            next.set(targetEnemyId!, {
+              ...e,
+              aiState: "NPC_FOLLOW",
+              followMode: mode,
+              followMaxDistance: isNaN(maxDistance) || maxDistance <= 0 ? 4 : maxDistance,
+              originalAiState: e.originalAiState || e.aiState,
+              originalMovementType: e.originalMovementType || e.movementType,
+              originalHomePos: e.originalHomePos || e.homePos || { x: e.x, y: e.y },
+              targetPos: mode === "PLAYER_FOLLOWS_NPC" ? { x: targetX, y: targetY } : undefined,
+              currentPath: path,
+            });
+          }
+          return next;
+        });
+
+        if (isSequential && mode === "PLAYER_FOLLOWS_NPC" && !isNaN(targetX) && !isNaN(targetY)) {
+          let hasTransitionedToFollow = false;
+          let checkCount = 0;
+          while (true) {
+            checkCount++;
+            const currentEnemy = latestEnemiesRef.current.get(targetEnemyId);
+            if (!currentEnemy) break;
+            if (currentEnemy.aiState === "NPC_FOLLOW") {
+              hasTransitionedToFollow = true;
+            }
+            if (currentEnemy.x === targetX && currentEnemy.y === targetY) {
+              break;
+            }
+            if (hasTransitionedToFollow && currentEnemy.aiState !== "NPC_FOLLOW") {
+              break;
+            }
+            if (!hasTransitionedToFollow && checkCount > 20) {
               break;
             }
             await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1064,6 +1418,14 @@ export const useScriptSystem = (
             : undefined;
         playSound(params.soundId, soundPos, undefined, 0, undefined);
         break;
+      case "LAUNCH_MINIGAME": {
+        const gameId = params.gameId;
+        const setActiveModal = latestSetActiveModalRef.current;
+        if (setActiveModal && gameId === 'chess') {
+          setActiveModal('chess');
+        }
+        break;
+      }
       case "SHOW_DIALOGUE": {
         const isRadio = params.isRadio || false;
         if (isRadio && onRadioTrigger) {
@@ -1285,23 +1647,38 @@ export const useScriptSystem = (
       case "SPAWN_NPC":
       case "SPAWN_ITEM":
       case "SPAWN_DECORATION":
+      case "SPAWN_EXPLOSION":
       case "SPAWN_ENTITY": {
-        const entityType = params.entityType || (action.type === 'SPAWN_ENEMY' ? 'ENEMY' : action.type === 'SPAWN_ITEM' ? 'ITEM' : action.type === 'SPAWN_NPC' ? 'NPC' : action.type === 'SPAWN_DECORATION' ? 'DECORATION' : undefined);
+        const rawEntityType = params.entityType || (
+          action.type === 'SPAWN_ENEMY' ? 'ENEMY' :
+          action.type === 'SPAWN_ITEM' ? 'ITEM' :
+          action.type === 'SPAWN_NPC' ? 'NPC' :
+          action.type === 'SPAWN_DECORATION' ? 'DECORATION' :
+          action.type === 'SPAWN_EXPLOSION' ? 'EXPLOSION' :
+          undefined
+        );
+        const entityType = String(rawEntityType || "").trim().toUpperCase();
         const definitionId = params.definitionId || params.entityId || params.enemyId || params.npcId || params.itemId || params.decorationId;
 
         if (
           params.x === undefined ||
           params.y === undefined ||
-          !entityType ||
-          !definitionId
+          !entityType
         )
           break;
-        const { x, y } = params;
+
+        if (entityType !== "EXPLOSION" && entityType !== "LIGHT" && !definitionId) {
+          break;
+        }
+
+        const x = Math.floor(Number(params.x));
+        const y = Math.floor(Number(params.y));
+        if (isNaN(x) || isNaN(y)) break;
 
         if (entityType === "EXPLOSION") {
           if (handleExplosion) {
             const damageDice = params.damageDice || params.damage || "2d6";
-            const range = params.range ?? 2;
+            const range = params.range !== undefined && params.range !== null && params.range !== "" ? Number(params.range) : 2;
             const assetId = params.assetId || "ANIM_EXPLOSION";
             const soundId = params.soundId || "EXPLOSION";
             const levelGrid = levelData ? levelData.grid : undefined;
@@ -1317,17 +1694,29 @@ export const useScriptSystem = (
               undefined,
               soundId,
               params.itemType,
-              params.itemDuration
+              params.itemDuration !== undefined && params.itemDuration !== null && params.itemDuration !== "" ? Number(params.itemDuration) : undefined
             );
+          }
+          const customDelay = params.delay !== undefined && params.delay !== null && params.delay !== "" ? Number(params.delay) : 0;
+          const delayTime = customDelay > 0 ? customDelay : (isSequential ? 450 : 0);
+          if (delayTime > 0) {
+            let timeLeft = delayTime;
+            while (timeLeft > 0) {
+              await new Promise((resolve) => setTimeout(resolve, 50));
+              if (!isPausedRef?.current) {
+                timeLeft -= 50;
+              }
+            }
           }
           break;
         }
 
         setLevelData((prev: any) => {
+          if (!prev) return prev;
           const next = { ...prev };
           const newGrid = [...(next.grid || [])];
 
-          if (entityType === "AMBIENT_SOUND") {
+          if (entityType === "AMBIENT_SOUND" || entityType === "SOUND" || entityType === "AMBIENT") {
             const def =
               prev.ambientSounds?.find((s: any) => s.symbol === definitionId) ||
               {};
@@ -1345,14 +1734,31 @@ export const useScriptSystem = (
                 maxInterval: def.maxInterval ?? params.maxInterval ?? 15000,
                 volume: def.volume ?? params.volume ?? 0.5,
                 radius: def.radius ?? params.radius ?? 10,
+                loop: def.loop ?? params.loop ?? false,
+                nonPositional: def.nonPositional ?? params.nonPositional ?? false,
               },
             ];
+
+            // Also place symbol into gridSounds if present
+            if (next.gridSounds && Array.isArray(next.gridSounds)) {
+              next.gridSounds = next.gridSounds.map((floorGrid: string[]) => {
+                if (!Array.isArray(floorGrid) || !floorGrid[y]) return floorGrid;
+                if (x < floorGrid[y].length) {
+                  const rowArr = floorGrid[y].split("");
+                  rowArr[x] = String(definitionId);
+                  const newFloor = [...floorGrid];
+                  newFloor[y] = rowArr.join("");
+                  return newFloor;
+                }
+                return floorGrid;
+              });
+            }
             return next;
           }
 
-          if (entityType === "PARTICLE_EMITTER") {
+          if (entityType === "PARTICLE_EMITTER" || entityType === "PARTICLE" || entityType === "EMITTER" || entityType === "PARTICLES") {
             next.particles = [
-              ...(next.particles || []),
+              ...(next.particles || []).filter((p: any) => Math.floor(Number(p.x)) !== x || Math.floor(Number(p.y)) !== y || String(p.definitionId) !== String(definitionId)),
               {
                 id:
                   params.emitterId ||
@@ -1360,7 +1766,7 @@ export const useScriptSystem = (
                 definitionId,
                 x,
                 y,
-                z: params.zOffset,
+                z: params.zOffset || 0,
               },
             ];
             return next;
@@ -1370,6 +1776,7 @@ export const useScriptSystem = (
           newGrid[y] = [...newGrid[y]];
           const tile = { ...newGrid[y][x] };
 
+          let lightSpawned = false;
           if (entityType === "LIGHT") {
             const def =
               prev.baseLightInfo?.lightDefinitions?.[definitionId] || {};
@@ -1381,31 +1788,57 @@ export const useScriptSystem = (
               range: def.range ?? params.range ?? 4,
               mode: def.mode ?? params.mode ?? "STATIC",
             };
+            lightSpawned = true;
+
+            // Set symbol in gridLight if definitionId matches a lightDefinition symbol
+            if (definitionId && definitionId.length === 1) {
+              if (next.gridLight && next.gridLight[y] && x < next.gridLight[y].length) {
+                const r = next.gridLight[y].split("");
+                r[x] = definitionId;
+                next.gridLight = [...next.gridLight];
+                next.gridLight[y] = r.join("");
+              }
+              if (next.baseLightInfo && next.baseLightInfo.gridLight && next.baseLightInfo.gridLight[y] && x < next.baseLightInfo.gridLight[y].length) {
+                const r = next.baseLightInfo.gridLight[y].split("");
+                r[x] = definitionId;
+                next.baseLightInfo = { ...next.baseLightInfo, gridLight: [...next.baseLightInfo.gridLight] };
+                next.baseLightInfo.gridLight[y] = r.join("");
+              }
+            }
           } else if (entityType === "ITEM") {
-            const levelItem = levelData && levelData.itemsPalette ? levelData.itemsPalette.find((i: any) => i.id === definitionId || i.symbol === definitionId) : null;
-            const realDbId = levelItem?.id || definitionId;
+            const levelItem = levelData && levelData.itemsPalette ? levelData.itemsPalette.find((i: any) => i.id === definitionId || i.symbol === definitionId || i.definitionId === definitionId) : null;
+            const realDbId = levelItem?.definitionId || levelItem?.id || definitionId;
             const dbTemplate = (itemsDb as any)[realDbId] || (itemsDb as any)[definitionId] || {};
-            const template = { ...dbTemplate, ...levelItem };
+            const template = { ...dbTemplate, ...(levelItem || {}) };
             if (latestSpriteMapRef.current) {
               ensureEntityAssetsLoaded(template, itemsDb, enemiesDb, npcsDb, decorationsDb, latestSpriteMapRef.current);
             }
             const items = [...(tile.items || [])];
-            const amount = params.amount || 1;
+            const amount = params.amount || params.count || 1;
+            const rawName = params.name || template.name || dbTemplate.name || realDbId || definitionId;
+            const rawDesc = params.description || template.description || dbTemplate.description || "";
+            const localizedName = localize(rawName);
+            const localizedDesc = localize(rawDesc);
             for (let i = 0; i < amount; i++) {
               items.push({
+                ...dbTemplate,
+                ...levelItem,
                 ...template,
                 ...params.itemOverrides,
-                id: Math.random().toString(36).substring(2, 9),
+                id: `${realDbId || definitionId}_${Math.random().toString(36).substring(2, 9)}`,
                 definitionId: realDbId || definitionId,
-                name: localize(params.name || template.name || dbTemplate.name || ""),
-                description: localize(params.description || template.description || dbTemplate.description || ""),
-                rawName: template.name || dbTemplate.name,
-                rawDescription: template.description || dbTemplate.description,
-                durability: template.maxDurability || dbTemplate.maxDurability,
+                name: localizedName,
+                description: localizedDesc,
+                rawName: rawName,
+                rawDescription: rawDesc,
+                durability: params.itemOverrides?.durability ?? template.maxDurability ?? dbTemplate.maxDurability,
                 handAssetId: template.handAsset || dbTemplate.handAsset,
                 handFemaleAssetId: template.handFemaleAsset || dbTemplate.handFemaleAsset,
                 attackAssetId: template.attackAsset || dbTemplate.attackAsset,
                 attackFemaleAssetId: template.attackAssetFemale || dbTemplate.attackAssetFemale,
+                maskAssetId: template.maskAsset || dbTemplate.maskAsset,
+                count: params.itemCount || template.count || dbTemplate.count || 1,
+                currentAmmo: template.type === 'AMMO' ? (params.itemCount || template.count || dbTemplate.count || 1) : (template.currentAmmo ?? dbTemplate.currentAmmo),
               });
             }
             tile.items = items;
@@ -1432,6 +1865,9 @@ export const useScriptSystem = (
             const currentDecs = tile.decorations && tile.decorations.length > 0 ? tile.decorations : (tile.decoration ? [tile.decoration] : []);
             tile.decorations = [...currentDecs, newDecor];
             tile.decoration = tile.decorations[0];
+            if (newDecor.lifeTime !== undefined) {
+              (window as any).registerTimedEffect?.(x, y);
+            }
           } else if (entityType === "NPC" || entityType === "ENEMY") {
             const db = entityType === "NPC" ? npcsDb : enemiesDb;
             const paletteList = entityType === "NPC" ? levelData?.npcsPalette : levelData?.enemiesPalette;
@@ -1541,139 +1977,525 @@ export const useScriptSystem = (
 
           newGrid[y][x] = tile;
           next.grid = newGrid;
+
+          if (lightSpawned && next.baseLightInfo) {
+            const res = calculateLightMap(
+              newGrid,
+              next.baseLightInfo.gridLight,
+              next.baseLightInfo.globalLight,
+              next.baseLightInfo.lightDefinitions || {},
+              next.outdoorMap,
+              next.grids
+            );
+            next.lightMap = res.baseLightMap;
+            next.floorLightMaps = res.floorLightMaps;
+            next.dynamicLights = res.dynamicLights;
+          }
+
           return next;
         });
         break;
       }
       case "REMOVE_ENTITY": {
-        if (
-          params.x === undefined ||
-          params.y === undefined ||
-          !params.entityType
-        )
-          break;
-        const { x, y, entityType } = params;
+        if (params.x === undefined || params.y === undefined) break;
 
-        setLevelData((prev: any) => {
-          const next = { ...prev };
+        const x = Math.floor(Number(params.x));
+        const y = Math.floor(Number(params.y));
+        if (isNaN(x) || isNaN(y)) break;
 
-          if (entityType === "AMBIENT_SOUND") {
-            if (next.ambientSounds) {
-              next.ambientSounds = next.ambientSounds.filter(
-                (s: any) => s.x !== x || s.y !== y,
-              );
-            }
-            return next;
-          }
+        const rawType = params.entityType || params.type || params.entityKind || params.kind || "";
+        const normType = String(rawType).trim().toUpperCase();
+        const definitionId = params.definitionId || params.entityId || params.enemyId || params.npcId || params.itemId || params.decorationId || params.symbol || params.id;
+        const defIdStr = definitionId !== undefined && definitionId !== null ? String(definitionId).trim() : "";
 
-          if (entityType === "PARTICLE_EMITTER") {
-            if (next.particles) {
-              if (params.definitionId) {
-                next.particles = next.particles.filter(
-                  (p: any) =>
-                    p.x !== x ||
-                    p.y !== y ||
-                    p.definitionId !== params.definitionId,
-                );
-              } else {
-                next.particles = next.particles.filter(
-                  (p: any) => p.x !== x || p.y !== y,
-                );
+        const isAll = normType === "" || normType === "ALL" || normType === "ANY" || normType === "*";
+        const isAmbientSound = isAll || normType === "AMBIENT_SOUND" || normType === "SOUND" || normType === "AMBIENT" || normType === "GRID_SOUND";
+        const isParticleEmitter = isAll || normType === "PARTICLE_EMITTER" || normType === "PARTICLE" || normType === "EMITTER" || normType === "PARTICLES";
+        const isLight = isAll || normType === "LIGHT" || normType === "GRID_LIGHT";
+        const isItem = isAll || normType === "ITEM" || normType === "ITEMS";
+        const isDecoration = isAll || normType === "DECORATION" || normType === "DECORATIONS" || normType === "DECOR";
+        const isNpcOrEnemy = isAll || normType === "NPC" || normType === "ENEMY" || normType === "MONSTER" || normType === "ENTITY";
+
+        const cleanEnemiesMap = (targetTileEnemyId?: string) => {
+          setEnemies((prevEnemies: Map<string, any>) => {
+            if (!prevEnemies || prevEnemies.size === 0) return prevEnemies;
+            const nextE = new Map(prevEnemies);
+            let changed = false;
+
+            for (const [id, enemy] of prevEnemies.entries()) {
+              const posMatch = Math.floor(Number(enemy.x)) === x && Math.floor(Number(enemy.y)) === y;
+              const idMatch = targetTileEnemyId ? id === targetTileEnemyId : false;
+              const defMatch = defIdStr ? (String(enemy.definitionId) === defIdStr || String(enemy.id) === defIdStr || String(enemy.symbol) === defIdStr) : true;
+
+              if ((posMatch || idMatch) && defMatch) {
+                nextE.delete(id);
+                changed = true;
+                if (typeof window !== 'undefined' && (window as any).enemyPositionsCache) {
+                  (window as any).enemyPositionsCache.delete(id);
+                }
               }
             }
-            return next;
+            return changed ? nextE : prevEnemies;
+          });
+        };
+
+        setLevelData((prev: any) => {
+          if (!prev) return prev;
+          const next = { ...prev };
+          let gridChanged = false;
+          let lightNeedRecalc = false;
+
+          // 1. AMBIENT_SOUND
+          if (isAmbientSound) {
+            if (next.ambientSounds && next.ambientSounds.length > 0) {
+              next.ambientSounds = next.ambientSounds.filter((s: any) => {
+                const posMatch = Math.floor(Number(s.x)) === x && Math.floor(Number(s.y)) === y;
+                const defMatch = defIdStr ? (String(s.symbol) === defIdStr || String(s.id) === defIdStr || String(s.definitionId) === defIdStr) : true;
+                return !(posMatch && defMatch);
+              });
+            }
+            if (next.gridSounds && Array.isArray(next.gridSounds)) {
+              next.gridSounds = next.gridSounds.map((floorGrid: string[]) => {
+                if (!Array.isArray(floorGrid) || !floorGrid[y]) return floorGrid;
+                const rowStr = floorGrid[y];
+                if (x < rowStr.length && rowStr[x] !== ".") {
+                  const targetSymbolMatch = !defIdStr || rowStr[x] === defIdStr;
+                  if (targetSymbolMatch) {
+                    const rowArr = rowStr.split("");
+                    rowArr[x] = ".";
+                    const newFloor = [...floorGrid];
+                    newFloor[y] = rowArr.join("");
+                    return newFloor;
+                  }
+                }
+                return floorGrid;
+              });
+            }
+          }
+
+          // 2. PARTICLE_EMITTER
+          if (isParticleEmitter) {
+            if (next.particles && next.particles.length > 0) {
+              next.particles = next.particles.filter((p: any) => {
+                const posMatch = Math.floor(Number(p.x)) === x && Math.floor(Number(p.y)) === y;
+                const defMatch = defIdStr ? (String(p.definitionId) === defIdStr || String(p.id) === defIdStr || String(p.emitterId) === defIdStr) : true;
+                return !(posMatch && defMatch);
+              });
+            }
+          }
+
+          // Helper to match target light definition or symbol
+          const matchesLightDefinition = (sym: string) => {
+            if (!sym || sym === ".") return false;
+            if (!defIdStr || sym === defIdStr) return true;
+            const defs = next.baseLightInfo?.lightDefinitions || next.lightDefinitions || {};
+            const def = defs[sym];
+            if (def) {
+              if (
+                String(def.id) === defIdStr ||
+                String(def.definitionId) === defIdStr ||
+                String(def.symbol) === defIdStr ||
+                String(def.name) === defIdStr
+              ) {
+                return true;
+              }
+            }
+            return false;
+          };
+
+          // 3. LIGHT
+          if (isLight) {
+            if (next.gridLight && next.gridLight[y]) {
+              const rowStr = next.gridLight[y];
+              if (x < rowStr.length && rowStr[x] !== ".") {
+                if (matchesLightDefinition(rowStr[x])) {
+                  const rowArr = rowStr.split("");
+                  rowArr[x] = ".";
+                  next.gridLight = [...next.gridLight];
+                  next.gridLight[y] = rowArr.join("");
+                  lightNeedRecalc = true;
+                }
+              }
+            }
+            if (next.baseLightInfo && next.baseLightInfo.gridLight && next.baseLightInfo.gridLight[y]) {
+              const rowStr = next.baseLightInfo.gridLight[y];
+              if (x < rowStr.length && rowStr[x] !== ".") {
+                if (matchesLightDefinition(rowStr[x])) {
+                  const rowArr = rowStr.split("");
+                  rowArr[x] = ".";
+                  next.baseLightInfo = { ...next.baseLightInfo, gridLight: [...next.baseLightInfo.gridLight] };
+                  next.baseLightInfo.gridLight[y] = rowArr.join("");
+                  lightNeedRecalc = true;
+                }
+              }
+            }
           }
 
           const newGrid = [...(next.grid || [])];
-          if (!newGrid[y] || !newGrid[y][x]) return prev;
+          if (!newGrid[y] || !newGrid[y][x]) {
+            if (isNpcOrEnemy) {
+              cleanEnemiesMap();
+            }
+            if (lightNeedRecalc) {
+              clearLightMapCache();
+              const gridLightToUse = next.baseLightInfo?.gridLight || next.gridLight;
+              const globalLightToUse = next.baseLightInfo?.globalLight ?? next.globalLight ?? 1.0;
+              const lightDefsToUse = next.baseLightInfo?.lightDefinitions || next.lightDefinitions || {};
+              const res = calculateLightMap(
+                newGrid,
+                gridLightToUse,
+                globalLightToUse,
+                lightDefsToUse,
+                next.outdoorMap,
+                next.grids
+              );
+              next.lightMap = res.baseLightMap;
+              next.floorLightMaps = res.floorLightMaps;
+              next.dynamicLights = res.dynamicLights;
+            }
+            return next;
+          }
 
           newGrid[y] = [...newGrid[y]];
           const tile = { ...newGrid[y][x] };
 
-          if (entityType === "LIGHT") {
+          if (isLight && tile.light) {
             delete tile.light;
-          } else if (entityType === "ITEM") {
-            if (params.definitionId) {
-              tile.items = (tile.items || []).filter(
-                (i: any) => i.definitionId !== params.definitionId,
-              );
-            } else {
-              tile.items = [];
-            }
-          } else if (entityType === "DECORATION") {
-            if (params.definitionId) {
-              const currentDecs = tile.decorations && tile.decorations.length > 0 ? tile.decorations : (tile.decoration ? [tile.decoration] : []);
-              const newDecs = currentDecs.filter((d: any) => d.id !== params.definitionId && d.type !== params.definitionId);
-              tile.decorations = newDecs.length > 0 ? newDecs : undefined;
-              tile.decoration = newDecs.length > 0 ? newDecs[0] : undefined;
-            } else {
-              delete tile.decorations;
-              delete tile.decoration;
-            }
-          } else if (entityType === "NPC" || entityType === "ENEMY") {
-            if (tile.enemyId) {
-              setEnemies((prevEnemies: any) => {
-                const nextE = new Map<string, any>(prevEnemies);
-                // Optional check if it's strictly an NPC or Enemy based on our knowledge.
-                // Usually we can just remove whatever is at the tile if it matches
-                if (params.definitionId) {
-                  const e = nextE.get(tile.enemyId);
-                  if (e && e.definitionId === params.definitionId) {
-                    nextE.delete(tile.enemyId);
-                    if (typeof window !== 'undefined' && (window as any).enemyPositionsCache) {
-                      (window as any).enemyPositionsCache.delete(tile.enemyId);
-                    }
-                  }
-                } else {
-                  nextE.delete(tile.enemyId);
-                  if (typeof window !== 'undefined' && (window as any).enemyPositionsCache) {
-                    (window as any).enemyPositionsCache.delete(tile.enemyId);
-                  }
+            lightNeedRecalc = true;
+            gridChanged = true;
+          }
+
+          if (isLight && (tile.decorations || tile.decoration)) {
+            if (tile.decorations && tile.decorations.length > 0) {
+              let decChanged = false;
+              tile.decorations = tile.decorations.map((d: any) => {
+                if (d.light) {
+                  decChanged = true;
+                  const copy = { ...d };
+                  delete copy.light;
+                  return copy;
                 }
-                return nextE;
+                return d;
               });
-              // If no definitionId specified, or we need to we check if we successfully deleted it ...
-              // Being simple, we'll just clear tile.enemyId. If the definitionId doesn't match, we might clear it incorrectly, so let's refine.
-              if (!params.definitionId) {
-                delete tile.enemyId;
-              } else {
-                // Wait, the tile update executes sync within the setLevelData callback, but we can't easily read `enemies` here safely without a ref or capturing.
-                // Actually we can just assume if `definitionId` is matching, we clear it. Let's just clear it anyway or skip the check.
-                delete tile.enemyId;
+              if (decChanged) {
+                lightNeedRecalc = true;
+                gridChanged = true;
+                tile.decoration = tile.decorations[0];
+              }
+            }
+            if (tile.decoration && tile.decoration.light) {
+              const copy = { ...tile.decoration };
+              delete copy.light;
+              tile.decoration = copy;
+              lightNeedRecalc = true;
+              gridChanged = true;
+            }
+          }
+
+          if (isItem) {
+            if (defIdStr) {
+              if (tile.items && tile.items.length > 0) {
+                const initialCount = tile.items.length;
+                tile.items = tile.items.filter(
+                  (i: any) =>
+                    String(i.definitionId) !== defIdStr &&
+                    String(i.id) !== defIdStr &&
+                    String(i.type) !== defIdStr &&
+                    String(i.symbol) !== defIdStr
+                );
+                if (tile.items.length !== initialCount) gridChanged = true;
+              }
+            } else {
+              if (tile.items && tile.items.length > 0) {
+                tile.items = [];
+                gridChanged = true;
               }
             }
           }
 
-          newGrid[y][x] = tile;
-          next.grid = newGrid;
+          if (isDecoration || isAll) {
+            const currentDecs = tile.decorations && tile.decorations.length > 0
+              ? tile.decorations
+              : (tile.decoration ? [tile.decoration] : []);
+
+            if (currentDecs.length > 0) {
+              let removedAnyLight = false;
+              if (defIdStr) {
+                const newDecs = currentDecs.filter((d: any) => {
+                  const match = String(d.id) === defIdStr ||
+                    String(d.type) === defIdStr ||
+                    String(d.definitionId) === defIdStr ||
+                    String(d.symbol) === defIdStr ||
+                    String(d.name) === defIdStr;
+                  if (match && d.light) {
+                    removedAnyLight = true;
+                  }
+                  return !match;
+                });
+                if (newDecs.length !== currentDecs.length) {
+                  tile.decorations = newDecs.length > 0 ? newDecs : undefined;
+                  tile.decoration = newDecs.length > 0 ? newDecs[0] : undefined;
+                  gridChanged = true;
+                  if (removedAnyLight) lightNeedRecalc = true;
+                }
+              } else {
+                if (currentDecs.some((d: any) => d.light)) {
+                  removedAnyLight = true;
+                }
+                delete tile.decorations;
+                delete tile.decoration;
+                gridChanged = true;
+                if (removedAnyLight) lightNeedRecalc = true;
+              }
+            }
+          }
+
+          if (isNpcOrEnemy) {
+            cleanEnemiesMap(tile.enemyId);
+            if (tile.enemyId) {
+              delete tile.enemyId;
+              gridChanged = true;
+            }
+          }
+
+          if (gridChanged) {
+            newGrid[y][x] = tile;
+            next.grid = newGrid;
+          }
+
+          if (lightNeedRecalc) {
+            clearLightMapCache();
+            const gridLightToUse = next.baseLightInfo?.gridLight || next.gridLight;
+            const globalLightToUse = next.baseLightInfo?.globalLight ?? next.globalLight ?? 1.0;
+            const lightDefsToUse = next.baseLightInfo?.lightDefinitions || next.lightDefinitions || {};
+            const res = calculateLightMap(
+              newGrid,
+              gridLightToUse,
+              globalLightToUse,
+              lightDefsToUse,
+              next.outdoorMap,
+              next.grids
+            );
+            next.lightMap = res.baseLightMap;
+            next.floorLightMaps = res.floorLightMaps;
+            next.dynamicLights = res.dynamicLights;
+          }
+
           return next;
         });
         break;
       }
+      case "MODIFY_ENTITY": {
+        if (!params) break;
+
+        const rawType = params.entityType || params.type || params.entityKind || params.kind || "";
+        const normType = String(rawType).trim().toUpperCase();
+        const targetX = (params.x !== undefined && params.x !== null && params.x !== "") ? Math.floor(Number(params.x)) : undefined;
+        const targetY = (params.y !== undefined && params.y !== null && params.y !== "") ? Math.floor(Number(params.y)) : undefined;
+        const definitionId = params.definitionId || params.entityId || params.enemyId || params.npcId || params.itemId || params.decorationId || params.symbol || params.id;
+        const defIdStr = definitionId !== undefined && definitionId !== null ? String(definitionId).trim().toLowerCase() : undefined;
+        const mods = params.modifiedConfig || params.overrides || params.config || {};
+
+        if (Object.keys(mods).length === 0) break;
+
+        const isNpcOrEnemy = !normType || normType === "ALL" || normType === "ENEMY" || normType === "NPC" || normType === "MONSTER" || normType === "ENTITY";
+        const isItem = !normType || normType === "ALL" || normType === "ITEM" || normType === "ITEMS";
+        const isDecoration = !normType || normType === "ALL" || normType === "DECORATION" || normType === "DECORATIONS" || normType === "DECOR";
+
+        // 1. Modify Enemy / NPC entities in state (enemies Map + latestSpriteMapRef)
+        if (isNpcOrEnemy) {
+          setEnemies((prevEnemies: Map<string, any>) => {
+            if (!prevEnemies || prevEnemies.size === 0) return prevEnemies;
+            const nextE = new Map(prevEnemies);
+            let updated = false;
+
+            for (const [id, entity] of nextE.entries()) {
+              const matchesType = !normType || normType === "ALL" || normType === "ENTITY" || (normType === "NPC" ? entity.isNPC : !entity.isNPC);
+              const matchesPos = targetX === undefined || targetY === undefined ||
+                (Math.floor(Number(entity.x)) === targetX && Math.floor(Number(entity.y)) === targetY) ||
+                (entity.homePos && Math.floor(Number(entity.homePos.x)) === targetX && Math.floor(Number(entity.homePos.y)) === targetY);
+              const matchesDef = !defIdStr ||
+                String(entity.definitionId || "").toLowerCase() === defIdStr ||
+                String(entity.id || "").toLowerCase() === defIdStr ||
+                String(entity.symbol || "").toLowerCase() === defIdStr;
+
+              if (matchesType && matchesPos && matchesDef) {
+                updated = true;
+                const newName = mods.name ? localize(mods.name) : entity.name;
+                const newDesc = mods.description ? localize(mods.description) : entity.description;
+
+                let newAssets = entity.assets;
+                if (mods.assets) {
+                  newAssets = { ...entity.assets, ...mods.assets };
+                }
+
+                const modifiedEntity = {
+                  ...entity,
+                  ...mods,
+                  name: newName,
+                  description: newDesc,
+                  assets: newAssets,
+                  hp: mods.hp !== undefined ? Number(mods.hp) : entity.hp,
+                  maxHp: mods.maxHp !== undefined ? Number(mods.maxHp) : (mods.hp !== undefined ? Math.max(entity.maxHp || 0, Number(mods.hp)) : entity.maxHp),
+                };
+
+                nextE.set(id, modifiedEntity);
+
+                // Update cached sprite if assetId changed
+                if (latestSpriteMapRef.current && modifiedEntity.assets?.map?.assetId) {
+                  const spriteImg = latestSpriteMapRef.current.get(modifiedEntity.assets.map.assetId);
+                  if (spriteImg) {
+                    latestSpriteMapRef.current.set(id, spriteImg);
+                  }
+                }
+              }
+            }
+            return updated ? nextE : prevEnemies;
+          });
+        }
+
+        // 2. Modify Items & Decorations in levelData.grid
+        if (isItem || isDecoration) {
+          setLevelData((prev: any) => {
+            if (!prev || !prev.grid) return prev;
+            let gridChanged = false;
+            const newGrid = prev.grid.map((row: any[]) => [...row]);
+
+            for (let y = 0; y < prev.height; y++) {
+              if (targetY !== undefined && y !== targetY) continue;
+              for (let x = 0; x < prev.width; x++) {
+                if (targetX !== undefined && x !== targetX) continue;
+                const tile = newGrid[y]?.[x];
+                if (!tile) continue;
+
+                let tileChanged = false;
+                const newTile = { ...tile };
+
+                // Modify Items
+                if (isItem && newTile.items && newTile.items.length > 0) {
+                  const updatedItems = newTile.items.map((item: any) => {
+                    const matchesDef = !defIdStr ||
+                      String(item.definitionId || "").toLowerCase() === defIdStr ||
+                      String(item.id || "").toLowerCase() === defIdStr ||
+                      String(item.symbol || "").toLowerCase() === defIdStr;
+                    if (matchesDef) {
+                      tileChanged = true;
+                      return {
+                        ...item,
+                        ...mods,
+                        name: mods.name ? localize(mods.name) : item.name,
+                        description: mods.description ? localize(mods.description) : item.description,
+                      };
+                    }
+                    return item;
+                  });
+                  if (tileChanged) {
+                    newTile.items = updatedItems;
+                  }
+                }
+
+                // Modify Decorations
+                if (isDecoration) {
+                  if (newTile.decorations && newTile.decorations.length > 0) {
+                    const updatedDecs = newTile.decorations.map((dec: any) => {
+                      const matchesDef = !defIdStr ||
+                        String(dec.definitionId || "").toLowerCase() === defIdStr ||
+                        String(dec.id || "").toLowerCase() === defIdStr ||
+                        String(dec.symbol || "").toLowerCase() === defIdStr;
+                      if (matchesDef) {
+                        tileChanged = true;
+                        return {
+                          ...dec,
+                          ...mods,
+                          name: mods.name ? localize(mods.name) : dec.name,
+                          description: mods.description ? localize(mods.description) : dec.description,
+                        };
+                      }
+                      return dec;
+                    });
+                    if (tileChanged) {
+                      newTile.decorations = updatedDecs;
+                      newTile.decoration = updatedDecs[0];
+                    }
+                  } else if (newTile.decoration) {
+                    const dec = newTile.decoration;
+                    const matchesDef = !defIdStr ||
+                      String(dec.definitionId || "").toLowerCase() === defIdStr ||
+                      String(dec.id || "").toLowerCase() === defIdStr ||
+                      String(dec.symbol || "").toLowerCase() === defIdStr;
+                    if (matchesDef) {
+                      tileChanged = true;
+                      const modifiedDec = {
+                        ...dec,
+                        ...mods,
+                        name: mods.name ? localize(mods.name) : dec.name,
+                        description: mods.description ? localize(mods.description) : dec.description,
+                      };
+                      newTile.decoration = modifiedDec;
+                      newTile.decorations = [modifiedDec];
+                    }
+                  }
+                }
+
+                if (tileChanged) {
+                  gridChanged = true;
+                  newGrid[y][x] = newTile;
+                }
+              }
+            }
+
+            return gridChanged ? { ...prev, grid: newGrid } : prev;
+          });
+        }
+
+        break;
+      }
       case "GIVE_ITEM": {
+        const player = latestPlayerRef.current;
         const defId = params.itemDefinitionId || params.itemId;
-        const levelItem = levelData && levelData.itemsPalette ? levelData.itemsPalette.find((i: any) => i.id === defId || i.symbol === defId) : null;
-        const itemTemplate = levelItem || (itemsDb as any)[defId] || {};
+        if (!defId) break;
+
+        const levelItem = levelData && levelData.itemsPalette ? levelData.itemsPalette.find((i: any) => i.id === defId || i.symbol === defId || i.definitionId === defId) : null;
+        const realDbId = levelItem?.definitionId || levelItem?.id || defId;
+        const dbTemplate = (itemsDb as any)[realDbId] || (itemsDb as any)[defId] || {};
+        const itemTemplate = { ...dbTemplate, ...(levelItem || {}) };
+
         if (latestSpriteMapRef.current) {
           ensureEntityAssetsLoaded(itemTemplate, itemsDb, enemiesDb, npcsDb, decorationsDb, latestSpriteMapRef.current);
         }
-        const count = params.count || 1;
-        const spawnX = params.spawnAtX;
-        const spawnY = params.spawnAtY;
-        const isSpawningOnGround = spawnX !== undefined && spawnY !== undefined;
+
+        const count = params.count || params.amount || 1;
+        const spawnX = params.spawnAtX !== undefined ? Number(params.spawnAtX) : undefined;
+        const spawnY = params.spawnAtY !== undefined ? Number(params.spawnAtY) : undefined;
+        const isSpawningOnGround = spawnX !== undefined && spawnY !== undefined && !isNaN(spawnX) && !isNaN(spawnY);
+
+        const rawName = params.itemName || itemTemplate.name || dbTemplate.name || realDbId || defId;
+        const rawDesc = params.itemDescription || itemTemplate.description || dbTemplate.description || "";
+        const localizedName = localize(rawName);
+        const localizedDesc = localize(rawDesc);
 
         const createItems = () => {
           const items = [];
           for (let i = 0; i < count; i++) {
             items.push({
+              ...dbTemplate,
+              ...levelItem,
               ...itemTemplate,
-              id: `${defId}_${Math.random().toString(36).substring(2, 7)}`,
-              definitionId: defId,
-              name: localize(itemTemplate.name || params.itemName || defId),
-              handAssetId: itemTemplate.handAsset,
-              handFemaleAssetId: itemTemplate.handFemaleAsset,
-              attackAssetId: itemTemplate.attackAsset,
-              attackFemaleAssetId: itemTemplate.attackAssetFemale,
+              ...params.itemOverrides,
+              id: `${realDbId || defId}_${Math.random().toString(36).substring(2, 7)}`,
+              definitionId: realDbId || defId,
+              name: localizedName,
+              description: localizedDesc,
+              rawName: rawName,
+              rawDescription: rawDesc,
+              durability: params.itemOverrides?.durability ?? itemTemplate.maxDurability ?? dbTemplate.maxDurability,
+              handAssetId: itemTemplate.handAsset || dbTemplate.handAsset,
+              handFemaleAssetId: itemTemplate.handFemaleAsset || dbTemplate.handFemaleAsset,
+              attackAssetId: itemTemplate.attackAsset || dbTemplate.attackAsset,
+              attackFemaleAssetId: itemTemplate.attackAssetFemale || dbTemplate.attackAssetFemale,
+              maskAssetId: itemTemplate.maskAsset || dbTemplate.maskAsset,
+              count: params.itemCount || itemTemplate.count || dbTemplate.count || 1,
+              currentAmmo: itemTemplate.type === 'AMMO' ? (params.itemCount || itemTemplate.count || dbTemplate.count || 1) : (itemTemplate.currentAmmo ?? dbTemplate.currentAmmo),
             });
           }
           return items;
@@ -1681,7 +2503,7 @@ export const useScriptSystem = (
 
         if (isSpawningOnGround) {
           setLevelData((prev: any) => {
-            if (!prev.grid || !prev.grid[spawnY] || !prev.grid[spawnY][spawnX])
+            if (!prev || !prev.grid || !prev.grid[spawnY] || !prev.grid[spawnY][spawnX])
               return prev;
             const newGrid = [...prev.grid];
             newGrid[spawnY] = [...newGrid[spawnY]];
@@ -1695,29 +2517,316 @@ export const useScriptSystem = (
             return { ...prev, grid: newGrid };
           });
 
-          const itemName = localize(
-            itemTemplate.name || params.itemName || defId,
-          );
-          addLog(
-            `${itemName}${count > 1 ? ` x${count}` : ""} появляется здесь.`,
-            "INFO",
-          );
-        } else {
-          setPlayer((prev: any) => {
-            return {
-              ...prev,
-              inventory: [...prev.inventory, ...createItems()],
-            };
-          });
+          const msg = `${localizedName}${count > 1 ? ` x${count}` : ""} ${localize("появляется здесь. / appears here.")}`;
+          addLog(msg, "INFO");
+          if (showToast) showToast(msg);
+        } else if (player) {
+          const BASE_INVENTORY_CAPACITY = 4;
+          const bonusCapacity =
+            (player.equipment?.helmet?.inventorySlots || 0) +
+            (player.equipment?.vest?.inventorySlots || 0) +
+            (player.equipment?.pants?.inventorySlots || 0) +
+            (player.equipment?.boots?.inventorySlots || 0) +
+            (player.equipment?.accessory1?.inventorySlots || 0) +
+            (player.equipment?.accessory2?.inventorySlots || 0);
+          const maxCapacity = BASE_INVENTORY_CAPACITY + bonusCapacity;
 
-          const logPrefix = strings?.logs?.item_received || "Received: ";
-          const itemName = localize(
-            itemTemplate.name || params.itemName || defId,
-          );
-          addLog(
-            `${localize(logPrefix)} ${itemName}${count > 1 ? ` x${count}` : ""}`,
-            "SUCCESS",
-          );
+          const equippedIds = new Set<string>();
+          if (player.equippedWeapon?.id) equippedIds.add(player.equippedWeapon.id);
+          if (player.equipment) {
+            Object.values(player.equipment).forEach((eqItem: any) => {
+              if (eqItem?.id) equippedIds.add(eqItem.id);
+            });
+          }
+
+          const newItems = createItems();
+          let updatedInventory = [...(player.inventory || [])];
+          const givenItemsFit: any[] = [];
+          const droppedItems: any[] = [];
+
+          for (const item of newItems) {
+            if (item.type === 'CASH') {
+              const existingIndex = updatedInventory.findIndex(i => i.type === 'CASH');
+              if (existingIndex !== -1) {
+                updatedInventory[existingIndex] = {
+                  ...updatedInventory[existingIndex],
+                  count: (updatedInventory[existingIndex].count || 0) + (item.count || 1)
+                };
+                givenItemsFit.push(item);
+                continue;
+              }
+            } else if (item.type === 'AMMO' || item.type === 'MATERIAL') {
+              const existingIndex = updatedInventory.findIndex(i =>
+                i.id !== item.id &&
+                (i.definitionId === item.definitionId || i.rawName === item.rawName) &&
+                (i.count || 1) < (i.maxStack || 999)
+              );
+              if (existingIndex !== -1) {
+                const existingItem = updatedInventory[existingIndex];
+                const space = (existingItem.maxStack || 999) - (existingItem.count || 1);
+                const amountToAdd = Math.min(space, item.count || 1);
+                updatedInventory[existingIndex] = {
+                  ...existingItem,
+                  count: (existingItem.count || 1) + amountToAdd
+                };
+                givenItemsFit.push(item);
+                continue;
+              }
+            }
+
+            const currentLoad = updatedInventory
+              .filter((i) => !equippedIds.has(i.id) && i.type !== 'CASH')
+              .reduce((acc, i) => acc + (i.weight !== undefined ? i.weight : 1), 0);
+            const itemWeight = item.weight !== undefined ? item.weight : 1;
+
+            if (currentLoad + itemWeight <= maxCapacity) {
+              updatedInventory.push(item);
+              givenItemsFit.push(item);
+            } else {
+              droppedItems.push(item);
+            }
+          }
+
+          setPlayer((prev: any) => ({
+            ...prev,
+            inventory: updatedInventory,
+          }));
+
+          if (givenItemsFit.length > 0) {
+            const givenCount = givenItemsFit.reduce((acc, i) => acc + (i.count || 1), 0);
+            const prefixText = localize("Получено: / Received:");
+            const msg = `${prefixText} ${localizedName}${givenCount > 1 ? ` x${givenCount}` : ""}`;
+            addLog(msg, "SUCCESS");
+            if (showToast) showToast(msg);
+          }
+
+          if (droppedItems.length > 0) {
+            const px = Math.floor(player.pos.x);
+            const py = Math.floor(player.pos.y);
+            if (setLevelData) {
+              setLevelData((prev: any) => {
+                if (!prev || !prev.grid || !prev.grid[py] || !prev.grid[py][px]) return prev;
+                const newGrid = [...prev.grid];
+                const newRow = [...newGrid[py]];
+                const existingItems = newRow[px].items || [];
+                newRow[px] = { ...newRow[px], items: [...existingItems, ...droppedItems] };
+                newGrid[py] = newRow;
+                return { ...prev, grid: newGrid };
+              });
+            }
+
+            const droppedCount = droppedItems.reduce((acc, i) => acc + (i.count || 1), 0);
+            const droppedLabel = `${localizedName}${droppedCount > 1 ? ` x${droppedCount}` : ""}`;
+            const overflowMsg = `${localize("Не хватило места в инвентаре! Выпало на землю: / Not enough inventory space! Dropped on ground:")} ${droppedLabel}`;
+            addLog(overflowMsg, "WARNING");
+            if (showToast) showToast(overflowMsg);
+          }
+        }
+
+        if (params.toastMsg) showToast(localize(params.toastMsg));
+        break;
+      }
+      case "TAKE_ITEM": {
+        const player = latestPlayerRef.current;
+        if (!player) break;
+
+        const isTakeAll = !!params.takeAll;
+        const takeScope = params.takeAllScope || params.scope || "ALL";
+
+        let updatedInventory = [...(player.inventory || [])];
+        let updatedEquippedWeapon = player.equippedWeapon;
+        let updatedEquipment = {
+          ...(player.equipment || {
+            weapon: null,
+            weaponAkimbo: null,
+            helmet: null,
+            vest: null,
+            pants: null,
+            boots: null,
+            accessory1: null,
+            accessory2: null,
+          }),
+        };
+
+        if (isTakeAll) {
+          if (takeScope === "ALL") {
+            updatedInventory = [];
+            updatedEquippedWeapon = null;
+            updatedEquipment = {
+              weapon: null,
+              weaponAkimbo: null,
+              helmet: null,
+              vest: null,
+              pants: null,
+              boots: null,
+              accessory1: null,
+              accessory2: null,
+            };
+            const msg = localize("Изъяты все предметы и экипировка / All items and equipment removed");
+            addLog(msg, "INFO");
+            if (showToast) showToast(msg);
+          } else if (takeScope === "INVENTORY") {
+            updatedInventory = [];
+            const msg = localize("Изъят весь инвентарь / Inventory cleared");
+            addLog(msg, "INFO");
+            if (showToast) showToast(msg);
+          } else if (takeScope === "EQUIPPED") {
+            const equippedIds = new Set<string>();
+            if (updatedEquippedWeapon?.id) equippedIds.add(updatedEquippedWeapon.id);
+            Object.values(updatedEquipment).forEach((eqItem: any) => {
+              if (eqItem?.id) equippedIds.add(eqItem.id);
+            });
+
+            if (equippedIds.size > 0) {
+              updatedInventory = updatedInventory.filter((item) => !equippedIds.has(item.id));
+            }
+
+            updatedEquippedWeapon = null;
+            updatedEquipment = {
+              weapon: null,
+              weaponAkimbo: null,
+              helmet: null,
+              vest: null,
+              pants: null,
+              boots: null,
+              accessory1: null,
+              accessory2: null,
+            };
+            const msg = localize("Изъята вся экипировка / Equipped items removed");
+            addLog(msg, "INFO");
+            if (showToast) showToast(msg);
+          }
+        } else {
+          const defId = params.itemDefinitionId || params.itemId;
+          if (!defId) break;
+
+          const currentItems = updatedInventory;
+          if (currentItems.length === 0) break;
+
+          const levelItem = levelData && levelData.itemsPalette ? levelData.itemsPalette.find((i: any) => i.id === defId || i.symbol === defId || i.definitionId === defId) : null;
+          const realDbId = levelItem?.definitionId || levelItem?.id || defId;
+
+          const amountToTakeNeeded = params.count || params.amount || 1;
+          let remainingToTake = amountToTakeNeeded;
+          let takenCount = 0;
+          let takenItemName = "";
+
+          const newInv: any[] = [];
+
+          for (const item of currentItems) {
+            const isMatch =
+              item.id === defId ||
+              item.definitionId === defId ||
+              item.definitionId === realDbId ||
+              item.rawName === defId ||
+              item.name === defId ||
+              (levelItem && (item.definitionId === levelItem.id || item.id === levelItem.id));
+
+            if (isMatch && remainingToTake > 0) {
+              if (!takenItemName) {
+                takenItemName = item.name || item.rawName || realDbId || defId;
+              }
+              const itemQuantity = item.count || 1;
+              if (itemQuantity > remainingToTake) {
+                takenCount += remainingToTake;
+                newInv.push({
+                  ...item,
+                  count: itemQuantity - remainingToTake,
+                });
+                remainingToTake = 0;
+              } else {
+                takenCount += itemQuantity;
+                remainingToTake -= itemQuantity;
+
+                if (updatedEquippedWeapon?.id === item.id) {
+                  updatedEquippedWeapon = null;
+                }
+                if (updatedEquipment.weapon?.id === item.id) updatedEquipment.weapon = null;
+                if (updatedEquipment.weaponAkimbo?.id === item.id) updatedEquipment.weaponAkimbo = null;
+                if (updatedEquipment.helmet?.id && updatedEquipment.helmet.id === item.id) updatedEquipment.helmet = null;
+                if (updatedEquipment.vest?.id && updatedEquipment.vest.id === item.id) updatedEquipment.vest = null;
+                if (updatedEquipment.pants?.id && updatedEquipment.pants.id === item.id) updatedEquipment.pants = null;
+                if (updatedEquipment.boots?.id && updatedEquipment.boots.id === item.id) updatedEquipment.boots = null;
+                if (updatedEquipment.accessory1?.id && updatedEquipment.accessory1.id === item.id) updatedEquipment.accessory1 = null;
+                if (updatedEquipment.accessory2?.id && updatedEquipment.accessory2.id === item.id) updatedEquipment.accessory2 = null;
+              }
+            } else {
+              newInv.push(item);
+            }
+          }
+
+          if (takenCount === 0) break;
+
+          updatedInventory = newInv;
+
+          const localizedTakenName = localize(takenItemName || realDbId || defId);
+          const prefixText = localize("Изъято: / Removed:");
+          const msg = `${prefixText} ${localizedTakenName}${takenCount > 1 ? ` x${takenCount}` : ""}`;
+          addLog(msg, "INFO");
+          if (showToast) showToast(msg);
+        }
+
+        const BASE_INVENTORY_CAPACITY = 4;
+        const bonusCapacity =
+          (updatedEquipment?.helmet?.inventorySlots || 0) +
+          (updatedEquipment?.vest?.inventorySlots || 0) +
+          (updatedEquipment?.pants?.inventorySlots || 0) +
+          (updatedEquipment?.boots?.inventorySlots || 0) +
+          (updatedEquipment?.accessory1?.inventorySlots || 0) +
+          (updatedEquipment?.accessory2?.inventorySlots || 0);
+
+        const maxCapacity = BASE_INVENTORY_CAPACITY + bonusCapacity;
+
+        const equippedIds = new Set<string>();
+        if (updatedEquippedWeapon?.id) equippedIds.add(updatedEquippedWeapon.id);
+        Object.values(updatedEquipment).forEach((eqItem: any) => {
+          if (eqItem?.id) equippedIds.add(eqItem.id);
+        });
+
+        let currentLoad = updatedInventory
+          .filter((i) => !equippedIds.has(i.id) && i.type !== 'CASH')
+          .reduce((acc, i) => acc + (i.weight !== undefined ? i.weight : 1), 0);
+
+        const droppedItems: any[] = [];
+        if (currentLoad > maxCapacity) {
+          for (let i = updatedInventory.length - 1; i >= 0; i--) {
+            if (currentLoad <= maxCapacity) break;
+            const item = updatedInventory[i];
+            if (equippedIds.has(item.id) || item.type === 'CASH') continue;
+
+            const itemWeight = item.weight !== undefined ? item.weight : 1;
+            droppedItems.push(item);
+            updatedInventory.splice(i, 1);
+            currentLoad -= itemWeight;
+          }
+        }
+
+        setPlayer((prev: any) => ({
+          ...prev,
+          inventory: updatedInventory,
+          equippedWeapon: updatedEquippedWeapon,
+          equipment: updatedEquipment,
+        }));
+
+        if (droppedItems.length > 0) {
+          const px = Math.floor(player.pos.x);
+          const py = Math.floor(player.pos.y);
+          if (setLevelData) {
+            setLevelData((prev: any) => {
+              if (!prev || !prev.grid || !prev.grid[py] || !prev.grid[py][px]) return prev;
+              const newGrid = [...prev.grid];
+              const newRow = [...newGrid[py]];
+              const existingItems = newRow[px].items || [];
+              newRow[px] = { ...newRow[px], items: [...existingItems, ...droppedItems] };
+              newGrid[py] = newRow;
+              return { ...prev, grid: newGrid };
+            });
+          }
+
+          const droppedNames = droppedItems.map(i => localize(i.name || i.rawName || i.id)).join(', ');
+          const overflowMsg = `${localize("Выпало на землю (не поместилось в инвентарь): / Dropped on the ground (didn't fit in inventory):")} ${droppedNames}`;
+          addLog(overflowMsg, "WARNING");
+          if (showToast) showToast(overflowMsg);
         }
 
         if (params.toastMsg) showToast(localize(params.toastMsg));
@@ -1754,6 +2863,59 @@ export const useScriptSystem = (
             checkTriggers("ON_ENTER_TILE", { x: Math.round(freshPlayer.x), y: Math.round(freshPlayer.y), atStart: true });
           }
         }
+        break;
+      }
+      case "CREATE_COUNTER":
+      case "SET_COUNTER": {
+        const counterId = String(params.counterId || params.id || params.counter || params.flag || params.name || "").trim();
+        if (!counterId) break;
+        const val = Number(params.value ?? params.initialValue ?? params.val ?? params.count ?? 0);
+        const currentLevelData = latestLevelDataRef.current;
+        if (currentLevelData) {
+          if (!currentLevelData.scriptCounters) {
+            currentLevelData.scriptCounters = {};
+          }
+          currentLevelData.scriptCounters[counterId] = val;
+        }
+        setLevelData((prev: any) => {
+          return {
+            ...prev,
+            scriptCounters: {
+              ...(prev?.scriptCounters || {}),
+              [counterId]: val,
+            },
+          };
+        });
+        checkTriggers("ON_COUNTER_VALUE", { counterId, value: val });
+        checkTriggers("ON_COUNTER_CHANGE", { counterId, value: val });
+        break;
+      }
+      case "INCREMENT_COUNTER": {
+        const counterId = String(params.counterId || params.id || params.counter || params.flag || params.name || "").trim();
+        if (!counterId) break;
+        const amount = Number(params.amount ?? params.value ?? params.val ?? params.increment ?? params.add ?? params.step ?? params.count ?? 1);
+        const currentLevelData = latestLevelDataRef.current;
+        const currentVal = Number(currentLevelData?.scriptCounters?.[counterId] ?? 0);
+        const newVal = currentVal + amount;
+
+        if (currentLevelData) {
+          if (!currentLevelData.scriptCounters) {
+            currentLevelData.scriptCounters = {};
+          }
+          currentLevelData.scriptCounters[counterId] = newVal;
+        }
+
+        setLevelData((prev: any) => {
+          return {
+            ...prev,
+            scriptCounters: {
+              ...(prev?.scriptCounters || {}),
+              [counterId]: newVal,
+            },
+          };
+        });
+        checkTriggers("ON_COUNTER_VALUE", { counterId, value: newVal, previousValue: currentVal, amount });
+        checkTriggers("ON_COUNTER_CHANGE", { counterId, value: newVal, previousValue: currentVal, amount });
         break;
       }
       case "SET_SECTOR": {
@@ -2221,6 +3383,64 @@ export const useScriptSystem = (
               })
             );
           }
+        }
+        break;
+      }
+      case "END": {
+        if (setCinematicMode) {
+          setCinematicMode(true);
+        }
+
+        const duration =
+          params && params.duration !== undefined && params.duration !== ""
+            ? Number(params.duration)
+            : 2000;
+
+        if (latestSetViewportFadeRef.current && duration > 0) {
+          const startTime = performance.now();
+          await new Promise<void>((resolve) => {
+            const animate = (time: number) => {
+              const elapsed = time - startTime;
+              const progress = Math.min(1, elapsed / duration);
+              if (latestSetViewportFadeRef.current) {
+                latestSetViewportFadeRef.current(progress);
+              }
+              if (progress < 1) {
+                requestAnimationFrame(animate);
+              } else {
+                resolve();
+              }
+            };
+            requestAnimationFrame(animate);
+          });
+        } else if (latestSetViewportFadeRef.current) {
+          latestSetViewportFadeRef.current(1);
+        }
+
+        const delay =
+          params && params.delay !== undefined && params.delay !== ""
+            ? Number(params.delay)
+            : 500;
+
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+
+        if (latestStopMusicRef.current) {
+          latestStopMusicRef.current({ fadeOutDuration: 0 });
+        }
+        if (latestStopAllSoundsRef.current) {
+          latestStopAllSoundsRef.current();
+        }
+
+        if (latestReturnToMenuRef.current) {
+          latestReturnToMenuRef.current();
+        } else if (setGameState) {
+          setGameState(GameState.MENU);
+        }
+
+        if (setCinematicMode) {
+          setCinematicMode(false);
         }
         break;
       }

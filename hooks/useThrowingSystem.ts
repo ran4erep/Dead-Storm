@@ -125,7 +125,7 @@ export const useThrowingSystem = ({
     return 3 + (player.stats.str || 0);
   }, [player.stats.str]);
 
-  const initiateThrow = (item: Item, countToDrop?: number) => {
+  const initiateThrow = (item: Item, countToDrop?: number, isSafe?: boolean) => {
     if (!strings) return;
 
     // Check if throwing an equipped item that provides slots will overflow inventory
@@ -208,13 +208,13 @@ export const useThrowingSystem = ({
 
     const finalItemToThrow =
       countToDrop !== undefined
-        ? { ...item, count: countToDrop, originalId: item.id }
-        : item;
+        ? { ...item, count: countToDrop, originalId: item.id, isSafeDrop: isSafe }
+        : { ...item, isSafeDrop: isSafe };
     setItemToThrow(finalItemToThrow);
     setLocalOffset(initialOffset);
     setGameState(GameState.THROWING);
 
-    if (item.sounds && item.sounds.prime) {
+    if (!isSafe && item.sounds && item.sounds.prime) {
       playSound(item.sounds.prime);
     }
   };
@@ -764,8 +764,9 @@ export const useThrowingSystem = ({
       }
 
       const isGrenade =
-        itemToThrow.type === "GRENADE" || itemToThrow.type === "FLASHBANG";
-      const isMolotov = itemToThrow.type === "MOLOTOV";
+        !(itemToThrow as any).isSafeDrop &&
+        (itemToThrow.type === "GRENADE" || itemToThrow.type === "FLASHBANG");
+      const isMolotov = !(itemToThrow as any).isSafeDrop && itemToThrow.type === "MOLOTOV";
       const timer = (itemToThrow as any).timer || 0;
       let shouldDropItem = true;
 
@@ -773,6 +774,8 @@ export const useThrowingSystem = ({
       if (isMolotov) {
         shouldDropItem = false;
         const fireObjectId = (itemToThrow as any).fireObjectId || "fire";
+        const itemSpreadsLeft = (itemToThrow as any).spreadsLeft !== undefined ? (itemToThrow as any).spreadsLeft : 3;
+        const itemSpreadChance = (itemToThrow as any).spreadChance !== undefined ? (itemToThrow as any).spreadChance : 0.5;
         const explosionSoundId =
           (itemToThrow as any).explosionSoundId || "GLASS";
         const explosionRange = (itemToThrow as any).explosionRange || 0;
@@ -900,18 +903,21 @@ export const useThrowingSystem = ({
                       }
                     }
 
+                    const spawnedDec = {
+                      ...decBase,
+                      type: fireObjectId,
+                      id: `${fireObjectId}_${Math.random()}`,
+                      createdByPlayer: true,
+                      isScorching: decBase.isScorching !== undefined ? decBase.isScorching : true,
+                      spreadsLeft: itemSpreadsLeft,
+                      spreadChance: itemSpreadChance,
+                      spreadType: decBase.spreadType || fireObjectId,
+                      lifeTime: decBase.lifeTime !== undefined ? decBase.lifeTime : 6,
+                    };
                     newGrid[ty][tx] = {
                       ...tile,
-                      decoration: {
-                        ...fireDec,
-                        id: `${fireObjectId}_${Math.random()}`,
-                        createdByPlayer: true,
-                        isScorching: true,
-                        spreadsLeft: 3,
-                        spreadChance: 0.5,
-                        spreadType: fireObjectId,
-                        lifeTime: decBase.lifeTime !== undefined ? decBase.lifeTime : 6,
-                      },
+                      decoration: spawnedDec,
+                      decorations: [spawnedDec],
                     };
                     (window as any).registerTimedEffect?.(tx, ty);
                   }
@@ -1063,8 +1069,24 @@ export const useThrowingSystem = ({
             (newItem as any).justPlaced = true;
           }
 
-          if ((itemToThrow as any).throwId) {
+          if (itemToThrow.type === "FLARE" || (itemToThrow as any).flareDuration !== undefined) {
+            const fDur = (itemToThrow as any).flareDuration ?? 15;
+            const initDur = (itemToThrow as any).initialFlareDuration ?? fDur;
+            (newItem as any).flareDuration = fDur;
+            (newItem as any).initialFlareDuration = initDur;
+            (newItem as any).justPlaced = true;
+            if (!(itemToThrow as any).isSafeDrop) {
+              (newItem as any).activeTimer = fDur;
+              (newItem as any).placedAsThrown = true;
+              (newItem as any).isLit = true;
+              (newItem as any).uncollectible = true;
+              (newItem as any).canBeInspected = false;
+              (newItem as any).mirroredThrow = Math.random() > 0.5 ? -1 : 1;
+            }
+          } else if ((itemToThrow as any).throwId && !(itemToThrow as any).isSafeDrop) {
             (newItem as any).placedAsThrown = true;
+            (newItem as any).uncollectible = true;
+            (newItem as any).canBeInspected = false;
             (newItem as any).mirroredThrow = Math.random() > 0.5 ? -1 : 1;
           }
 
@@ -1073,11 +1095,11 @@ export const useThrowingSystem = ({
           return { ...prev, grid: newGrid };
         });
 
-        if (isGrenade && timer > 0) {
+        if ((isGrenade && timer > 0) || ((itemToThrow.type === "FLARE" || (itemToThrow as any).flareDuration !== undefined) && !(itemToThrow as any).isSafeDrop)) {
           (window as any).registerTimedEffect?.(x, y);
         }
 
-        if (itemToThrow.sounds?.bounce) {
+        if (!(itemToThrow as any).isSafeDrop && itemToThrow.sounds?.bounce) {
           playSound(itemToThrow.sounds.bounce, { x, y });
         }
       };

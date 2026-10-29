@@ -21,7 +21,7 @@ import { useAssetLoader } from './useAssetLoader';
 import { useLevelSystem } from './useLevelSystem';
 import { useScriptSystem } from './useScriptSystem';
 import { useCombatSystem } from './useCombatSystem';
-import { useMovementSystem } from './useMovementSystem';
+import { useMovementSystem, findActiveKeypad } from './useMovementSystem';
 import { useInventorySystem } from './useInventorySystem';
 import { useSoundSystem } from './useSoundSystem';
 import { useDialogueSystem } from './useDialogueSystem';
@@ -63,13 +63,14 @@ export function useGameEngine() {
       inspectText, setInspectText,
       showPauseMenu, setShowPauseMenu, showSettings, setShowSettings, showDebug, setShowDebug,
       showVolume, setShowVolume, lootData, setLootData, enemies, setEnemies,
+      enemiesRef, runtimeEnemiesRef, syncEnemiesSnapshot,
       enemyFlashesRef, playerDamageSource, setPlayerDamageSource,
       explosionsRef, isTransitioningToMenu, setIsTransitioningToMenu,
       showIntroVideo, setShowIntroVideo, isVideoReady, setIsVideoReady,
       manualReloadTrigger, setManualReloadTrigger, playerReflectionSprite, setPlayerReflectionSprite,
       forceUpdate, mapSnapshotsRef, inventorySysRef, raycasterRef, activeExplosionsRef, sectorStatesRef, globalScriptFlagsRef,
-      roamingAnims, setRoamingAnims, boxMoveAnims, setBoxMoveAnims, cinematicMode, setCinematicMode, cinematicCamera, setCinematicCamera, raycasterWidth, raycasterHeight, resolutionDivisor, weaponRef, akimboWeaponRef,
-      pickupAnim, setPickupAnim, throwAnim, setThrowAnim,
+      roamingAnimsRef, roamingAnims, setRoamingAnims, boxMoveAnimsRef, boxMoveAnims, setBoxMoveAnims, cinematicMode, setCinematicMode, cinematicCamera, setCinematicCamera, raycasterWidth, raycasterHeight, resolutionDivisor, weaponRef, akimboWeaponRef,
+      pickupAnimRef, pickupAnim, setPickupAnim, throwAnimRef, throwAnim, setThrowAnim,
       lookAroundAngle, setLookAroundAngle,
       lookAroundPitch, setLookAroundPitch,
       lookAroundAngleRef, lookAroundPitchRef,
@@ -177,11 +178,6 @@ export function useGameEngine() {
       inventorySysRef.current?.forceCloseMap();
   }, []);
 
-  const enemiesRef = useRef(enemies);
-  useEffect(() => { enemiesRef.current = enemies; }, [enemies]);
-  const roamingAnimsRef = useRef(roamingAnims);
-  useEffect(() => { roamingAnimsRef.current = roamingAnims; }, [roamingAnims]);
-
   const checkTriggersRef = useRef<((type: string, params: any) => void)>();
   const checkTriggersStable = useCallback((type: string, params: any) => {
       checkTriggersRef.current?.(type, params);
@@ -195,11 +191,17 @@ export function useGameEngine() {
       if (loadSoundRef.current) return await loadSoundRef.current(u); 
   }, []);
 
+  const stopAllSoundsRef = useRef<(() => void) | null>(null);
+  const stopAllSoundsWrapper = useCallback(() => {
+      if (stopAllSoundsRef.current) stopAllSoundsRef.current();
+  }, []);
+
   const levelSystem = useLevelSystem(
       strings, masterSpriteMapRef, setSpriteMap, setEnemies, setPlayer, addLog, setLoading, setLoadingProgress, setLoadingLogs, setLoadingMessage, setIsWaitingToStart, setIsTransitionLoading, settings.language,
       forceCloseMapWrapper, loadSoundWrapper, undefined, enemiesDb, npcsDb, decorationsDb, itemsDb,
       sectorStatesRef, () => enemiesRef.current, () => roamingAnimsRef.current, setRoamingAnims, handleDoorStateChange,
-      globalScriptFlagsRef
+      globalScriptFlagsRef,
+      stopAllSoundsWrapper
   );
   const {
       levelData, setLevelData, currentLevelPath, setCurrentLevelPath,
@@ -230,14 +232,15 @@ export function useGameEngine() {
   );
   const { playSound: originalPlaySound, stopSound, stopAllSounds, playMusic, pauseMusic, resumeMusic, stopMusic, playWeather, loadSound, initContext, prepareStream, updateSoundPosition } = soundSystem;
 
-  useEffect(() => { loadSoundRef.current = loadSound; }, [loadSound]);
+  loadSoundRef.current = loadSound;
+  stopAllSoundsRef.current = stopAllSounds;
 
   const levelDataRef = useRef(levelData);
-  useEffect(() => { levelDataRef.current = levelData; }, [levelData]);
+  levelDataRef.current = levelData;
 
   // Wrapper around sound system's playSound to alert enemies within triggerRange
-  const playSound = useCallback((soundId: string, pos?: { x: number, y: number }, id?: string, delayMs?: number, reverbPos?: { x: number, y: number }, maxDistance?: number, loopOverride?: boolean) => {
-      originalPlaySound(soundId, pos, id, delayMs, reverbPos, maxDistance, loopOverride);
+  const playSound = useCallback((soundId: string, pos?: { x: number, y: number }, id?: string, delayMs?: number, reverbPos?: { x: number, y: number }, maxDistance?: number, loopOverride?: boolean, nonPositionalOverride?: boolean) => {
+      originalPlaySound(soundId, pos, id, delayMs, reverbPos, maxDistance, loopOverride, nonPositionalOverride);
 
       const soundDef = sounds[soundId];
       if (soundDef && soundDef.triggerRange && pos && settings.debug.aiEnabled && gameState !== GameState.DYING) {
@@ -345,7 +348,7 @@ export function useGameEngine() {
 
   const activeWeapon = player.equippedWeapon || defaultFists || null;
   const activeAkimboWeapon = player.equipment.weaponAkimbo || (activeWeapon?.id === 'fists_weapon' ? activeWeapon : null);
-  const weaponAnimation = useWeaponAnimation(activeWeapon, activeAkimboWeapon, animations, player.characterId, spriteMap, gameState, cinematicMode, activeModal);
+  const weaponAnimation = useWeaponAnimation(activeWeapon, activeAkimboWeapon, animations, player.characterId, spriteMap, gameState, cinematicMode, activeModal, triggerMuzzleFlash);
   const { 
       weaponStyle, akimboWeaponStyle, displayedWeapon, displayedAkimboWeapon, 
       mainHandContainerRef, akimboHandContainerRef, mapContainerRef, consoleContainerRef, mainHandImgRef, mainHandImgShadowRef, akimboHandImgRef, akimboHandImgShadowRef,
@@ -522,9 +525,13 @@ export function useGameEngine() {
       triggerScreenShake,
       setGameOverType
   });
-  const { deathAnimProgress: realDeathAnimProgress } = playerDeath;
-  const [scriptedDeathProgress, setScriptedDeathProgress] = useState(0);
-  const deathAnimProgress = Math.max(realDeathAnimProgress, scriptedDeathProgress);
+  const { deathAnimProgress: realDeathAnimProgress, deathAnimProgressRef: realDeathAnimProgressRef } = playerDeath;
+  const scriptedDeathProgressRef = useRef(0);
+  const setScriptedDeathProgress = useCallback((val: number | ((prev: number) => number)) => {
+      scriptedDeathProgressRef.current = typeof val === 'function' ? val(scriptedDeathProgressRef.current) : val;
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('raycaster-look'));
+  }, []);
+  const deathAnimProgress = Math.max(realDeathAnimProgress, scriptedDeathProgressRef.current);
 
   const playerFall = usePlayerFall({
       player,
@@ -537,7 +544,7 @@ export function useGameEngine() {
   const { fallAnimProgress } = playerFall;
 
   const enemySoundEffects = useEnemySoundEffects({
-      levelData, player, playSound, combat, enemies
+      levelData, player, playSound, combat, enemies: enemiesRef.current
   });
   const { activeCombatIds, handleEnemyStep } = enemySoundEffects;
 
@@ -545,7 +552,7 @@ export function useGameEngine() {
   const roamingSystem = useRoamingSystem(
       levelData, 
       setLevelData, 
-      enemies, 
+      enemiesRef.current, 
       setEnemies, 
       player, 
       combat.isActive, 
@@ -555,7 +562,8 @@ export function useGameEngine() {
       settings.debug.aiEnabled && gameState !== GameState.DYING, // Pass AI enabled setting
       joinCombat, // Pass Join Combat Callback
       handleEnemyStep, // Pass Sound Callback
-      playSound
+      playSound,
+      enemiesRef
   );
   const { triggerRoamingTurn } = roamingSystem;
 
@@ -566,7 +574,7 @@ export function useGameEngine() {
       setPlayer,
       levelData,
       setLevelData,
-      enemies,
+      enemiesRef,
       setEnemies,
       spriteMap,
       raycasterRef,
@@ -755,6 +763,9 @@ export function useGameEngine() {
   const prevLevelPathRef = useRef<string | null>(null);
 
   useEffect(() => {
+      if (prevLevelPathRef.current && prevLevelPathRef.current !== currentLevelPath) {
+          stopAllSounds();
+      }
       if (loading || prevLevelPathRef.current !== currentLevelPath) {
           prevLevelPathRef.current = currentLevelPath;
           lastPlayerPosRef.current = { x: player.pos.x, y: player.pos.y };
@@ -787,10 +798,12 @@ export function useGameEngine() {
       const py = Math.round(pPos.y);
       if (px >= 0 && px < w && py >= 0 && py < h && playerHpRef.current > 0 && !damagedEntitiesThisTurnRef.current.has('PLAYER')) {
           const tile = grid[py][px];
-          if (tile.decoration && tile.decoration.id) {
-              const decDef = tile.decoration.damaging !== undefined 
-                           ? tile.decoration 
-                           : (decorationsDb[tile.decoration.id] || decorationsDb[tile.decoration.type]);
+          const decList = tile.decorations && tile.decorations.length > 0 ? tile.decorations : (tile.decoration ? [tile.decoration] : []);
+          for (const decObj of decList) {
+              if (!decObj || !decObj.id) continue;
+              const decDef = decObj.damaging !== undefined 
+                           ? decObj 
+                           : (decorationsDb[decObj.id] || decorationsDb[decObj.type]);
               
               if (decDef && decDef.damaging) {
                   const dice = decDef.damageDice || "1d4";
@@ -805,6 +818,7 @@ export function useGameEngine() {
                   triggerDamageEffect(true);
                   if (playerHpRef.current > 0 && player.sounds && player.sounds.damage) playSound(player.sounds.damage);
                   if (dmg > 0) addLog(strings?.logs?.trap_damage?.replace('{name}', localize(decDef.name))?.replace('{dmg}', dmg.toString()) || `Ранение от ловушки ${localize(decDef.name)}: ${dmg} урона.`, 'WARNING');
+                  break;
               }
           }
       }
@@ -820,18 +834,21 @@ export function useGameEngine() {
       for (let y = 0; y < h; y++) {
           for (let x = 0; x < w; x++) {
               const tile = grid[y][x];
-              if (tile.enemyId && tile.decoration && tile.decoration.id) {
+              if (tile.enemyId) {
                   const enemyId = tile.enemyId;
                   if (damagedEntitiesThisTurnRef.current.has(enemyId)) continue;
                   
                   const enemy = enemiesRef.current.get(enemyId);
                   if (!enemy || enemy.hp <= 0) continue;
 
-                  const decDef = tile.decoration.damaging !== undefined 
-                           ? tile.decoration 
-                           : (decorationsDb[tile.decoration.id] || decorationsDb[tile.decoration.type]);
-                           
-                  if (decDef && decDef.damaging) {
+                  const decList = tile.decorations && tile.decorations.length > 0 ? tile.decorations : (tile.decoration ? [tile.decoration] : []);
+                  for (const decObj of decList) {
+                      if (!decObj || !decObj.id) continue;
+                      const decDef = decObj.damaging !== undefined 
+                               ? decObj 
+                               : (decorationsDb[decObj.id] || decorationsDb[decObj.type]);
+                               
+                      if (decDef && decDef.damaging) {
                       const dice = decDef.damageDice || "1d4";
                       const dmg = rollDice(dice);
                       
@@ -857,20 +874,22 @@ export function useGameEngine() {
 
                       if (enemy.hp - dmg <= 0) {
                            if (strings) addLog(strings.logs.enemy_killed_trap?.replace('{enemy}', enemy.name)?.replace('{trap}', localize(decDef.name)) || `${enemy.name} погибает в ${localize(decDef.name)}!`, 'SUCCESS');
-                           if (tile.decoration.createdByPlayer) {
+                           if (decObj.createdByPlayer) {
                                killedByPlayerThisTurn.push({ id: enemyId, cause: decDef.type || decDef.id });
                            } else {
                                killedByEnvThisTurn.push({ id: enemyId, cause: decDef.type || decDef.id });
                            }
-                      } else if (tile.decoration.createdByPlayer) {
+                      } else if (decObj.createdByPlayer) {
                            if (!enemiesToAggro.includes(enemyId)) {
                                enemiesToAggro.push(enemyId);
                            }
                       }
+                      break;
                   }
               }
           }
       }
+  }
       
       if (killedByPlayerThisTurn.length > 0) {
           handleEnemiesKilled(killedByPlayerThisTurn, false, true);
@@ -906,9 +925,9 @@ export function useGameEngine() {
   // Reaper Effect: Safely catch any enemies that reached 0 HP but missed the death event.
   // This serves as an ultimate fallback guard against "ghosts".
   useEffect(() => {
-      if (!levelData?.grid || !enemies) return;
+      if (!levelData?.grid || !enemiesRef.current) return;
       const ghostIds: string[] = [];
-      enemies.forEach((enemy, id) => {
+      enemiesRef.current.forEach((enemy, id) => {
           if (enemy.hp <= 0) ghostIds.push(id);
       });
       if (ghostIds.length > 0) {
@@ -918,7 +937,7 @@ export function useGameEngine() {
               handleEnemiesKilled(ghostsOnGrid, false, false);
           }
       }
-  }, [enemies, levelData, handleEnemiesKilled]);
+  }, [levelData, handleEnemiesKilled]);
 
   const gameTurns = useGameTurns({
       combat,
@@ -955,15 +974,21 @@ export function useGameEngine() {
     return !!((activeModal !== null && activeModal !== 'actions' && activeModal !== 'loot' && activeModal !== 'inspect' && activeModal !== 'inspect_anim') || showPauseMenu || showSettings || showDebug || showVolume);
   };
   const isPausedRef = useRef(checkIsPaused());
-  useEffect(() => { isPausedRef.current = checkIsPaused(); }, [activeModal, showPauseMenu, showSettings, showDebug, showVolume]);
+  isPausedRef.current = checkIsPaused();
+
+  const returnToMenuRef = useRef<(() => void) | null>(null);
+  const returnToMenuWrapper = useCallback(() => {
+      if (returnToMenuRef.current) returnToMenuRef.current();
+  }, []);
 
   // SCRIPT SYSTEM
   const scriptSystem = useScriptSystem(
-      player, setPlayer, levelData, setLevelData, enemies, setEnemies, 
+      player, setPlayer, levelData, setLevelData, enemiesRef.current, setEnemies, 
       addLog, playSound, startDialogueWrapper, showToast, strings, localize, onRadioTrigger,
       setCinematicMode, setCinematicCamera, isPausedRef, raycasterRef, showTutorialWrapper,
       setGameState, triggerScreenShake, setScriptedDeathProgress, handleExplosion, setScreamer,
-      setSkyTexture, spriteMap, playMusic, pauseMusic, resumeMusic, stopMusic, setGameOverType, unlockAchievement
+      setSkyTexture, spriteMap, playMusic, pauseMusic, resumeMusic, stopMusic, setGameOverType, unlockAchievement,
+      returnToMenuWrapper, stopAllSounds, setViewportFade, setActiveModal, gameState
   );
 
   useEffect(() => {
@@ -1039,7 +1064,7 @@ export function useGameEngine() {
 
   const inspectingSys = useInspectingSystem({
       player, setPlayer, levelData, gameState, setGameState, strings, addLog,
-      enemiesDb, decorationsDb, itemsDb, enemies,
+      enemiesDb, decorationsDb, itemsDb, enemies: enemiesRef.current,
       onInspect: handleRemoteInspect,
       setLookAroundAngle,
       lookAroundAngle,
@@ -1082,7 +1107,7 @@ export function useGameEngine() {
     startDialogueWrapper,
     effectSys.processEffects,
     handleGameTurnWrapper,
-    enemies, 
+    enemiesRef.current, 
     settings.debug.aiEnabled,
     triggerEnemyTurn, // PASS COMBAT TURN TRIGGER
     joinCombat,
@@ -1142,7 +1167,7 @@ export function useGameEngine() {
   useAudioOrchestrator({
       gameState, loading, combat, levelData, player, settings, activeModal,
       playSound, stopSound, stopAllSounds, playMusic, playWeather, showIntroVideo, updateSoundPosition, initContext,
-      enemies,
+      enemies: enemiesRef.current,
       cinematicMode,
       cinematicCamera
   });
@@ -1162,11 +1187,11 @@ export function useGameEngine() {
       isCombatActive: combat.isActive,
       showToast,
       playSound,
-      enemies
+      enemies: enemiesRef.current
   });
 
   const throwingSys = useThrowingSystem({
-      player, setPlayer, levelData, setLevelData, enemies, setEnemies, gameState, setGameState, strings, addLog, startCombat: handleStartCombatWrapper,
+      player, setPlayer, levelData, setLevelData, enemies: enemiesRef.current, setEnemies, gameState, setGameState, strings, addLog, startCombat: handleStartCombatWrapper,
       onEnemiesKilled: handleEnemiesKilled, setThrowAnim, isCombatActive: combat.isActive, triggerEnemyTurn, onVisualHit: handleVisualHit,
       playSound, setCombat, combatRef, triggerExplosion, triggerDamageEffect, triggerFlash: triggerMuzzleFlash, triggerExplosionFlash: triggerEnemyFlash, triggerScreenShake,
       onTakeTurn: handleGameTurn, // PASS TURN HANDLER FOR NON-COMBAT THROWS
@@ -1269,7 +1294,7 @@ export function useGameEngine() {
 
   const isSystemMenuOpen = showPauseMenu || showSettings || showDebug || showVolume || !!activeTutorial;
   const isBlockingModal = activeModal === 'inventory' || activeModal === 'stats' || activeModal === 'equipment';
-  const isBlockingInteraction = isActionBlocked || viewportFade > 0 || !!throwAnim || gameState === GameState.DIALOGUE || gameState === GameState.DYING || gameState === GameState.FALLING || activeModal === 'keypad' || activeModal === 'inspect_anim' || cinematicMode || isBlockingModal;
+  const isBlockingInteraction = isActionBlocked || viewportFade > 0 || !!throwAnimRef.current || gameState === GameState.DIALOGUE || gameState === GameState.DYING || gameState === GameState.FALLING || activeModal === 'keypad' || activeModal === 'inspect_anim' || cinematicMode || isBlockingModal;
   const disableMovement = isSystemMenuOpen || isBlockingInteraction || combat.isProcessingTurn || gameState === GameState.CONSOLE_VIEW;
   const disableWalking = disableMovement || (explosionsRef.current && explosionsRef.current.length > 0) || (activeExplosionsRef && activeExplosionsRef.current > 0);
   const disableActions = isSystemMenuOpen || (isBlockingInteraction && activeModal !== 'keypad');
@@ -1339,11 +1364,15 @@ export function useGameEngine() {
       toggleModal
   } = gameLifecycle;
 
+  useEffect(() => {
+      returnToMenuRef.current = returnToMenu;
+  }, [returnToMenu]);
+
   engineContext.current.toggleModal = toggleModal;
   engineContext.current.handleSkipTurn = handleSkipTurn;
 
   const dialogueNPC = useDialogueNPC(
-      gameState, activeDialogue, levelData, npcsDb, enemies, localize, activeDialogueEntityId
+      gameState, activeDialogue, levelData, npcsDb, enemiesRef.current, localize, activeDialogueEntityId
   );
   const { dialogueNPCName, dialogueNPCAsset, dialogueNPCInstanceId, dialogueNPCDefinitionId, dialogueNPCVoice } = dialogueNPC;
 
@@ -1381,20 +1410,152 @@ export function useGameEngine() {
     }
   }, [combat.isActive, gameState, activeModal, inventorySys, setActiveModal]);
 
+  const runtime = useMemo(() => ({
+      raycasterRef,
+      enemiesRef,
+      roamingAnimsRef,
+      boxMoveAnimsRef,
+      pickupAnimRef,
+      throwAnimRef,
+      enemyMoveAnimRef: combatSystem.enemyMoveAnimRef,
+      enemyFlashesRef,
+      explosionsRef,
+      lookAroundAngleRef,
+      lookAroundPitchRef,
+      deathAnimProgressRef: realDeathAnimProgressRef,
+      fallAnimProgressRef: playerFall.fallAnimProgressRef,
+      scriptedDeathProgressRef,
+      cinematicCameraRef: globalState.cinematicCameraRef,
+      muzzleFlashIntensityRef,
+      shakeEventRef,
+      particlesDb,
+      customWallBuffers,
+      customFloorBuffers,
+      playerReflectionSprite,
+      flashlightBatteryRatio,
+      resolutionDivisor,
+      aimingSys,
+      currentMovementSys,
+      inventorySys,
+      effectSys,
+      combatSystem,
+      playSound,
+      addSplatterWithSound,
+      addShardDecal,
+      handlePlayerAttack,
+      triggerMuzzleFlash,
+      toggleModal,
+      setPlayer,
+      handleShootWrapper,
+      handleSkipTurn,
+      finalizeLevelLoad,
+      setActiveModal,
+      setActiveTutorial,
+      activeTutorial,
+      inspectZoom
+  }), [
+      raycasterRef,
+      enemiesRef,
+      roamingAnimsRef,
+      boxMoveAnimsRef,
+      pickupAnimRef,
+      throwAnimRef,
+      combatSystem,
+      enemyFlashesRef,
+      explosionsRef,
+      lookAroundAngleRef,
+      lookAroundPitchRef,
+      realDeathAnimProgressRef,
+      playerFall.fallAnimProgressRef,
+      scriptedDeathProgressRef,
+      globalState.cinematicCameraRef,
+      muzzleFlashIntensityRef,
+      shakeEventRef,
+      particlesDb,
+      customWallBuffers,
+      customFloorBuffers,
+      playerReflectionSprite,
+      flashlightBatteryRatio,
+      resolutionDivisor,
+      aimingSys,
+      currentMovementSys,
+      inventorySys,
+      effectSys,
+      playSound,
+      addSplatterWithSound,
+      addShardDecal,
+      handlePlayerAttack,
+      triggerMuzzleFlash,
+      toggleModal,
+      setPlayer,
+      handleShootWrapper,
+      handleSkipTurn,
+      finalizeLevelLoad,
+      setActiveModal,
+      setActiveTutorial,
+      activeTutorial,
+      inspectZoom
+  ]);
+
+  // Derived world calculations
+  const activeEffects = useMemo(() => {
+      return effectSys.getActiveEffectDefinitions(levelData?.grid, player.pos);
+  }, [player.activeEffects, levelData?.grid, player.pos.x, player.pos.y, effectSys]);
+
+  const synchronizedGrids = useMemo(() => {
+      if (!levelData?.grids) return undefined;
+      return [levelData.grid, ...levelData.grids.slice(1)];
+  }, [levelData?.grid, levelData?.grids]);
+
+  const hasCompass = useMemo(() => {
+      return player?.inventory?.some((item: any) => item.type === 'COMPASS') || 
+             Object.values(player?.equipment || {}).some((item: any) => item?.type === 'COMPASS');
+  }, [player.inventory, player.equipment]);
+
+  const hasDigitalMap = useMemo(() => {
+      return player?.inventory?.some((item: any) => item.type === 'DIGITAL_MAP' && item.isActive && (item.currentAmmo ?? 0) > 0 && item.hasBattery !== false) || 
+             Object.values(player?.equipment || {}).some((item: any) => item?.type === 'DIGITAL_MAP' && item.isActive && (item.currentAmmo ?? 0) > 0 && item.hasBattery !== false);
+  }, [player.inventory, player.equipment]);
+
+  const hasConsoleItem = useMemo(() => {
+      return player.inventory.some(i => i.type === 'CONSOLE') || player.equippedWeapon?.type === 'CONSOLE';
+  }, [player.inventory, player.equippedWeapon]);
+
+  const consoleItem = useMemo(() => {
+      if (player.equippedWeapon?.type === 'CONSOLE') return player.equippedWeapon;
+      return player.inventory.find(i => i.type === 'CONSOLE') || null;
+  }, [player.equippedWeapon, player.inventory]);
+
+  const displayedActiveWeapon = useMemo(() => {
+      if (activeWeapon && (activeWeapon.type === 'MAP' || activeWeapon.type === 'CONSOLE' || activeWeapon.type === 'NOTE' || activeWeapon.type === 'RADIO')) {
+          return player.equipment.weapon || null;
+      }
+      return activeWeapon;
+  }, [activeWeapon, player.equipment.weapon]);
+
+  const activeKeypadInfo = useMemo(() => {
+      if (activeModal !== 'keypad' || !levelData?.grid) return null;
+      return findActiveKeypad(player, levelData.grid);
+  }, [activeModal, player.pos.x, player.pos.y, player.dir, levelData?.grid]);
+
   return {
+      runtime,
+      enemyMoveAnimRef: combatSystem.enemyMoveAnimRef,
       // Global State
       globalState,
       gameState, setGameState, settings, setSettings, activeModal, setActiveModal,
       inspectText, setInspectText,
       showPauseMenu, setShowPauseMenu, showSettings, setShowSettings, showDebug, setShowDebug,
       showVolume, setShowVolume, lootData, setLootData, enemies, setEnemies,
+      enemiesRef, runtimeEnemiesRef, syncEnemiesSnapshot,
+      get runtimeEnemies() { return enemiesRef.current; },
       enemyFlashesRef, playerDamageSource, setPlayerDamageSource,
       explosionsRef, isTransitioningToMenu, setIsTransitioningToMenu,
       showIntroVideo, setShowIntroVideo, isVideoReady, setIsVideoReady,
       manualReloadTrigger, setManualReloadTrigger, playerReflectionSprite, setPlayerReflectionSprite,
       forceUpdate, mapSnapshotsRef, inventorySysRef, raycasterRef, activeExplosionsRef, sectorStatesRef,
-      roamingAnims, setRoamingAnims, boxMoveAnims, setBoxMoveAnims, raycasterWidth, raycasterHeight, resolutionDivisor, weaponRef, akimboWeaponRef,
-      pickupAnim, setPickupAnim, throwAnim, setThrowAnim,
+      roamingAnimsRef, roamingAnims, setRoamingAnims, boxMoveAnimsRef, boxMoveAnims, setBoxMoveAnims, raycasterWidth, raycasterHeight, resolutionDivisor, weaponRef, akimboWeaponRef,
+      pickupAnimRef, pickupAnim, setPickupAnim, throwAnimRef, throwAnim, setThrowAnim,
 
       // Layout
       layout, isLandscape, headerHeight, iframeTopOffset,
@@ -1460,8 +1621,9 @@ export function useGameEngine() {
       joinCombat,
 
       // Player Death & Fall
-      playerDeath, deathAnimProgress,
-      playerFall, fallAnimProgress,
+      playerDeath, deathAnimProgress, deathAnimProgressRef: realDeathAnimProgressRef,
+      playerFall, fallAnimProgress, fallAnimProgressRef: playerFall.fallAnimProgressRef,
+      scriptedDeathProgressRef, get scriptedDeathProgress() { return scriptedDeathProgressRef.current; }, setScriptedDeathProgress,
 
       // Enemy Sound Effects
       enemySoundEffects, activeCombatIds, handleEnemyStep,
@@ -1518,9 +1680,19 @@ export function useGameEngine() {
 
       // Misc
       initAudio, onMenuStart, disableMovement, disableWalking, disableActions, isSystemMenuOpen, isBlockingInteraction,
-      cinematicMode, setCinematicMode, cinematicCamera, setCinematicCamera,
+      cinematicMode, setCinematicMode, cinematicCamera, setCinematicCamera, cinematicCameraRef: globalState.cinematicCameraRef,
       screamer, setScreamer,
       gameOverType, setGameOverType,
-      checkTriggers: checkTriggersStable
+      checkTriggers: checkTriggersStable,
+
+      // Derived world calculations
+      activeEffects,
+      synchronizedGrids,
+      hasCompass,
+      hasDigitalMap,
+      hasConsoleItem,
+      consoleItem,
+      displayedActiveWeapon,
+      activeKeypadInfo
   };
 }

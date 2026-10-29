@@ -464,7 +464,7 @@ export interface VoiceConfig {
 export interface Item {
   id: string;
   definitionId?: string;
-  type: 'WEAPON' | 'ARMOR' | 'CONSUMABLE' | 'KEY' | 'AMMO' | 'MAP' | 'GRENADE' | 'MISC' | 'FLASHLIGHT' | 'C4' | 'CASH' | 'MOLOTOV' | 'FLASHBANG' | 'COMPASS' | 'RADIO' | 'BATTERY' | 'NOTE' | 'CONTAINER' | 'CONSOLE' | 'DIGITAL_MAP' | 'MATERIAL' | 'CARTRIDGE';
+  type: 'WEAPON' | 'ARMOR' | 'CONSUMABLE' | 'KEY' | 'AMMO' | 'MAP' | 'GRENADE' | 'MISC' | 'FLASHLIGHT' | 'C4' | 'CASH' | 'MOLOTOV' | 'FLASHBANG' | 'COMPASS' | 'RADIO' | 'BATTERY' | 'NOTE' | 'CONTAINER' | 'CONSOLE' | 'DIGITAL_MAP' | 'MATERIAL' | 'CARTRIDGE' | 'FLARE';
   name: string;
   description: string;
   gameName?: string;
@@ -515,21 +515,36 @@ export interface Item {
   ammoType?: string;
   loseAmmoOnReload?: boolean;
   ejectAllOnReload?: boolean;
-  shootType?: 'default' | 'shotgun' | 'auto';
+  shootType?: 'default' | 'shotgun' | 'auto' | 'rifle';
   attackAssetId?: string;
   attackFemaleAssetId?: string;
   attackAnimation?: AnimationFrame[];
   muzzleFlash?: boolean;
+  muzzleAsset?: string;
+  muzzleFemaleAsset?: string;
+  muzzleFrame?: number;
   vibrationPattern?: number | number[]; 
   
   timer?: number;
   explosionRange?: number;
   wallAssetId?: string;
+  fireObjectId?: string;
+  spreadsLeft?: number;
+  spreadChance?: number;
+  glassTextureId?: string;
   
   throwId?: string;
   placedAsThrown?: boolean;
+  isLit?: boolean;
   mirroredThrow?: number;
   activeTimer?: number;
+
+  flareColor?: { r: number; g: number; b: number } | string;
+  flareDuration?: number;
+  flareRadius?: number;
+  flareBrightness?: number;
+  smokeColor?: string | { r: number; g: number; b: number };
+  burntAssetId?: string;
 
   handAssetId?: string;
   handFemaleAssetId?: string;
@@ -716,7 +731,9 @@ export interface Enemy {
   homePos?: { x: number, y: number };
   targetPos?: { x: number, y: number };
   currentPath?: { x: number, y: number }[];
-  aiState?: 'IDLE' | 'PATROL' | 'CHASE' | 'COMBAT' | 'INVESTIGATE' | 'FLASHED' | 'SCRIPT_MOVE'; // Added for debug and flashbang
+  aiState?: 'IDLE' | 'PATROL' | 'CHASE' | 'COMBAT' | 'INVESTIGATE' | 'FLASHED' | 'SCRIPT_MOVE' | 'NPC_FOLLOW'; // Added for debug, flashbang, and script follow
+  followMode?: 'NPC_FOLLOWS_PLAYER' | 'PLAYER_FOLLOWS_NPC' | 'STOP';
+  followMaxDistance?: number;
   originalAiState?: 'IDLE' | 'PATROL' | 'CHASE' | 'COMBAT' | 'INVESTIGATE' | 'FLASHED';
   originalMovementType?: 'patroling' | 'roaming';
   originalHomePos?: { x: number, y: number };
@@ -733,6 +750,86 @@ export interface Enemy {
 }
 
 
+
+export interface FaceTextureTransform {
+    scaleU?: number;      // Scale / tile width multiplier (default 1.0)
+    scaleV?: number;      // Scale / tile height multiplier (default 1.0)
+    offsetU?: number;     // Offset U / horizontal shift (-2.0..2.0, default 0)
+    offsetV?: number;     // Offset V / vertical shift (-2.0..2.0, default 0)
+    rotation?: number;    // Texture rotation angle in degrees (0..360, default 0)
+    flipU?: boolean;      // Flip horizontally
+    flipV?: boolean;      // Flip vertically
+}
+
+export interface TextureLayer {
+    id: string;
+    textureId: string;
+    name?: string;
+    transform?: FaceTextureTransform;
+    opacity?: number;          // 0.0 to 1.0 (default 1.0)
+    blendMode?: GlobalCompositeOperation; // 'source-over', 'multiply', 'screen', 'overlay', etc.
+    enabled?: boolean;         // Default true
+}
+
+export interface PolyCustomFace {
+    vertices: number[];
+    color?: string | [number, number, number];
+    textureId?: string;
+    textureTransform?: FaceTextureTransform;
+    textureLayers?: TextureLayer[];
+    isInner?: boolean;
+    name?: string;
+}
+
+export interface PolyObjectCube {
+    shape?: 'cube' | 'cylinder' | 'flat_square' | 'flat_circle' | 'sphere' | string;
+    offset: [number, number, number];
+    size: [number, number, number];
+    color?: string | [number, number, number];
+    faceColors?: {
+        top?: string | [number, number, number];
+        bottom?: string | [number, number, number];
+        front?: string | [number, number, number];
+        back?: string | [number, number, number];
+        left?: string | [number, number, number];
+        right?: string | [number, number, number];
+    };
+    textureId?: string;
+    faceTextures?: {
+        top?: string;
+        bottom?: string;
+        front?: string;
+        back?: string;
+        left?: string;
+        right?: string;
+    };
+    textureTransform?: FaceTextureTransform;
+    faceTransforms?: {
+        top?: FaceTextureTransform;
+        bottom?: FaceTextureTransform;
+        front?: FaceTextureTransform;
+        back?: FaceTextureTransform;
+        left?: FaceTextureTransform;
+        right?: FaceTextureTransform;
+    };
+    textureLayers?: TextureLayer[];
+    faceTextureLayers?: {
+        top?: TextureLayer[];
+        bottom?: TextureLayer[];
+        front?: TextureLayer[];
+        back?: TextureLayer[];
+        left?: TextureLayer[];
+        right?: TextureLayer[];
+    };
+    vertices?: [number, number, number][];
+    customFaces?: PolyCustomFace[];
+}
+
+export interface PolyObjectModel {
+    id: string;
+    name?: string;
+    cubes: PolyObjectCube[];
+}
 
 export interface Decoration {
     id: string;
@@ -765,13 +862,37 @@ export interface Decoration {
     isEmptyness?: boolean;
     isBox?: boolean;
     boxSize?: number;
+    polyModelId?: string;
+    polyModel?: PolyObjectModel;
     moveSound?: string;
     fallSound?: string;
     stepSound?: string;
     canBeInspected?: boolean;
     noShadow?: boolean;
-    type?: 'LADDER' | string;
+    type?: 'LADDER' | 'KEYPAD' | string;
     ladderSound?: string;
+    targetId?: string;
+    password?: string;
+    sounds?: string[];
+    panelAsset?: string;
+    panelMaskAsset?: string;
+    panelPlacedAt?: 'N' | 'E' | 'S' | 'W' | string;
+    keypadAssetId?: string;
+    keypadMaskAssetId?: string;
+    keypadSound?: string;
+    keypadSuccessSound?: string;
+    keypadFailSound?: string;
+    spriteFacing?: 'right' | 'left';
+    yRotation?: number;
+    facing?: 'N' | 'E' | 'S' | 'W' | 'NE' | 'NW' | 'SE' | 'SW' | number;
+    autoMirror?: boolean;
+    isMirrored?: boolean;
+    renderMode?: 'billboard' | 'mesh' | 'polyObject';
+    wallSide?: 'N' | 'S' | 'E' | 'W' | 'TOP' | 'BOTTOM';
+    meshAxis?: 'NS' | 'WE' | 'AUTO' | 'Y';
+    meshOffset?: number;
+    meshWidth?: number;
+    preserveAspect?: boolean;
 }
 
 export interface Tile {
@@ -1036,6 +1157,7 @@ export interface AmbientSoundDef {
     volume?: number;
     radius?: number; // Max distance sound can be heard
     loop?: boolean;
+    nonPositional?: boolean;
 }
 
 export interface ParticleDefinition {
@@ -1181,9 +1303,9 @@ export interface EnemyDefinition {
     noShadow?: boolean;
 }
 
-export type ScriptTriggerType = 'ON_ENTER_TILE' | 'ON_INTERACT' | 'ON_ENEMY_DEFEAT' | 'ON_MAP_LOAD' | 'ON_ITEM_PICKUP' | 'ON_DOOR_STATE_CHANGE' | 'ON_TIMER' | 'ON_FLAG_CHANGE' | 'ON_DIALOGUE_NODE';
+export type ScriptTriggerType = 'ON_ENTER_TILE' | 'ON_INTERACT' | 'ON_ENEMY_DEFEAT' | 'ON_MAP_LOAD' | 'ON_ITEM_PICKUP' | 'ON_DOOR_STATE_CHANGE' | 'ON_TIMER' | 'ON_FLAG_CHANGE' | 'ON_COUNTER_VALUE' | 'ON_COUNTER_CHANGE' | 'ON_DIALOGUE_NODE';
 
-export type ScriptActionType = 'SPAWN_ENTITY' | 'SPAWN_ENEMY' | 'SPAWN_NPC' | 'SPAWN_ITEM' | 'SPAWN_DECORATION' | 'REMOVE_ENTITY' | 'GIVE_ITEM' | 'SHOW_DIALOGUE' | 'SHOW_TUTORIAL' | 'PLAY_SOUND' | 'CHANGE_TILE' | 'ADD_LOG' | 'SET_FLAG' | 'SET_SECTOR' | 'REVEAL_TASK' | 'COMPLETE_TASK' | 'CINEMATIC_CAMERA' | 'CINEMATIC_STATIC_CAMERA' | 'DELAY' | 'PLAYER_FALL' | 'PLAYER_DEATH' | 'DOOR_STATE_CHANGE' | 'SHOW_SCREAMER' | 'MOVE_TO' | 'RESET_SPAWN' | 'MUSIC_PLAYER' | 'GAME_OVER' | 'UNLOCK_ACHIEVEMENT';
+export type ScriptActionType = 'SPAWN_ENTITY' | 'SPAWN_EXPLOSION' | 'SPAWN_ENEMY' | 'SPAWN_NPC' | 'SPAWN_ITEM' | 'SPAWN_DECORATION' | 'REMOVE_ENTITY' | 'MODIFY_ENTITY' | 'GIVE_ITEM' | 'TAKE_ITEM' | 'SHOW_DIALOGUE' | 'SHOW_TUTORIAL' | 'PLAY_SOUND' | 'CHANGE_TILE' | 'ADD_LOG' | 'SET_FLAG' | 'CREATE_COUNTER' | 'SET_COUNTER' | 'INCREMENT_COUNTER' | 'SET_SECTOR' | 'REVEAL_TASK' | 'COMPLETE_TASK' | 'CINEMATIC_CAMERA' | 'CINEMATIC_STATIC_CAMERA' | 'DELAY' | 'PLAYER_FALL' | 'PLAYER_DEATH' | 'DOOR_STATE_CHANGE' | 'SHOW_SCREAMER' | 'MOVE_TO' | 'NPC_FOLLOW' | 'RESET_SPAWN' | 'MUSIC_PLAYER' | 'GAME_OVER' | 'UNLOCK_ACHIEVEMENT' | 'END' | 'LAUNCH_MINIGAME' | 'REPEAT' | 'STOP_REPEAT';
 
 export type TutorialHighlightElement = 
     | 'TOUCH_CONTROLS'
@@ -1273,16 +1395,20 @@ export interface DecorationDefinition {
     damageDice?: string;
     noBleeding?: boolean;
     lifeTime?: number;
+    isScorching?: boolean;
+    spreadChance?: number;
+    spreadType?: string;
     foreground?: boolean;
     soundId?: string;
     light?: { r: number; g: number; b: number; intensity?: number; range?: number; mode?: 'STATIC' | 'FLICKERING' | 'FIRE'; flickerPeriod?: string | number; flickerAlwaysOn?: boolean; };
     renderMode?: 'billboard' | 'mesh';
     wallSide?: 'N' | 'S' | 'E' | 'W';
-    meshAxis?: 'NS' | 'WE' | 'AUTO';
+    meshAxis?: 'NS' | 'WE' | 'AUTO' | 'Y';
     meshOffset?: number;
     worldOffsetX?: number;
     worldOffsetY?: number;
     meshWidth?: number;
+    preserveAspect?: boolean;
     glassAssetId?: string;
     textureId?: string;
     shatterConfig?: { maskId: string; };
@@ -1293,6 +1419,7 @@ export interface DecorationDefinition {
     type?: 'LADDER' | string;
     ladderSound?: string;
     noShadow?: boolean;
+    yRotation?: number;
 }
 
 export interface EffectDefinition {

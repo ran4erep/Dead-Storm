@@ -5,6 +5,9 @@ import npcsData from '../../data/npcs.json';
 import itemsData from '../../data/items.json';
 import decorationsData from '../../data/decorations.json';
 import { CustomSelect } from './CustomSelect';
+import { getEntityPreviewUrl } from './levelBuilderUtils';
+import { PolyObjectIsometricIcon } from '../../utils/polyObjectIsoRenderer';
+import { REGISTERED_POLY_MODELS, getPolyModelById } from '../../data/polyModels';
 
 interface EntitySettingsModalProps {
     isOpen: boolean;
@@ -19,7 +22,6 @@ export const EntitySettingsModal: React.FC<EntitySettingsModalProps> = ({
 }) => {
     const [entityType, setEntityType] = useState<'item' | 'enemy' | 'npc' | 'decoration'>(initialConfig.entityType || 'enemy');
     const [id, setId] = useState<string>(initialConfig.id || '');
-    const [keyId, setKeyId] = useState<string>(initialConfig.keyId || '');
 
     const [symbol, setSymbol] = useState<string>(initialConfig.symbol || '');
 
@@ -27,7 +29,6 @@ export const EntitySettingsModal: React.FC<EntitySettingsModalProps> = ({
         if (isOpen) {
             setEntityType(initialConfig.entityType || 'enemy');
             setId(initialConfig.id || '');
-            setKeyId(initialConfig.keyId || '');
             setSymbol(initialConfig.symbol || '');
         }
     }, [isOpen, initialConfig]);
@@ -38,8 +39,7 @@ export const EntitySettingsModal: React.FC<EntitySettingsModalProps> = ({
         onSave({
             symbol,
             entityType,
-            id,
-            ...(entityType === 'item' ? { keyId } : {})
+            id
         });
     };
 
@@ -113,26 +113,59 @@ export const EntitySettingsModal: React.FC<EntitySettingsModalProps> = ({
                             className="bg-gray-700 text-white p-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-indigo-500"
                         >
                             <option value="">{strings?.ui?.level_editor?.please_select || "-- Выберите --"}</option>
-                            {idOptions.map(opt => (
-                                <option key={opt} value={opt}>{opt}</option>
-                            ))}
+                            {idOptions.map(opt => {
+                                const previewUrl = getEntityPreviewUrl(entityType, opt);
+                                let displayName = opt;
+                                if (entityType === 'enemy' && (enemiesData as any)[opt]?.name) {
+                                    displayName = `${(enemiesData as any)[opt].name.split('/')[0].trim()} [${opt}]`;
+                                } else if (entityType === 'npc' && (npcsData as any)[opt]?.name) {
+                                    displayName = `${(npcsData as any)[opt].name.split('/')[0].trim()} [${opt}]`;
+                                } else if (entityType === 'item' && (itemsData as any)[opt]?.name) {
+                                    displayName = `${(itemsData as any)[opt].name.split('/')[0].trim()} [${opt}]`;
+                                } else if (entityType === 'decoration' && (decorationsData as any)[opt]?.name) {
+                                    displayName = `${(decorationsData as any)[opt].name.split('/')[0].trim()} [${opt}]`;
+                                }
+
+                                const optStr = String(opt);
+                                let polyModelObj: any = undefined;
+                                let polyModelId: string | undefined = undefined;
+
+                                if (entityType === 'decoration' && (decorationsData as any)[opt]) {
+                                    const dec = (decorationsData as any)[opt];
+                                    if (dec.renderMode === 'polyObject' || dec.polyModelId || dec.polyModel || dec.cubes || REGISTERED_POLY_MODELS[optStr] || getPolyModelById(optStr)) {
+                                        polyModelObj = dec.polyModel || (dec.cubes ? { id: optStr, name: dec.name || optStr, cubes: dec.cubes } : getPolyModelById(dec.polyModelId || optStr));
+                                        polyModelId = dec.polyModelId || optStr;
+                                    }
+                                } else if (REGISTERED_POLY_MODELS[optStr] || getPolyModelById(optStr)) {
+                                    polyModelObj = getPolyModelById(optStr);
+                                    polyModelId = optStr;
+                                }
+
+                                return (
+                                    <option key={opt} value={opt}>
+                                        <span className="inline-flex items-center gap-2">
+                                            {polyModelObj || polyModelId ? (
+                                                <span className="w-6 h-6 shrink-0 rounded bg-black/60 p-0.5 border border-gray-700 flex items-center justify-center overflow-hidden inline-flex">
+                                                    <PolyObjectIsometricIcon modelId={polyModelId || optStr} model={polyModelObj} className="w-full h-full object-contain" />
+                                                </span>
+                                            ) : previewUrl ? (
+                                                <img
+                                                    src={previewUrl}
+                                                    className="w-6 h-6 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700"
+                                                    style={{ imageRendering: 'pixelated' }}
+                                                    alt=""
+                                                    referrerPolicy="no-referrer"
+                                                />
+                                            ) : (
+                                                <span className="w-6 h-6 bg-gray-900 rounded shrink-0 border border-gray-700 inline-block" />
+                                            )}
+                                            <span>{displayName}</span>
+                                        </span>
+                                    </option>
+                                );
+                            })}
                         </CustomSelect>
                     </div>
-
-                    {entityType === 'item' && (
-                        <div className="flex flex-col gap-1">
-                            <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
-                                {strings?.ui?.level_editor?.entity_key_id || "ID ключа (Key ID, опционально)"}
-                            </label>
-                            <input 
-                                type="text"
-                                value={keyId} 
-                                onChange={(e) => setKeyId(e.target.value)}
-                                className="bg-gray-700 text-white p-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-indigo-500"
-                                placeholder={strings?.ui?.level_editor?.entity_key_placeholder || "Например: key_red"}
-                            />
-                        </div>
-                    )}
                 </div>
 
                 <div className="flex gap-4 mt-6 pt-4 border-t border-gray-700">

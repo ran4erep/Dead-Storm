@@ -19,11 +19,29 @@ let cachedSolidMap = new Uint8Array(128 * 128);
 let cachedSolidMapWidth = 0;
 let cachedSolidMapHeight = 0;
 
+// The solid map only changes when the grid geometry reference changes (a tile
+// becomes/ceases to be a wall or a door opens/closes/broken). Door opening
+// animations mutate `openAmount` in-place, which does not affect solidity, so
+// we can safely reuse the map across frames until the grid reference changes.
+// This avoids an O(width * height * floors) full scan on every rendered frame.
+let cachedSolidGridRef: any = null;
+let cachedSolidGridsRef: any = null;
+
+export const invalidateLightingSolidMapCache = () => {
+    cachedSolidGridRef = null;
+    cachedSolidGridsRef = null;
+};
+
 export const updateLightingSolidMap = (grid: any[][], activeGrids?: any[][][]) => {
     if (!grid) return;
     const height = grid.length;
     const width = grid[0]?.length || 0;
     if (width === 0 || height === 0) return;
+
+    const gridsRef = activeGrids ?? undefined;
+    if (grid === cachedSolidGridRef && gridsRef === cachedSolidGridsRef) {
+        return;
+    }
 
     const total = width * height;
     if (cachedSolidMap.length < total) {
@@ -31,6 +49,8 @@ export const updateLightingSolidMap = (grid: any[][], activeGrids?: any[][][]) =
     }
     cachedSolidMapWidth = width;
     cachedSolidMapHeight = height;
+    cachedSolidGridRef = grid;
+    cachedSolidGridsRef = gridsRef;
 
     cachedSolidMap.fill(0, 0, total);
 
@@ -182,7 +202,7 @@ export const calculateLighting = (
                 if (wallX < 0) wallX = 0;
                 if (wallX > 1) wallX = 1;
 
-                let flipped = (side === 0 && rayDirX > 0) || (side === 1 && rayDirY < 0);
+                let flipped = (side === 0 && rayDirX < 0) || (side === 1 && rayDirY > 0);
                 if (flipped) {
                     wallX = 1 - wallX;
                 }
@@ -199,64 +219,41 @@ export const calculateLighting = (
                     else { lightX_L = lightX - 1; lightX_R = lightX + 1; }
                 }
 
-                // Быстрая проверка непрозрачности соседей через cachedSolidMap
-                let opaqueL = (lightY_L < 0 || lightY_L >= mapHeight || lightX_L < 0 || lightX_L >= mapWidth);
-                if (!opaqueL) {
-                    if (cachedSolidMapWidth === mapWidth && cachedSolidMapHeight === mapHeight) {
-                        opaqueL = cachedSolidMap[lightY_L * mapWidth + lightX_L] === 1;
-                    } else if (activeGrids && activeGrids.length > 0) {
-                        const targetL = currentLevelIndex !== undefined ? currentLevelIndex : 0;
-                        if (targetL >= 0 && targetL < activeGrids.length) {
-                            const layer = activeGrids[targetL];
-                            if (layer && layer[lightY_L]) {
-                                const tile = layer[lightY_L][lightX_L];
-                                if (tile && (tile.type === 'WALL' || (tile.type === 'DOOR' && tile.door?.state !== 'OPEN' && !tile.door?.maskId && !tile.door?.broken))) {
+                // Проверка выхода за границы карты для соседей L и R
+                const outOfBoundsL = (lightY_L < 0 || lightY_L >= mapHeight || lightX_L < 0 || lightX_L >= mapWidth);
+                const outOfBoundsR = (lightY_R < 0 || lightY_R >= mapHeight || lightX_R < 0 || lightX_R >= mapWidth);
+
+                const levelIdx = currentLevelIndex !== undefined ? currentLevelIndex : 0;
+                let opaqueL = outOfBoundsL;
+                let opaqueR = outOfBoundsR;
+
+                if (!opaqueL || !opaqueR) {
+                    const activeLayer = (activeGrids && levelIdx >= 0 && levelIdx < activeGrids.length) ? activeGrids[levelIdx] : grid;
+                    if (activeLayer) {
+                        if (!opaqueL) {
+                            const rowL = activeLayer[lightY_L];
+                            if (rowL) {
+                                const tileL = rowL[lightX_L];
+                                if (tileL && (tileL.type === 'WALL' || (tileL.type === 'DOOR' && tileL.door?.state !== 'OPEN' && !tileL.door?.maskId && !tileL.door?.broken))) {
                                     opaqueL = true;
                                 }
                             }
                         }
-                    } else {
-                        const rowL = grid[lightY_L];
-                        if (rowL && rowL[lightX_L]) {
-                            const tile = rowL[lightX_L];
-                            if (tile && (tile.type === 'WALL' || (tile.type === 'DOOR' && tile.door?.state !== 'OPEN' && !tile.door?.maskId && !tile.door?.broken))) {
-                                opaqueL = true;
-                            }
-                        }
-                    }
-                }
-
-                let opaqueR = (lightY_R < 0 || lightY_R >= mapHeight || lightX_R < 0 || lightX_R >= mapWidth);
-                if (!opaqueR) {
-                    if (cachedSolidMapWidth === mapWidth && cachedSolidMapHeight === mapHeight) {
-                        opaqueR = cachedSolidMap[lightY_R * mapWidth + lightX_R] === 1;
-                    } else if (activeGrids && activeGrids.length > 0) {
-                        const targetR = currentLevelIndex !== undefined ? currentLevelIndex : 0;
-                        if (targetR >= 0 && targetR < activeGrids.length) {
-                            const layer = activeGrids[targetR];
-                            if (layer && layer[lightY_R]) {
-                                const tile = layer[lightY_R][lightX_R];
-                                if (tile && (tile.type === 'WALL' || (tile.type === 'DOOR' && tile.door?.state !== 'OPEN' && !tile.door?.maskId && !tile.door?.broken))) {
+                        if (!opaqueR) {
+                            const rowR = activeLayer[lightY_R];
+                            if (rowR) {
+                                const tileR = rowR[lightX_R];
+                                if (tileR && (tileR.type === 'WALL' || (tileR.type === 'DOOR' && tileR.door?.state !== 'OPEN' && !tileR.door?.maskId && !tileR.door?.broken))) {
                                     opaqueR = true;
                                 }
                             }
                         }
-                    } else {
-                        const rowR = grid[lightY_R];
-                        if (rowR && rowR[lightX_R]) {
-                            const tile = rowR[lightX_R];
-                            if (tile && (tile.type === 'WALL' || (tile.type === 'DOOR' && tile.door?.state !== 'OPEN' && !tile.door?.maskId && !tile.door?.broken))) {
-                                opaqueR = true;
-                            }
-                        }
                     }
                 }
 
-                // Сэмплируем освещение у соседей, только если они прозрачны (свободны)
-                const rowMapL = lightMap[lightY_L];
-                const rowMapR = lightMap[lightY_R];
-                const cellL = (!opaqueL && rowMapL) ? (rowMapL[lightX_L] || cellC) : cellC;
-                const cellR = (!opaqueR && rowMapR) ? (rowMapR[lightX_R] || cellC) : cellC;
+                // Сэмплируем освещение у соседей вдоль плоскости стены для бесшовной интерполяции
+                const cellL = (!opaqueL && lightMap[lightY_L]) ? (lightMap[lightY_L][lightX_L] || cellC) : cellC;
+                const cellR = (!opaqueR && lightMap[lightY_R]) ? (lightMap[lightY_R][lightX_R] || cellC) : cellC;
 
                 // Непрерывная линейная интерполяция между центрами клеток
                 if (wallX <= 0.5) {

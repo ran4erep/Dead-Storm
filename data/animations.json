@@ -212,28 +212,38 @@
     "repeat": false
   },
   "SHOTGUN_SHOT": {
+    "frames": ["SHOTGUN_SHOT1", "SHOTGUN_SHOT2", "SHOTGUN_SHOT3", "SHOTGUN_SHOT4", "SHOTGUN_SHOT5", "SHOTGUN_SHOT6", "SHOTGUN_SHOT7", "SHOTGUN_SHOT8", "SHOTGUN_SHOT9"],
+    "fps": 9,
+    "scale": 1.7,
+    "repeat": false
+  },
+  "SHOTGUN_SHOT_FEMALE": {
+    "frames": ["SHOTGUN_SHOT_FEMALE1", "SHOTGUN_SHOT_FEMALE2", "SHOTGUN_SHOT_FEMALE3", "SHOTGUN_SHOT_FEMALE4", "SHOTGUN_SHOT_FEMALE5", "SHOTGUN_SHOT_FEMALE6", "SHOTGUN_SHOT_FEMALE7", "SHOTGUN_SHOT_FEMALE8", "SHOTGUN_SHOT_FEMALE9"],
+    "fps": 9,
+    "scale": 1.7,
+    "repeat": false
+  },
+  "RIFLE_SHOT": {
     "frames": [
-      "SHOTGUN_SHOT1",
-      "SHOTGUN_SHOT2",
-      "SHOTGUN_SHOT3",
-      "SHOTGUN_SHOT4",
-      "SHOTGUN_SHOT5",
-      "SHOTGUN_SHOT6",
-      "SHOTGUN_SHOT7"
+      "RIFLE_SHOT1",
+      "RIFLE_SHOT2",
+      "RIFLE_SHOT3",
+      "RIFLE_SHOT4",
+      "RIFLE_SHOT5",
+      "RIFLE_SHOT6"
     ],
     "fps": 7,
     "scale": 1.5,
     "repeat": false
   },
-  "SHOTGUN_SHOT_FEMALE": {
+  "RIFLE_SHOT_FEMALE": {
     "frames": [
-      "SHOTGUN_SHOT_FEMALE1",
-      "SHOTGUN_SHOT_FEMALE2",
-      "SHOTGUN_SHOT_FEMALE3",
-      "SHOTGUN_SHOT_FEMALE4",
-      "SHOTGUN_SHOT_FEMALE5",
-      "SHOTGUN_SHOT_FEMALE6",
-      "SHOTGUN_SHOT_FEMALE7"
+      "RIFLE_SHOT_FEMALE1",
+      "RIFLE_SHOT_FEMALE2",
+      "RIFLE_SHOT_FEMALE3",
+      "RIFLE_SHOT_FEMALE4",
+      "RIFLE_SHOT_FEMALE5",
+      "RIFLE_SHOT_FEMALE6"
     ],
     "fps": 7,
     "scale": 1.5,

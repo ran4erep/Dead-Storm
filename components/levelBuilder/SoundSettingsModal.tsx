@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { LevelDefinition } from '../../types';
 import soundsData from '../../data/sounds.json';
@@ -20,7 +20,7 @@ export const SoundSettingsModal: React.FC<SoundSettingsModalProps> = ({
 }) => {
     if (!show) return null;
 
-    const soundOptions = Object.keys(soundsData);
+    const soundOptions = useMemo(() => Object.keys(soundsData).filter(key => !(soundsData as any)[key]?.alias), []);
 
     const handleUpdateField = (field: string, value: any) => {
          setBrushConfig({ ...brushConfig, [field]: value });
@@ -113,6 +113,18 @@ export const SoundSettingsModal: React.FC<SoundSettingsModalProps> = ({
                                 <span>{uiStrings.sound_loop || 'Постоянный повтор (Loop)'}</span>
                             </label>
                         </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300 select-none">
+                            <input 
+                                type="checkbox" 
+                                checked={!!brushConfig.nonPositional} 
+                                onChange={(e) => handleUpdateField('nonPositional', e.target.checked)}
+                                className="w-4 h-4 rounded bg-gray-900 border-gray-700 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>{uiStrings.sound_non_positional || 'Непозиционный (в обоих ушах)'}</span>
+                        </label>
                     </div>
                 </div>
 

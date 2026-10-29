@@ -30,12 +30,26 @@ import {
 } from "../components/raycaster/RaycasterUtils";
 import { clearRaycastCache } from "../components/raycaster/RaycastCore";
 
-const getLightingHashAndCheckAnimating = (grid: Tile[][]) => {
+const getLightingHashAndCheckAnimating = (grid: Tile[][], gridLight?: string[]) => {
   if (!grid) return { hash: 0, hasAnimatingDoor: false };
   const height = grid.length;
   const width = grid[0]?.length || 0;
   let hash = 2166136261;
   let hasAnimatingDoor = false;
+
+  if (gridLight && Array.isArray(gridLight)) {
+    for (let y = 0; y < gridLight.length; y++) {
+      const rowStr = gridLight[y];
+      if (!rowStr) continue;
+      for (let x = 0; x < rowStr.length; x++) {
+        if (rowStr[x] !== ".") {
+          const val = (x << 16) ^ (y << 8) ^ rowStr.charCodeAt(x) ^ 0x55AA55AA;
+          hash ^= val;
+          hash = Math.imul(hash, 16777619);
+        }
+      }
+    }
+  }
 
   for (let y = 0; y < height; y++) {
     const row = grid[y];
@@ -66,6 +80,15 @@ const getLightingHashAndCheckAnimating = (grid: Tile[][]) => {
         const val = (x << 16) ^ (y << 8) ^ ((l.r * 255) | 0) ^ (((l.g * 255) | 0) << 8) ^ (((l.b * 255) | 0) << 16) ^ (((l.intensity || 1) * 100) | 0);
         hash ^= val;
         hash = Math.imul(hash, 16777619);
+      } else if (tile.decorations && tile.decorations.length > 0) {
+        for (const dec of tile.decorations) {
+          if (dec.light) {
+            const dl = dec.light;
+            const val = (x << 16) ^ (y << 8) ^ ((dl.r * 255) | 0) ^ (((dl.g * 255) | 0) << 8) ^ (((dl.b * 255) | 0) << 16);
+            hash ^= val;
+            hash = Math.imul(hash, 16777619);
+          }
+        }
       } else if (tile.decoration?.light) {
         const dl = tile.decoration.light;
         const val = (x << 16) ^ (y << 8) ^ ((dl.r * 255) | 0) ^ (((dl.g * 255) | 0) << 8) ^ (((dl.b * 255) | 0) << 16);
@@ -199,7 +222,11 @@ export const useLevelSystem = (
   setRoamingAnimsCallback?: (anims: any[]) => void,
   onDoorStateChange?: (x: number, y: number, state: "OPEN" | "CLOSED") => void,
   globalScriptFlagsRef?: React.MutableRefObject<Record<string, any>>,
+  stopAllSoundsFn?: () => void,
 ) => {
+  const stopAllSoundsRef = useRef(stopAllSoundsFn);
+  stopAllSoundsRef.current = stopAllSoundsFn;
+
   const [levelData, setLevelData] = useState<{
     name: string;
     rawName: string;
@@ -276,19 +303,23 @@ export const useLevelSystem = (
   // Recalculate dynamic lighting when grid changes (e.g. doors open/break, decorations appear/disappear)
   useEffect(() => {
     if (!levelData || !levelData.grid) return;
-    const { hash: currentHash, hasAnimatingDoor } = getLightingHashAndCheckAnimating(levelData.grid);
+    const gLight = levelData.baseLightInfo?.gridLight || levelData.gridLight;
+    const { hash: currentHash, hasAnimatingDoor } = getLightingHashAndCheckAnimating(levelData.grid, gLight);
     if (currentHash === lastLightingHashRef.current) return;
     lastLightingHashRef.current = currentHash;
 
     if (hasAnimatingDoor) return;
 
     setLevelData((prev) => {
-      if (!prev || !prev.baseLightInfo) return prev;
+      if (!prev) return prev;
+      const baseGLight = prev.baseLightInfo?.gridLight || prev.gridLight;
+      const globalL = prev.baseLightInfo?.globalLight ?? prev.globalLight ?? 1.0;
+      const lightDefs = prev.baseLightInfo?.lightDefinitions || prev.lightDefinitions || {};
       const newLightMapRes = calculateLightMap(
         prev.grid,
-        prev.baseLightInfo.gridLight,
-        prev.baseLightInfo.globalLight,
-        prev.baseLightInfo.lightDefinitions || {},
+        baseGLight,
+        globalL,
+        lightDefs,
         prev.outdoorMap,
         prev.grids
       );
@@ -299,7 +330,7 @@ export const useLevelSystem = (
         dynamicLights: newLightMapRes.dynamicLights,
       };
     });
-  }, [levelData?.grid]);
+  }, [levelData?.grid, levelData?.baseLightInfo?.gridLight, levelData?.gridLight]);
 
   // Sync scriptFlags globally
   useEffect(() => {
@@ -648,6 +679,86 @@ export const useLevelSystem = (
       }
     },
     [levelData, wallTexture, floorTexture, doorTexture, masterSpriteMapRef],
+  );
+
+  const addDecalToFloor = useCallback(
+    (x: number, y: number, assetId: string) => {
+      const currentLevel = levelData;
+      if (!currentLevel || !floorTexture) return;
+
+      const tileX = Math.floor(x);
+      const tileY = Math.floor(y);
+
+      if (
+        tileX < 0 ||
+        tileX >= currentLevel.width ||
+        tileY < 0 ||
+        tileY >= currentLevel.height
+      )
+        return;
+
+      const key = (tileY * 10000 + tileX) * 10 + 4; // Floor face
+      let buffer = customFloorBuffersRef.current.get(key);
+
+      const tile = currentLevel.grid[tileY][tileX];
+      let baseImg: HTMLImageElement = floorTexture;
+      const floorAssetId = tile.assetId || tile.floorAssetId;
+      if (floorAssetId) {
+        let img =
+          masterSpriteMapRef.current.get(floorAssetId) ||
+          masterSpriteMapRef.current.get(`TEX_${floorAssetId}`);
+        if (img) baseImg = img;
+      }
+
+      if (!buffer) {
+        if (baseFloorBufferRef.current && baseImg === floorTexture) {
+          buffer = cloneBuffer(baseFloorBufferRef.current);
+          buffer.id = `custom_floor_${key}`;
+          customFloorBuffersRef.current.set(key, buffer);
+        } else {
+          const baseBuf = getBaseTextureBuffer(baseImg);
+          if (baseBuf) {
+            buffer = cloneBuffer(baseBuf);
+            buffer.id = `custom_floor_${key}`;
+            customFloorBuffersRef.current.set(key, buffer);
+          }
+        }
+      }
+
+      if (!buffer) return;
+
+      const img =
+        masterSpriteMapRef.current.get(assetId) ||
+        masterSpriteMapRef.current.get(`TEX_${assetId}`);
+      if (!img) return;
+
+      const relX = x - tileX;
+      const relY = y - tileY;
+
+      const cvs = document.createElement("canvas");
+      cvs.width = buffer.width;
+      cvs.height = buffer.height;
+      const ctx = cvs.getContext("2d");
+      if (!ctx) return;
+
+      const imgData = ctx.createImageData(buffer.width, buffer.height);
+      const buf32 = new Uint32Array(imgData.data.buffer);
+      buf32.set(buffer.data);
+      ctx.putImageData(imgData, 0, 0);
+
+      const drawWidth = buffer.width * 0.35;
+      const drawHeight = (img.height / (img.width || 1)) * drawWidth;
+      const posX = relX * buffer.width - drawWidth / 2;
+      const posY = relY * buffer.height - drawHeight / 2;
+
+      ctx.drawImage(img, posX, posY, drawWidth, drawHeight);
+
+      const updatedData = ctx.getImageData(0, 0, buffer.width, buffer.height);
+      const updated32 = new Uint32Array(updatedData.data.buffer);
+      buffer.data.set(updated32);
+      buffer.dirty = true;
+    },
+    [levelData, floorTexture, masterSpriteMapRef],
   );
 
   const addShardDecal = useCallback(
@@ -1069,7 +1180,8 @@ export const useLevelSystem = (
               tile &&
               (tile.explosive ||
                 (tile.items && tile.items.length > 0) ||
-                (tile.decoration && tile.decoration.lifeTime !== undefined))
+                (tile.decoration && tile.decoration.lifeTime !== undefined) ||
+                (tile.decorations && tile.decorations.some((d: any) => d && d.lifeTime !== undefined)))
             ) {
               activeCoordsSet.add(`${x},${y}`);
             }
@@ -1097,7 +1209,8 @@ export const useLevelSystem = (
           if (
             tile.explosive ||
             (tile.items && tile.items.length > 0) ||
-            (tile.decoration && tile.decoration.lifeTime !== undefined)
+            (tile.decoration && tile.decoration.lifeTime !== undefined) ||
+            (tile.decorations && tile.decorations.some((d: any) => d && d.lifeTime !== undefined))
           ) {
             needsUpdate = true;
           }
@@ -1261,6 +1374,45 @@ export const useLevelSystem = (
                         return null;
                       }
                       return { ...item, activeTimer: newTimer };
+                    } else if (
+                      (item.type === "FLARE" || item.flareDuration !== undefined) &&
+                      (item.isLit === true || item.placedAsThrown === true)
+                    ) {
+                      if (item.justPlaced) {
+                        itemsChanged = true;
+                        const { justPlaced, ...rest } = item;
+                        return rest;
+                      }
+                      const curDur = item.flareDuration !== undefined ? item.flareDuration : (item.activeTimer !== undefined ? item.activeTimer : 15);
+                      if (curDur <= 0) {
+                        return item;
+                      }
+                      itemsChanged = true;
+                      const initialDur = item.initialFlareDuration || 15;
+                      const newDur = curDur - 1;
+                      if (newDur <= 0) {
+                        // Extinguished flare: stays on ground as an inactive item, 0 CPU resource overhead
+                        const burntAsset = item.burntAssetId || 'FLASHBANG_ARMED';
+                        return {
+                          ...item,
+                          flareDuration: 0,
+                          activeTimer: 0,
+                          assetId: burntAsset,
+                          throwId: item.throwId ? burntAsset : item.throwId,
+                          uncollectible: true,
+                          canBeInspected: false,
+                          placedAsThrown: true,
+                        };
+                      }
+                      return {
+                        ...item,
+                        flareDuration: newDur,
+                        activeTimer: newDur,
+                        initialFlareDuration: initialDur,
+                        uncollectible: true,
+                        canBeInspected: false,
+                        placedAsThrown: true,
+                      };
                     }
                     return item;
                   })
@@ -1271,33 +1423,44 @@ export const useLevelSystem = (
                 }
               }
 
-              if (
-                updatedTile.decoration &&
-                updatedTile.decoration.lifeTime !== undefined
-              ) {
-                const newLifeTime = updatedTile.decoration.lifeTime - 1;
+              const currentDecList = updatedTile.decorations && updatedTile.decorations.length > 0
+                ? updatedTile.decorations
+                : (updatedTile.decoration ? [updatedTile.decoration] : []);
 
-                if (updatedTile.decoration.isScorching) {
-                  scorches.push({ x, y });
+              if (currentDecList.length > 0 && currentDecList.some((d: any) => d && d.lifeTime !== undefined)) {
+                let decsChanged = false;
+                const newDecList: any[] = [];
+
+                for (const dec of currentDecList) {
+                  if (dec && dec.lifeTime !== undefined) {
+                    decsChanged = true;
+                    const newLifeTime = dec.lifeTime - 1;
+
+                    if (dec.isScorching) {
+                      scorches.push({ x, y });
+                    }
+
+                    if (dec.spreadsLeft && dec.spreadsLeft > 0) {
+                      spreads.push({ x, y, decoration: dec });
+                    }
+
+                    if (newLifeTime > 0) {
+                      newDecList.push({
+                        ...dec,
+                        lifeTime: newLifeTime,
+                        spreadsLeft: 0, // Parent stops spreading further
+                      });
+                    }
+                  } else {
+                    newDecList.push(dec);
+                  }
                 }
 
-                if (
-                  updatedTile.decoration.spreadsLeft &&
-                  updatedTile.decoration.spreadsLeft > 0
-                ) {
-                  spreads.push({ x, y, decoration: updatedTile.decoration });
-                }
-
-                if (newLifeTime <= 0) {
-                  updatedTile = { ...updatedTile, decoration: undefined };
-                } else {
+                if (decsChanged) {
                   updatedTile = {
                     ...updatedTile,
-                    decoration: {
-                      ...updatedTile.decoration,
-                      lifeTime: newLifeTime,
-                      spreadsLeft: 0, // Parent stops spreading further
-                    },
+                    decoration: newDecList.length > 0 ? newDecList[0] : undefined,
+                    decorations: newDecList.length > 0 ? newDecList : undefined,
                   };
                 }
               }
@@ -1305,8 +1468,8 @@ export const useLevelSystem = (
               const stillHasEffects =
                 updatedTile.explosive ||
                 (updatedTile.items && updatedTile.items.length > 0) ||
-                (updatedTile.decoration &&
-                  updatedTile.decoration.lifeTime !== undefined);
+                (updatedTile.decoration && updatedTile.decoration.lifeTime !== undefined) ||
+                (updatedTile.decorations && updatedTile.decorations.some((d: any) => d && d.lifeTime !== undefined));
               if (!stillHasEffects) {
                 (window as any).timedEffectsCache?.delete(`${x},${y}`);
                 (window as any).explosivePositionsCache?.delete(`${x},${y}`);
@@ -1388,19 +1551,25 @@ export const useLevelSystem = (
                   decorationsDb[s.decoration.type];
                 if (decDef) {
                   updateTileInGrid(ny, nx, (oldTile) => {
+                    const spreadDec = {
+                      ...decDef,
+                      type: s.decoration.spreadType || s.decoration.type,
+                      id: `${s.decoration.spreadType || s.decoration.type}_${Math.random()}`,
+                      createdByPlayer: s.decoration.createdByPlayer,
+                      isScorching: s.decoration.isScorching ?? decDef.isScorching,
+                      spreadsLeft: Math.max(0, (s.decoration.spreadsLeft || 1) - 1),
+                      spreadChance: s.decoration.spreadChance ?? decDef.spreadChance ?? 0.5,
+                      spreadType: s.decoration.spreadType || decDef.spreadType || s.decoration.type,
+                      lifeTime: decDef.lifeTime !== undefined ? decDef.lifeTime : 6,
+                    };
+                    const existingDecs = oldTile.decorations && oldTile.decorations.length > 0
+                      ? oldTile.decorations
+                      : (oldTile.decoration ? [oldTile.decoration] : []);
+                    const newDecs = [...existingDecs, spreadDec];
                     return {
                       ...oldTile,
-                      decoration: {
-                        ...decDef,
-                        type: s.decoration.spreadType || s.decoration.type,
-                        id: `${s.decoration.spreadType || s.decoration.type}_${Math.random()}`,
-                        createdByPlayer: s.decoration.createdByPlayer,
-                        isScorching: s.decoration.isScorching,
-                        spreadsLeft: s.decoration.spreadsLeft - 1,
-                        spreadChance: s.decoration.spreadChance,
-                        spreadType: s.decoration.spreadType,
-                        lifeTime: decDef.lifeTime !== undefined ? decDef.lifeTime : 6,
-                      },
+                      decoration: newDecs[0],
+                      decorations: newDecs,
                     };
                   });
                   (window as any).registerTimedEffect?.(nx, ny);
@@ -1497,6 +1666,9 @@ export const useLevelSystem = (
     }
 
     forceCloseMap();
+    if (stopAllSoundsRef.current) {
+      stopAllSoundsRef.current();
+    }
     if (!isTransition) {
       setLoading(true);
       setLoadingProgress(35);
@@ -1814,7 +1986,7 @@ export const useLevelSystem = (
           );
         }
 
-        setLevelData({ ...loadedData.levelData, soundtrack: data.soundtrack });
+        setLevelData({ ...loadedData.levelData, soundtrack: data.soundtrack, fileName: data.fileName || pathToLoad });
         if (
           typeof window !== "undefined" &&
           (window as any).initializeLevelCaches

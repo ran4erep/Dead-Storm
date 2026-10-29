@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { LevelDefinition } from "../../types";
 import { X, Play } from "lucide-react";
-import { resolveDoorBrushSymbol, getPreviewSrc, isTextureAsset } from "./levelBuilderUtils";
+import { resolveDoorBrushSymbol, getPreviewSrc, isTextureAsset, getEntityPreviewUrl } from "./levelBuilderUtils";
 import itemsData from "../../data/items.json";
 import soundsData from "../../data/sounds.json";
 import { ASSETS } from "../../assets";
@@ -27,7 +27,27 @@ export const DoorSettingsModal: React.FC<DoorSettingsModalProps> = ({
   setLevel,
   uiStrings,
 }) => {
+  const soundOptions = useMemo(() => Object.keys(soundsData).filter((k) => !(soundsData as any)[k]?.alias), []);
   const [texturePickerTarget, setTexturePickerTarget] = useState<string | null>(null);
+
+  const availableItems = useMemo(() => {
+    const itemsMap = new Map<string, { id: string; name: string }>();
+    if (itemsData) {
+      Object.entries(itemsData as Record<string, any>).forEach(([id, itemDef]) => {
+        const name = itemDef.name ? (itemDef.name.includes('/') ? itemDef.name.split('/')[0].trim() : itemDef.name) : id;
+        itemsMap.set(id, { id, name });
+      });
+    }
+    if (level && level.items) {
+      level.items.forEach((item: any) => {
+        if (item.id) {
+          const name = item.name ? (item.name.includes('/') ? item.name.split('/')[0].trim() : item.name) : item.id;
+          itemsMap.set(item.id, { id: item.id, name });
+        }
+      });
+    }
+    return Array.from(itemsMap.values());
+  }, [level]);
 
   if (!show) return null;
 
@@ -228,7 +248,7 @@ export const DoorSettingsModal: React.FC<DoorSettingsModalProps> = ({
                   className="flex-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 outline-none focus:border-indigo-500"
                 >
                   <option value="">{uiStrings.default_sound || "Default (Sound)"}</option>
-                  {Object.keys(soundsData).map((k) => (
+                  {soundOptions.map((k) => (
                     <option key={k} value={k}>
                       {k}
                     </option>
@@ -257,7 +277,7 @@ export const DoorSettingsModal: React.FC<DoorSettingsModalProps> = ({
                   className="flex-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 outline-none focus:border-indigo-500"
                 >
                   <option value="">{uiStrings.default_sound || "Default (Sound)"}</option>
-                  {Object.keys(soundsData).map((k) => (
+                  {soundOptions.map((k) => (
                     <option key={k} value={k}>
                       {k}
                     </option>
@@ -341,14 +361,36 @@ export const DoorSettingsModal: React.FC<DoorSettingsModalProps> = ({
 
             <div>
               <label className="block text-sm text-gray-400 mb-1">
-                {uiStrings.keyId || "Key to this door"}
+                {uiStrings.keyId || "Предмет для отпирания (Ключ / Предмет)"}
               </label>
-              <input
-                className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 outline-none focus:border-indigo-500"
+              <CustomSelect
                 value={brushConfig.keyId || ""}
                 onChange={(e) => handleChange("keyId", e.target.value)}
-                placeholder="ID"
-              />
+                className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 outline-none focus:border-indigo-500"
+              >
+                <option value="">-- Нет (Без ключа) --</option>
+                {availableItems.map((item) => {
+                  const previewUrl = getEntityPreviewUrl('item', item.id);
+                  return (
+                    <option key={item.id} value={item.id}>
+                      <span className="inline-flex items-center gap-2">
+                        {previewUrl ? (
+                          <img
+                            src={previewUrl}
+                            className="w-5 h-5 object-contain shrink-0 rounded bg-black/60 p-0.5 border border-gray-700"
+                            style={{ imageRendering: 'pixelated' }}
+                            alt=""
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <span className="w-5 h-5 bg-gray-900 rounded shrink-0 border border-gray-700" />
+                        )}
+                        <span>{item.name} [{item.id}]</span>
+                      </span>
+                    </option>
+                  );
+                })}
+              </CustomSelect>
             </div>
           </div>
         </div>
