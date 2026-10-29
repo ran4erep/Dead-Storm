@@ -74,6 +74,61 @@ const cloneMirrorReflection = (ref: MirrorReflection): MirrorReflection => ({
 });
 
 let cachedMirrorCols: CachedMirrorColumn[] = [];
+
+// Refresh flash-dependent lighting on a cached mirror reflection without re-running the
+// expensive secondary raycast. Mirrors the flash math in performMirrorRaycast.
+const refreshCachedMirrorFlash = (
+    colRef: any,
+    activeFlashes: {x: number, y: number, intensity: number}[] | undefined,
+    lightningIntensity: number,
+    muzzleFlashIntensity: number,
+    muzzleR: number, muzzleG: number, muzzleB: number,
+    lightningR: number, lightningG: number, lightningB: number,
+    posX: number, posY: number,
+    lightningMap: Float32Array | null | undefined,
+    outdoorMap: boolean[][] | undefined,
+    mapWidth: number, mapHeight: number
+) => {
+    const mirrorMapX = Math.floor(colRef.mirrorHitX);
+    const mirrorMapY = Math.floor(colRef.mirrorHitY);
+    const isOutdoor = outdoorMap
+        ? mirrorMapY >= 0 && mirrorMapY < mapHeight && mirrorMapX >= 0 && mirrorMapX < mapWidth
+            ? outdoorMap[mirrorMapY][mirrorMapX]
+            : false
+        : true;
+    const lightningMult =
+        lightningMap &&
+        mirrorMapY >= 0 && mirrorMapY < mapHeight &&
+        mirrorMapX >= 0 && mirrorMapX < mapWidth
+            ? lightningMap[mirrorMapY * mapWidth + mirrorMapX]
+            : isOutdoor ? 1.0 : 0.0;
+    const effectiveLightningIntensity = lightningIntensity * lightningMult;
+
+    const playerDistSq = (colRef.mirrorHitX - posX) ** 2 + (colRef.mirrorHitY - posY) ** 2;
+    const mInt = muzzleFlashIntensity > 0 ? muzzleFlashIntensity / (playerDistSq * 0.5 + 1.0) : 0;
+
+    let enemyFlashR = 0, enemyFlashG = 0, enemyFlashB = 0;
+    if (activeFlashes && activeFlashes.length > 0) {
+        for (let i = 0; i < activeFlashes.length; i++) {
+            const f = activeFlashes[i];
+            const d2 = (f.x - colRef.mirrorHitX) ** 2 + (f.y - colRef.mirrorHitY) ** 2;
+            const fInt = f.intensity / (d2 * 0.5 + 1.0);
+            if ((f as any).isFlashbang) {
+                enemyFlashR += fInt * 2.0;
+                enemyFlashG += fInt * 2.0;
+                enemyFlashB += fInt * 2.0;
+            } else {
+                enemyFlashR += fInt * muzzleR;
+                enemyFlashG += fInt * muzzleG;
+                enemyFlashB += fInt * muzzleB;
+            }
+        }
+    }
+
+    colRef.fR = effectiveLightningIntensity * lightningR + mInt * muzzleR + enemyFlashR;
+    colRef.fG = effectiveLightningIntensity * lightningG + mInt * muzzleG + enemyFlashG;
+    colRef.fB = effectiveLightningIntensity * lightningB + mInt * muzzleB + enemyFlashB;
+};
 let lastMirrorCacheWidth = 0;
 let lastPosX = -1;
 let lastPosY = -1;
@@ -131,6 +186,11 @@ export const renderWalls = ({
     // Set render distance high enough to avoid wall strips rendering empty/gaps at high/far distances, but keep it constrained by map dimensions
     renderDistance = Math.max(128, Math.max(mapWidth, mapHeight) * 2);
 
+    // Flash colors (pre-calc) - hoisted before mirror cache decision so cached mirrors
+    // can refresh their flash lighting.
+    const lightningR = 0.6, lightningG = 0.65, lightningB = 0.8;
+    const muzzleR = 1.0, muzzleG = 0.8, muzzleB = 0.3;
+
     resetRaycastPools();
     resetMirrorPool();
     updateLightingSolidMap(grid, grids);
@@ -157,7 +217,10 @@ export const renderWalls = ({
 
     const anyFlashActive = lightningIntensity > 0 || muzzleFlashIntensity > 0 || (activeFlashes && activeFlashes.length > 0);
 
-    const useMirrorCache = !cameraChanged && !mirrorAffectedByDoor && !anyFlashActive && cachedMirrorCols.length === width;
+    // Keep reusing the geometry cache even while flashes (molotov/flashbang/etc.) are
+    // active: flash lighting is refreshed cheaply per frame on cache hits instead of
+    // forcing a full reflection raycast + precalc for every mirror column.
+    const useMirrorCache = !cameraChanged && !mirrorAffectedByDoor && cachedMirrorCols.length === width;
 
     if (useMirrorCache) {
         // Clear only door and wall passthroughs
@@ -206,10 +269,6 @@ export const renderWalls = ({
     const upperGeometryCache = getUpperGeometryLayersCache(grid, activeGrids);
     const solidWallCache = getSolidWallLayersCache(grid, activeGrids);
     
-    // Flash colors (pre-calc)
-    const lightningR = 0.6, lightningG = 0.65, lightningB = 0.8;
-    const muzzleR = 1.0, muzzleG = 0.8, muzzleB = 0.3;
-
     let lastRay: RaycastResult | null = null;
     let currentRayObj = rayResultA;
 
@@ -457,6 +516,13 @@ export const renderWalls = ({
                         for (let r = 0; r < mirrorResult.clonedReflections.length; r++) {
                             const refCloned = cloneMirrorReflection(mirrorResult.clonedReflections[r]);
                             mirrorReflections[x].push(refCloned);
+                            if (anyFlashActive) {
+                                refreshCachedMirrorFlash(
+                                    refCloned, activeFlashes, lightningIntensity, muzzleFlashIntensity,
+                                    muzzleR, muzzleG, muzzleB, lightningR, lightningG, lightningB,
+                                    posX, posY, lightningMap, outdoorMap, mapWidth, mapHeight
+                                );
+                            }
                         }
                     }
                 } else {

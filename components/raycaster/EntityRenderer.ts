@@ -66,6 +66,9 @@ const persistentElevatedShadows: SpriteShadow[] = [];
 // Zero-GC persistent array reused each frame instead of allocating spritePool.slice()
 const persistentRenderSprites: any[] = [];
 
+// Zero-GC persistent array reused across mirror segments for the reflected sprite pass
+const persistentReflectedSprites: any[] = [];
+
 // --- OVERLAY CACHE ---
 let overlayCanvas: HTMLCanvasElement | null = null;
 let overlayCtx: CanvasRenderingContext2D | null = null;
@@ -2849,6 +2852,7 @@ export const renderEntities = ({
 
   // 5. DRAWING LOOP (BATCHED)
   // First, draw reflected sprites
+  const reflectedBaseSprites = renderSprites.filter((s) => !s.isPortrait && !s.hidden);
   mirrorSegments.forEach((seg) => {
     const ref = seg.reflection;
 
@@ -2882,23 +2886,23 @@ export const renderEntities = ({
     if (ref.side === 0) vPlaneX = -planeX;
     else vPlaneY = -planeY;
 
-    // Render sprites from virtual camera
-    // We need to sort them by virtual depth (transformY) for the reflection pass
-    const reflectedSprites = renderSprites
-      .filter((s) => !s.isPortrait && !s.hidden)
-      .map((sprite) => {
-        const spriteX = sprite.x - virtualPosX;
-        const spriteY = sprite.y - virtualPosY;
+    // Render sprites from virtual camera (reuse a persistent array, filtered once per frame)
+    persistentReflectedSprites.length = 0;
+    const reflectedSprites = persistentReflectedSprites;
+    for (let si = 0; si < reflectedBaseSprites.length; si++) {
+      const sprite = reflectedBaseSprites[si];
+      const spriteX = sprite.x - virtualPosX;
+      const spriteY = sprite.y - virtualPosY;
 
-        const det = vPlaneX * virtualDirY - virtualDirX * vPlaneY;
-        const invDet = 1.0 / det;
+      const det = vPlaneX * virtualDirY - virtualDirX * vPlaneY;
+      const invDet = 1.0 / det;
 
-        const transformX =
-          invDet * (virtualDirY * spriteX - virtualDirX * spriteY);
-        const transformY = invDet * (-vPlaneY * spriteX + vPlaneX * spriteY);
+      const transformX =
+        invDet * (virtualDirY * spriteX - virtualDirX * spriteY);
+      const transformY = invDet * (-vPlaneY * spriteX + vPlaneX * spriteY);
 
-        return { ...sprite, transformX, transformY };
-      });
+      persistentReflectedSprites.push({ ...sprite, transformX, transformY });
+    }
 
     // ADD PLAYER TO REFLECTION
     if (playerReflectionSprite) {
@@ -3276,12 +3280,11 @@ export const renderEntities = ({
     } = getOverlayCanvas(width, height);
     const segWidth = seg.xEnd - seg.xStart + resolutionDivisor; // Adjust width for last pixel
 
-    // Clear the used portion of the buffer
+    // Clear the used portion of the buffer (typed-array fill, faster than nested JS loops)
     const stride = oCanvas.width;
     for (let y = 0; y < height; y++) {
-      for (let x = 0; x < segWidth; x++) {
-        oData[y * stride + x] = 0;
-      }
+      const rowStart = y * stride;
+      oData.fill(0, rowStart, rowStart + segWidth);
     }
 
     for (let x = seg.xStart; x <= seg.xEnd; x += resolutionDivisor) {
@@ -3327,11 +3330,8 @@ export const renderEntities = ({
 
         // Fill resolutionDivisor pixels
         const pixelVal = (colRef.mirrorAlpha << 24) | (b << 16) | (g << 8) | r;
-        for (let k = 0; k < resolutionDivisor; k++) {
-          if (localX + k < segWidth) {
-            oData[y * stride + localX + k] = pixelVal;
-          }
-        }
+        const rowStart = y * stride + localX;
+        oData.fill(pixelVal, rowStart, Math.min(rowStart + resolutionDivisor, y * stride + segWidth));
       }
     }
 
