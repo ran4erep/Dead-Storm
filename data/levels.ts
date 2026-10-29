@@ -19,12 +19,6 @@ export const WORLD_MAP_PATHS: any[] = [
     sectors: [
       './data/levels/level1/tutorial.json'
     ]
-  },
-  {
-    name: "Tutorial NoWindows",
-    sectors: [
-      './data/levels/level1/tutorial_nowindows.json'
-    ]
   }
 ];
 

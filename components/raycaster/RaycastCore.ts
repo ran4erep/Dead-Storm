@@ -761,26 +761,6 @@ export const performRaycast = (
     const solidWallCache = precalcSolidWall || getSolidWallLayersCache(grid, activeGrids);
     const exposedCapCache = getExposedCapLayersCache(grid, activeGrids);
 
-    // Portal skip: when a ray passes through a window cutout, teleport it to
-    // the far side of the wall (exitDist) instead of marching through the
-    // wall's depth. This makes windows look flat (no visible inner cheek
-    // surfaces / volume), exactly like a hole through a zero-thickness wall.
-    const portalSkip = (exitDistVal: number): boolean => {
-        if (exitDistVal <= 0.01) return false;
-        const nx = posX + exitDistVal * rayDirX;
-        const ny = posY + exitDistVal * rayDirY;
-        const nmx = Math.floor(nx);
-        const nmy = Math.floor(ny);
-        if (nmx < 0 || nmx >= mapWidth || nmy < 0 || nmy >= mapHeight) return false;
-        mapX = nmx;
-        mapY = nmy;
-        if (rayDirX < 0) sideDistX = (posX - mapX) * deltaDistX;
-        else sideDistX = (mapX + 1.0 - posX) * deltaDistX;
-        if (rayDirY < 0) sideDistY = (posY - mapY) * deltaDistY;
-        else sideDistY = (mapY + 1.0 - posY) * deltaDistY;
-        return true;
-    };
-
 
     // --- CHECK START TILE FOR DOOR (Visuals inside doorway) ---
     if (mapX >= 0 && mapX < mapWidth && mapY >= 0 && mapY < mapHeight) {
@@ -1157,8 +1137,54 @@ export const performRaycast = (
                                   passThroughWalls[x].push(wall);
                               }
 
+                              // 2. Сама боковая стенка (cheek) на месте выхода из выреза
+                              let visibleCheek = true;
+                              if (exitDist > 0.05 && viewHeight > 0) {
+                                  const lh = viewHeight / exitDist;
+                                  const yTop_raw = Math.floor(horizon + lh * (cameraZ - topZ)) - 1;
+                                  const yBot_raw = Math.ceil(horizon + lh * (cameraZ - bottomZ)) + 1;
+                                  const yTop = (topZ < cameraZ) ? Math.floor(horizon) - 1 : yTop_raw;
+                                  const yBot = (bottomZ > cameraZ) ? Math.ceil(horizon) + 1 : yBot_raw;
+                                  if (yTop >= yBot) {
+                                      visibleCheek = false;
+                                  } else {
+                                      let overlap = false;
+                                      for (let vi = 0; vi < visibleCount; vi++) {
+                                          if (yBot > currentVisible[vi * 2] && yTop < currentVisible[vi * 2 + 1]) {
+                                              overlap = true;
+                                              break;
+                                          }
+                                      }
+                                      if (!overlap) {
+                                          visibleCheek = false;
+                                      }
+                                  }
+                              }
+
+                              if (visibleCheek) {
+                                  const cheekWall = getWallFromPool();
+                                  cheekWall.dist = exitDist;
+                                  cheekWall.exitDist = exitDist + 0.05;
+                                  cheekWall.mapX = mapX;
+                                  cheekWall.mapY = mapY;
+                                  cheekWall.side = cutoutAxis === 'NS' ? 0 : 1;
+                                  cheekWall.layer = 0;
+                                  cheekWall.topZ = topZ;
+                                  cheekWall.bottomZ = bottomZ;
+                                  cheekWall.isWindow = true;
+                                  cheekWall.clipBottom = currentClipBottom;
+                                  cheekWall.cutoutAxis = cutoutAxis;
+                                  cheekWall.cutoutTop = tile.cutout ? tile.cutout.topLeft.y : 0.25;
+                                  cheekWall.cutoutBottom = tile.cutout ? tile.cutout.bottomRight.y : 0.75;
+                                  cheekWall.cutoutLeft = tile.cutout ? tile.cutout.topLeft.x : 0.25;
+                                  cheekWall.cutoutRight = tile.cutout ? tile.cutout.bottomRight.x : 0.75;
+                                  cheekWall.glassTransparency = 0.0;
+                                  cheekWall.glassOffset = 0.5;
+                                  cheekWall.glassDist = exitDist;
+                                  passThroughWalls[x].push(cheekWall);
+                              }
+
                               isSolidWall = false;
-                              if (portalSkip(exitDist)) continue;
                           } else {
                               let visible = true;
                               if (tHit > 0.05 && viewHeight > 0) {
@@ -1208,17 +1234,16 @@ export const performRaycast = (
                                       let glassX = mapX + tOffsetVal * (1.0 - tThickness) + gOffset * tThickness;
                                       exactGlassDist = (glassX - posX) / rayDirX;
                                   }
-                                   wall.glassDist = exactGlassDist;
-                                   passThroughWalls[x].push(wall);
-                               }
+                                  wall.glassDist = exactGlassDist;
+                                  passThroughWalls[x].push(wall);
+                              }
 
-                               isSolidWall = false;
-                               if (portalSkip(exitDist)) continue;
-                           }
-                       } else {
-                           isSolidWall = false;
-                       }
-                   }
+                              isSolidWall = false;
+                          }
+                      } else {
+                          isSolidWall = false;
+                      }
+                  }
 
                   if (isSolidWall) {
                       if (bottomZ <= 0.001 && topZ >= 0.999 && cameraZ >= bottomZ && cameraZ <= topZ && tile.type === 'WALL' && !tile.isWindow) {
@@ -1513,12 +1538,33 @@ export const performRaycast = (
                                           let glassX = mapX + uLayer.offsetVal! * (1.0 - uLayer.thickness!) + uLayer.glassOffset! * uLayer.thickness!;
                                           exactGlassDist = (glassX - posX) / rayDirX;
                                       }
-                                       wall.glassDist = exactGlassDist;
-                                       passThroughWalls[x].push(wall);
-                                       if (portalSkip(exitDist)) continue;
-                                   } else {
-                                       const wall = getWallFromPool();
-                                       wall.dist = tHit; wall.exitDist = exitDist; wall.mapX = mapX; wall.mapY = mapY; wall.side = hitSide; wall.layer = i;
+                                      wall.glassDist = exactGlassDist;
+                                      passThroughWalls[x].push(wall);
+
+                                      // 2. Сама боковая стенка (cheek) на месте выхода из выреза
+                                      const cheekWall = getWallFromPool();
+                                      cheekWall.dist = exitDist;
+                                      cheekWall.exitDist = exitDist + 0.05;
+                                      cheekWall.mapX = mapX;
+                                      cheekWall.mapY = mapY;
+                                      cheekWall.side = cutoutAxis === 'NS' ? 0 : 1;
+                                      cheekWall.layer = i;
+                                      cheekWall.topZ = topZ;
+                                      cheekWall.bottomZ = bottomZ;
+                                      cheekWall.isWindow = true;
+                                      cheekWall.clipBottom = currentClipBottom;
+                                      cheekWall.cutoutAxis = cutoutAxis;
+                                      cheekWall.cutoutTop = uLayer.cutoutTop;
+                                      cheekWall.cutoutBottom = uLayer.cutoutBottom;
+                                      cheekWall.cutoutLeft = uLayer.cutoutLeft;
+                                      cheekWall.cutoutRight = uLayer.cutoutRight;
+                                      cheekWall.glassTransparency = 0.0;
+                                      cheekWall.glassOffset = 0.5;
+                                      cheekWall.glassDist = exitDist;
+                                      passThroughWalls[x].push(cheekWall);
+                                  } else {
+                                      const wall = getWallFromPool();
+                                      wall.dist = tHit; wall.exitDist = exitDist; wall.mapX = mapX; wall.mapY = mapY; wall.side = hitSide; wall.layer = i;
                                       wall.topZ = topZ; wall.bottomZ = bottomZ;
                                       wall.isWindow = true;
                                       wall.clipBottom = currentClipBottom;
@@ -1538,12 +1584,11 @@ export const performRaycast = (
                                           let glassX = mapX + uLayer.offsetVal! * (1.0 - uLayer.thickness!) + uLayer.glassOffset! * uLayer.thickness!;
                                           exactGlassDist = (glassX - posX) / rayDirX;
                                       }
-                                       wall.glassDist = exactGlassDist;
-                                       passThroughWalls[x].push(wall);
-                                       if (portalSkip(exitDist)) continue;
-                                   }
-                               }
-                           } else {
+                                      wall.glassDist = exactGlassDist;
+                                      passThroughWalls[x].push(wall);
+                                  }
+                              }
+                          } else {
                               let dist; if (side === 0) dist = (sideDistX - deltaDistX); else dist = (sideDistY - deltaDistY);
                               const exitDist = Math.min(sideDistX, sideDistY);
                               pushPassThroughWall(
