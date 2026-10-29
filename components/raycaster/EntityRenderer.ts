@@ -4113,17 +4113,6 @@ export const renderEntities = ({
       }
     } else continue;
 
-    // Adaptive per-sprite resolution: distant sprites render at half
-    // horizontal resolution (wider strips) — imperceptible at distance but
-    // roughly halves CPU fill-rate for the majority of visible sprites.
-    // Close-up, portrait and attack sprites keep full detail.
-    const effSpDiv =
-      !sprite.isPortrait &&
-      !sprite.isAttackSprite &&
-      sprite.transformY >= 2.5
-        ? 2
-        : 1;
-
     startStripe = Math.floor(drawStartX);
     endStripe = Math.floor(drawEndX);
 
@@ -4131,8 +4120,10 @@ export const renderEntities = ({
     if (endStripe >= width) endStripe = width - 1;
 
     // Align startStripe to resolution grid
-    if (effSpDiv > 1) {
-      startStripe = Math.ceil(startStripe / effSpDiv) * effSpDiv;
+    if (spriteResolutionDivisor > 1) {
+      startStripe =
+        Math.ceil(startStripe / spriteResolutionDivisor) *
+        spriteResolutionDivisor;
     }
 
     // --- OPTIMIZATION (FAST PATH): Check if completely unobstructed ---
@@ -4293,7 +4284,7 @@ export const renderEntities = ({
       for (
         let stripe = startStripe;
         stripe < endStripe;
-        stripe += effSpDiv
+        stripe += spriteResolutionDivisor
       ) {
       if (stripe >= width) break;
 
