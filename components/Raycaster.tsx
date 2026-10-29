@@ -420,6 +420,8 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
   const lastFpsUpdateRef = useRef(0);
 
   const stageAccRef = useRef({ bg: 0, walls: 0, gl: 0, ent: 0, part: 0, oth: 0, frames: 0 });
+  const perfHistoryRef = useRef<{ t: number; fps: number; bg: number; walls: number; gl: number; ent: number; part: number; oth: number }[]>([]);
+  const perfStatsRef = useRef({ min: Infinity, max: 0, sum: 0, count: 0 });
 
   const [lightningIntensity, setLightningIntensity] = useState(0);
 
@@ -2431,14 +2433,68 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
       return () => window.removeEventListener('raycaster-look', handleLookEvent);
   }, [startLoop, isPaused]);
 
+  const downloadPerfLog = useCallback(() => {
+      const p = propsRef.current;
+      const _a = stageAccRef.current;
+      const _n = Math.max(1, _a.frames);
+      const stats = perfStatsRef.current;
+      const gridsLen = p.grids && p.grids.length > 0 ? p.grids.length : (p.grid ? 1 : 0);
+      const mapW = p.grid && p.grid[0] ? p.grid[0].length : 0;
+      const mapH = p.grid ? p.grid.length : 0;
+      const lines: string[] = [];
+      lines.push('Dead Storm perf log');
+      lines.push('time: ' + new Date().toISOString());
+      lines.push('level: ' + (p.levelPath || 'unknown'));
+      lines.push('grid: ' + mapW + 'x' + mapH + ' floors=' + gridsLen);
+      lines.push('renderer: ' + (isWebGLActive ? 'WebGL' : 'Soft'));
+      lines.push('viewport: ' + width + 'x' + height + ' divisor=' + (p.resolutionDivisor || 1));
+      lines.push('player: (' + p.player.pos.x.toFixed(2) + ', ' + p.player.pos.y.toFixed(2) + ')');
+      lines.push('current avg ms: bg=' + (_a.bg / _n).toFixed(2) + ' walls=' + (_a.walls / _n).toFixed(2) + ' gl=' + (_a.gl / _n).toFixed(2) + ' ent=' + (_a.ent / _n).toFixed(2) + ' part=' + (_a.part / _n).toFixed(2) + ' oth=' + (_a.oth / _n).toFixed(2));
+      lines.push('fps range: ' + (isFinite(stats.min) ? stats.min.toFixed(0) : '-') + '-' + stats.max.toFixed(0) + ' avg=' + (stats.count > 0 ? (stats.sum / stats.count).toFixed(1) : '-'));
+      lines.push('samples: ' + perfHistoryRef.current.length);
+      lines.push('');
+      lines.push('sec,fps,bg_ms,walls_ms,gl_ms,ent_ms,part_ms,oth_ms');
+      for (const s of perfHistoryRef.current) {
+          lines.push(s.t + ',' + s.fps + ',' + s.bg.toFixed(2) + ',' + s.walls.toFixed(2) + ',' + s.gl.toFixed(2) + ',' + s.ent.toFixed(2) + ',' + s.part.toFixed(2) + ',' + s.oth.toFixed(2));
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'deadstorm_perf_' + Date.now() + '.txt';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, [width, height]);
+
   useEffect(() => {
       if (!showFps) return;
       const interval = setInterval(() => {
           if (fpsRef.current) {
               const _a = stageAccRef.current;
               const _n = Math.max(1, _a.frames);
+              const _fps = frameCountRef.current;
+              const stats = perfStatsRef.current;
+              if (_fps < stats.min) stats.min = _fps;
+              if (_fps > stats.max) stats.max = _fps;
+              stats.sum += _fps;
+              stats.count++;
+              perfHistoryRef.current.push({
+                  t: Math.floor(Date.now() / 1000),
+                  fps: _fps,
+                  bg: _a.bg / _n,
+                  walls: _a.walls / _n,
+                  gl: _a.gl / _n,
+                  ent: _a.ent / _n,
+                  part: _a.part / _n,
+                  oth: _a.oth / _n
+              });
+              if (perfHistoryRef.current.length > 600) {
+                  perfHistoryRef.current.shift();
+              }
               fpsRef.current.textContent =
-                  `FPS: ${frameCountRef.current}\n` +
+                  `FPS: ${_fps}\n` +
                   `bg: ${(_a.bg / _n).toFixed(2)}ms\n` +
                   `walls: ${(_a.walls / _n).toFixed(2)}ms\n` +
                   `gl: ${(_a.gl / _n).toFixed(2)}ms\n` +
@@ -2468,8 +2524,11 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
         <canvas ref={canvasRef} width={width} height={height} className="w-full h-full bg-black" style={{ imageRendering: viewportSmoothing ? 'auto' : 'pixelated' }} />
         <div ref={overlaysContainerRef} className="absolute inset-x-0 inset-y-0 pointer-events-none z-20 overflow-hidden" />
         {showFps && (
-            <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 border border-gray-700/50 rounded-[2px] pointer-events-none z-[100] flex items-center shadow-sm">
-                <span ref={fpsRef} style={{ whiteSpace: 'pre-line' }} className="text-[10px] font-['Jura'] font-bold text-gray-400 tracking-tight">FPS: 0</span>
+            <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 border border-gray-700/50 rounded-[2px] pointer-events-none z-[100] shadow-sm">
+                <div className="flex items-start gap-2">
+                    <span ref={fpsRef} style={{ whiteSpace: 'pre-line' }} className="text-[10px] font-['Jura'] font-bold text-gray-400 tracking-tight leading-tight">FPS: 0</span>
+                    <button type="button" onClick={downloadPerfLog} className="pointer-events-auto text-[10px] text-cyan-300 underline hover:text-cyan-100 select-none mt-0.5">DL</button>
+                </div>
             </div>
         )}
     </div>
