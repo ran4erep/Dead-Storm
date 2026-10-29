@@ -1163,26 +1163,7 @@ export const renderWalls = ({
 
     // Render passthrough walls (windows) and doors after occluders are populated
     const invWidth = 1.0 / width;
-    // Distance-aware cap: always keep segments closer than 14 tiles; beyond that
-    // keep only a small tail so far-away micro-layers don't eat CPU time, while
-    // nearby walls/windows stay fully visible.
-    const PT_NEAR_DIST = 14.0;
-    const MAX_PT_FAR = 8;
     for (let x = 0; x < width; x += resolutionDivisor) {
-        const arr = passThroughWalls[x];
-        if (arr.length > MAX_PT_FAR + 16) {
-            let w = 0;
-            let farSeen = 0;
-            for (let i = 0; i < arr.length; i++) {
-                const seg = arr[i];
-                if (seg.dist < PT_NEAR_DIST || farSeen < MAX_PT_FAR) {
-                    arr[w++] = seg;
-                    if (seg.dist >= PT_NEAR_DIST) farSeen++;
-                }
-            }
-            arr.length = w;
-        }
-    }
     const _l1 = performance.now();
     for (let x = 0; x < width; x += resolutionDivisor) {
         const cameraX = 2 * x * invWidth - 1;

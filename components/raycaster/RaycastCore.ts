@@ -1438,12 +1438,6 @@ export const performRaycast = (
                           const topZ = uLayer.topZ;
                           const bottomZ = uLayer.bottomZ;
 
-                          // Sub-pixel cull: skip upper-floor segments whose projected
-                          // height is below 0.5px (they cannot be seen).
-                          if (dist > 0.05 && viewHeight > 0 && viewHeight / dist * (topZ - bottomZ) < 0.5) {
-                              continue;
-                          }
-
                           // Оптимизация: отсечение полностью невидимых (загороженных) сегментов верхних этажей
                           // Optimization: cull completely invisible (occluded) upper floor segments
                           if (dist > 0.05 && viewHeight > 0) {
@@ -1596,9 +1590,6 @@ export const performRaycast = (
                               }
                           } else {
                               let dist; if (side === 0) dist = (sideDistX - deltaDistX); else dist = (sideDistY - deltaDistY);
-                              if (viewHeight > 0 && viewHeight / dist * (topZ - bottomZ) < 0.5) {
-                                  continue;
-                              }
                               const exitDist = Math.min(sideDistX, sideDistY);
                               pushPassThroughWall(
                                   passThroughWalls[x],
