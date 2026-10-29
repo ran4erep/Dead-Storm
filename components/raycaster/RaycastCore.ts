@@ -1439,8 +1439,8 @@ export const performRaycast = (
                           const bottomZ = uLayer.bottomZ;
 
                           // Sub-pixel cull: skip upper-floor segments whose projected
-                          // height is below 1px (they cannot be seen).
-                          if (dist > 0.05 && viewHeight > 0 && viewHeight / dist * (topZ - bottomZ) < 1.0) {
+                          // height is below 0.5px (they cannot be seen).
+                          if (dist > 0.05 && viewHeight > 0 && viewHeight / dist * (topZ - bottomZ) < 0.5) {
                               continue;
                           }
 
@@ -1596,7 +1596,7 @@ export const performRaycast = (
                               }
                           } else {
                               let dist; if (side === 0) dist = (sideDistX - deltaDistX); else dist = (sideDistY - deltaDistY);
-                              if (viewHeight > 0 && viewHeight / dist * (topZ - bottomZ) < 1.0) {
+                              if (viewHeight > 0 && viewHeight / dist * (topZ - bottomZ) < 0.5) {
                                   continue;
                               }
                               const exitDist = Math.min(sideDistX, sideDistY);
