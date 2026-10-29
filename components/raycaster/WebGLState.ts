@@ -30,6 +30,11 @@ export interface WebGLQuad {
 export let isWebGLActive = false;
 export const wallQuadsCollector: WebGLQuad[] = [];
 
+// When true (and WebGL active), opaque passthrough wall segments are pushed to
+// the GPU quad pipeline instead of being rasterized on the CPU.
+export let fastGlPt = false;
+export const setFastGlPt = (v: boolean) => { fastGlPt = v; };
+
 export interface SpriteShadow {
   x: number;
   y: number;
