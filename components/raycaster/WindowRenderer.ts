@@ -496,17 +496,40 @@ export function renderWindowSegment({
 
     pt.isCutoutColumn = isCutoutCol;
 
-    if (!isCutoutCol) {
-        if (drawStart < drawEnd && (pt.dist <= zBuffer[x] + 1.5 || (pt.layer !== undefined && pt.layer > 0))) {
-            const spans = getUnoccludedSpans(drawStart, drawEnd, passThroughWallsCol, pt.dist);
-            for (let s = 0; s < spans.length; s++) {
+    // Compute the unoccluded spans ONCE for the whole column. Every later part
+    // (top/bottom frame, head/sill cheeks, glass) clips against these spans,
+    // which is pixel-identical to calling getUnoccludedSpans per part but
+    // avoids repeated full passes + allocations per window.
+    const fullSpans = getUnoccludedSpans(0, height, passThroughWallsCol, pt.dist);
+
+    const drawWindowPartClipped = (
+        partStart: number,
+        partEnd: number,
+        buf: RaycasterBuffer,
+        texXVal: number,
+        levelDS: number,
+        texShift: number,
+        lhVal: number,
+        alphaMult: number
+    ) => {
+        if (partStart >= partEnd) return;
+        for (let si = 0; si < fullSpans.length; si++) {
+            const a = fullSpans[si].start > partStart ? fullSpans[si].start : partStart;
+            const b = fullSpans[si].end < partEnd ? fullSpans[si].end : partEnd;
+            if (a < b) {
                 drawWindowPart(
-                    x, spans[s].start, spans[s].end, pt, currentWallBuf, texX,
-                    levelDrawStart, texStartShift, lh,
-                    rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
+                    x, a, b, pt, buf, texXVal,
+                    levelDS, texShift, lhVal,
+                    rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, alphaMult,
                     screenBuffer, width, resolutionDivisor
                 );
             }
+        }
+    };
+
+    if (!isCutoutCol) {
+        if (drawStart < drawEnd && (pt.dist <= zBuffer[x] + 1.5 || (pt.layer !== undefined && pt.layer > 0))) {
+            drawWindowPartClipped(drawStart, drawEnd, currentWallBuf, texX, levelDrawStart, texStartShift, lh, 1.0);
         }
         return;
     }
@@ -517,29 +540,13 @@ export function renderWindowSegment({
     // 1. Top Frame (Opaque)
     const topDrawEnd = Math.min(drawEnd, screenCutoutTop);
     if (drawStart < topDrawEnd) {
-        const spans = getUnoccludedSpans(drawStart, topDrawEnd, passThroughWallsCol, pt.dist);
-        for (let s = 0; s < spans.length; s++) {
-            drawWindowPart(
-                x, spans[s].start, spans[s].end, pt, currentWallBuf, texX,
-                levelDrawStart, texStartShift, lh,
-                rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
-                screenBuffer, width, resolutionDivisor
-            );
-        }
+        drawWindowPartClipped(drawStart, topDrawEnd, currentWallBuf, texX, levelDrawStart, texStartShift, lh, 1.0);
     }
 
     // 2. Bottom Frame (Opaque)
     const botDrawStart = Math.max(drawStart, screenCutoutBot);
     if (botDrawStart < drawEnd) {
-        const spans = getUnoccludedSpans(botDrawStart, drawEnd, passThroughWallsCol, pt.dist);
-        for (let s = 0; s < spans.length; s++) {
-            drawWindowPart(
-                x, spans[s].start, spans[s].end, pt, currentWallBuf, texX,
-                levelDrawStart, texStartShift, lh,
-                rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
-                screenBuffer, width, resolutionDivisor
-            );
-        }
+        drawWindowPartClipped(botDrawStart, drawEnd, currentWallBuf, texX, levelDrawStart, texStartShift, lh, 1.0);
     }
 
     // 2b. Render simple, flat, highly-optimized horizontal inner cheeks (Head and Sill)
@@ -578,9 +585,11 @@ export function renderWindowSegment({
         const headStart = Math.max(drawStart, screenCutoutTop);
         const headEnd = Math.min(drawEnd, screenCutoutTopFar);
         if (headStart < headEnd) {
-            const headSpans = getUnoccludedSpans(headStart, headEnd, passThroughWallsCol, pt.dist);
-            for (let s = 0; s < headSpans.length; s++) {
-                for (let y = headSpans[s].start; y < headSpans[s].end; y++) {
+            for (let si = 0; si < fullSpans.length; si++) {
+                const a = fullSpans[si].start > headStart ? fullSpans[si].start : headStart;
+                const b = fullSpans[si].end < headEnd ? fullSpans[si].end : headEnd;
+                if (a >= b) continue;
+                for (let y = a; y < b; y++) {
                     const dy = horizon - y;
                     if (dy <= 0) continue;
                     const dist_cheek = numerator_head / dy;
@@ -642,9 +651,11 @@ export function renderWindowSegment({
         const sillStart = Math.max(drawStart, screenCutoutBotFar);
         const sillEnd = Math.min(drawEnd, screenCutoutBot);
         if (sillStart < sillEnd) {
-            const sillSpans = getUnoccludedSpans(sillStart, sillEnd, passThroughWallsCol, pt.dist);
-            for (let s = 0; s < sillSpans.length; s++) {
-                for (let y = sillSpans[s].start; y < sillSpans[s].end; y++) {
+            for (let si = 0; si < fullSpans.length; si++) {
+                const a = fullSpans[si].start > sillStart ? fullSpans[si].start : sillStart;
+                const b = fullSpans[si].end < sillEnd ? fullSpans[si].end : sillEnd;
+                if (a >= b) continue;
+                for (let y = a; y < b; y++) {
                     const dy = y - horizon;
                     if (dy <= 0) continue;
                     const dist_cheek = numerator_sill / dy;
@@ -753,14 +764,18 @@ export function renderWindowSegment({
                 const cutoutScreenHeight = gScreenBot - gScreenTop;
                 const targetLh = cutoutScreenHeight > 0 ? cutoutScreenHeight : 1;
 
-                const glassSpans = getUnoccludedSpans(glassDrawStart, glassDrawEnd, passThroughWallsCol, glassDist);
+                const glassSpans = fullSpans;
                 for (let s = 0; s < glassSpans.length; s++) {
-                    drawWindowPart(
-                        x, glassSpans[s].start, glassSpans[s].end, pt, glassBuf, glassTexX,
-                        gScreenTop, 0, targetLh,
-                        rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, alphaMultiplier,
-                        screenBuffer, width, resolutionDivisor
-                    );
+                    const a = glassSpans[s].start > glassDrawStart ? glassSpans[s].start : glassDrawStart;
+                    const b = glassSpans[s].end < glassDrawEnd ? glassSpans[s].end : glassDrawEnd;
+                    if (a < b) {
+                        drawWindowPart(
+                            x, a, b, pt, glassBuf, glassTexX,
+                            gScreenTop, 0, targetLh,
+                            rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, alphaMultiplier,
+                            screenBuffer, width, resolutionDivisor
+                        );
+                    }
                 }
             }
         }
