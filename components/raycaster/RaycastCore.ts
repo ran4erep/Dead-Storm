@@ -1137,53 +1137,6 @@ export const performRaycast = (
                                   passThroughWalls[x].push(wall);
                               }
 
-                              // 2. Сама боковая стенка (cheek) на месте выхода из выреза
-                              let visibleCheek = true;
-                              if (exitDist > 0.05 && viewHeight > 0) {
-                                  const lh = viewHeight / exitDist;
-                                  const yTop_raw = Math.floor(horizon + lh * (cameraZ - topZ)) - 1;
-                                  const yBot_raw = Math.ceil(horizon + lh * (cameraZ - bottomZ)) + 1;
-                                  const yTop = (topZ < cameraZ) ? Math.floor(horizon) - 1 : yTop_raw;
-                                  const yBot = (bottomZ > cameraZ) ? Math.ceil(horizon) + 1 : yBot_raw;
-                                  if (yTop >= yBot) {
-                                      visibleCheek = false;
-                                  } else {
-                                      let overlap = false;
-                                      for (let vi = 0; vi < visibleCount; vi++) {
-                                          if (yBot > currentVisible[vi * 2] && yTop < currentVisible[vi * 2 + 1]) {
-                                              overlap = true;
-                                              break;
-                                          }
-                                      }
-                                      if (!overlap) {
-                                          visibleCheek = false;
-                                      }
-                                  }
-                              }
-
-                              if (visibleCheek) {
-                                  const cheekWall = getWallFromPool();
-                                  cheekWall.dist = exitDist;
-                                  cheekWall.exitDist = exitDist + 0.05;
-                                  cheekWall.mapX = mapX;
-                                  cheekWall.mapY = mapY;
-                                  cheekWall.side = cutoutAxis === 'NS' ? 0 : 1;
-                                  cheekWall.layer = 0;
-                                  cheekWall.topZ = topZ;
-                                  cheekWall.bottomZ = bottomZ;
-                                  cheekWall.isWindow = true;
-                                  cheekWall.clipBottom = currentClipBottom;
-                                  cheekWall.cutoutAxis = cutoutAxis;
-                                  cheekWall.cutoutTop = tile.cutout ? tile.cutout.topLeft.y : 0.25;
-                                  cheekWall.cutoutBottom = tile.cutout ? tile.cutout.bottomRight.y : 0.75;
-                                  cheekWall.cutoutLeft = tile.cutout ? tile.cutout.topLeft.x : 0.25;
-                                  cheekWall.cutoutRight = tile.cutout ? tile.cutout.bottomRight.x : 0.75;
-                                  cheekWall.glassTransparency = 0.0;
-                                  cheekWall.glassOffset = 0.5;
-                                  cheekWall.glassDist = exitDist;
-                                  passThroughWalls[x].push(cheekWall);
-                              }
-
                               isSolidWall = false;
                           } else {
                               let visible = true;
@@ -1540,28 +1493,6 @@ export const performRaycast = (
                                       }
                                       wall.glassDist = exactGlassDist;
                                       passThroughWalls[x].push(wall);
-
-                                      // 2. Сама боковая стенка (cheek) на месте выхода из выреза
-                                      const cheekWall = getWallFromPool();
-                                      cheekWall.dist = exitDist;
-                                      cheekWall.exitDist = exitDist + 0.05;
-                                      cheekWall.mapX = mapX;
-                                      cheekWall.mapY = mapY;
-                                      cheekWall.side = cutoutAxis === 'NS' ? 0 : 1;
-                                      cheekWall.layer = i;
-                                      cheekWall.topZ = topZ;
-                                      cheekWall.bottomZ = bottomZ;
-                                      cheekWall.isWindow = true;
-                                      cheekWall.clipBottom = currentClipBottom;
-                                      cheekWall.cutoutAxis = cutoutAxis;
-                                      cheekWall.cutoutTop = uLayer.cutoutTop;
-                                      cheekWall.cutoutBottom = uLayer.cutoutBottom;
-                                      cheekWall.cutoutLeft = uLayer.cutoutLeft;
-                                      cheekWall.cutoutRight = uLayer.cutoutRight;
-                                      cheekWall.glassTransparency = 0.0;
-                                      cheekWall.glassOffset = 0.5;
-                                      cheekWall.glassDist = exitDist;
-                                      passThroughWalls[x].push(cheekWall);
                                   } else {
                                       const wall = getWallFromPool();
                                       wall.dist = tHit; wall.exitDist = exitDist; wall.mapX = mapX; wall.mapY = mapY; wall.side = hitSide; wall.layer = i;
