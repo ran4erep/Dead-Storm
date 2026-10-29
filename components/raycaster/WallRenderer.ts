@@ -1163,7 +1163,6 @@ export const renderWalls = ({
 
     // Render passthrough walls (windows) and doors after occluders are populated
     const invWidth = 1.0 / width;
-    for (let x = 0; x < width; x += resolutionDivisor) {
     const _l1 = performance.now();
     for (let x = 0; x < width; x += resolutionDivisor) {
         const cameraX = 2 * x * invWidth - 1;
