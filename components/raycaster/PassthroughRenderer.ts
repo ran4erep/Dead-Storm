@@ -482,32 +482,36 @@ export const renderPassthroughWalls = (
                 drawEnd = Math.min(drawEnd, pt.clipBottom);
             }
 
-            const isPixelOccluded = (py: number, pDist: number): boolean => {
-                if (!passThroughWalls || passThroughWalls.length === 0) return false;
-                for (let k = 0; k < passThroughWalls.length; k++) {
-                    if (k === i) continue;
-                    const occ = passThroughWalls[k];
-                    if (!occ) continue;
-                    if (occ.dist >= pDist - 0.02) continue;
+            const nearSpans: { top: number; bot: number }[] = [];
+            for (let k = 0; k < passThroughWalls.length; k++) {
+                if (k === i) continue;
+                const occ = passThroughWalls[k];
+                if (!occ) continue;
+                if (occ.dist >= dist - 0.02) continue;
 
-                    let occTop: number;
-                    let occBot: number;
-                    if (occ.wallTop !== undefined && occ.wallBottom !== undefined) {
-                        occTop = occ.wallTop;
-                        occBot = occ.wallBottom;
-                    } else {
-                        const occLh = height / occ.dist;
-                        const occAbsTopZ = occ.layer + (occ.topZ !== undefined ? occ.topZ : 1.0);
-                        const occAbsBotZ = occ.layer + (occ.bottomZ !== undefined ? occ.bottomZ : 0.0);
-                        occTop = Math.floor(horizon + occLh * (cameraZ - occAbsTopZ));
-                        occBot = Math.ceil(horizon + occLh * (cameraZ - occAbsBotZ));
-                        if (occ.clipBottom !== undefined) {
-                            occBot = Math.min(occBot, occ.clipBottom);
-                        }
+                let occTop: number;
+                let occBot: number;
+                if (occ.wallTop !== undefined && occ.wallBottom !== undefined) {
+                    occTop = occ.wallTop;
+                    occBot = occ.wallBottom;
+                } else {
+                    const occLh = height / occ.dist;
+                    const occAbsTopZ = occ.layer + (occ.topZ !== undefined ? occ.topZ : 1.0);
+                    const occAbsBotZ = occ.layer + (occ.bottomZ !== undefined ? occ.bottomZ : 0.0);
+                    occTop = Math.floor(horizon + occLh * (cameraZ - occAbsTopZ));
+                    occBot = Math.ceil(horizon + occLh * (cameraZ - occAbsBotZ));
+                    if (occ.clipBottom !== undefined) {
+                        occBot = Math.min(occBot, occ.clipBottom);
                     }
-                    if (py >= occTop && py < occBot) {
-                        return true;
-                    }
+                }
+                if (occBot > occTop) {
+                    nearSpans.push({ top: occTop, bot: occBot });
+                }
+            }
+            const isPixelOccluded = (py: number): boolean => {
+                for (let si = 0; si < nearSpans.length; si++) {
+                    const s = nearSpans[si];
+                    if (py >= s.top && py < s.bot) return true;
                 }
                 return false;
             };
@@ -998,7 +1002,7 @@ export const renderPassthroughWalls = (
                                 currFogInt += stepFogInt;
                                 stepsLeft--;
 
-                                if (isPixelOccluded(y, distToP)) continue;
+                                if (isPixelOccluded(y)) continue;
 
                                 const weight = distToP;
                                 const currentFloorX = posX + weight * rayDirX;
@@ -1296,7 +1300,7 @@ export const renderPassthroughWalls = (
                                 currFogInt += stepFogInt;
                                 stepsLeft--;
 
-                                if (isPixelOccluded(y, distToP)) continue;
+                                if (isPixelOccluded(y)) continue;
 
                                 const weight = distToP;
                                 let texXCoord = posX + weight * rayDirX;
