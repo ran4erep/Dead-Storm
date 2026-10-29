@@ -180,18 +180,9 @@ export const useScriptSystem = (
     lastGameStateRef.current = gameState;
     scriptExecutionEpochRef.current++;
     runningTriggersRef.current.clear();
-    locallyFiredTriggersRef.current.clear();
     stoppedRepeatsRef.current.clear();
     activeRepeatsPerLevelRef.current = {};
     timerStatesRef.current = {};
-
-    if (levelData?.triggers && Array.isArray(levelData.triggers)) {
-      for (const t of levelData.triggers) {
-        if (t && typeof t === "object") {
-          delete t.fired;
-        }
-      }
-    }
   }
 
   const currentLevelKey = levelData
@@ -640,6 +631,7 @@ export const useScriptSystem = (
         executeActions(activeTriggers, eventParams).finally(() => {
           for (let i = 0; i < activeTriggers.length; i++) {
             runningTriggersRef.current.delete(activeTriggers[i]);
+            locallyFiredTriggersRef.current.delete(activeTriggers[i]);
           }
         });
 
