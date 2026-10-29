@@ -1508,15 +1508,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ settings, strings, isGame
         )}
 
         {renderToggleItem(
-            (strings as any).debug_auto_res || "AUTO RESOLUTION", 
-            (strings as any).debug_auto_res_desc || "DYNAMICALLY LOWER INTERNAL RES IN HEAVY SCENES", 
-            settings.debug.autoResolution !== false, 
-            () => onUpdate({ ...settings, debug: { ...settings.debug, autoResolution: settings.debug.autoResolution !== false ? false : true } }), 
-            Zap, 
-            "text-gray-400"
-        )}
-
-        {renderToggleItem(
             strings.debug_timer || "COMBAT TIMER", 
             strings.debug_timer_desc || "DISABLE TURN LIMITS", 
             settings.debug.combatTimer, 
