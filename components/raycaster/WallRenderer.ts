@@ -13,6 +13,13 @@ import { renderPassthroughWalls, renderPassthroughDoors } from './PassthroughRen
 import { collectPolyObjectsFromGrid, generatePolyObjectOccluders } from './PolyObjectRenderer';
 import { isWebGLActive } from './WebGLState';
 
+// Diagnostics: per-frame CPU wall work counters
+let wallStats = { strips: 0, rows: 0, passthrough: 0 };
+let fastGlWalls = false;
+export const setFastGlWalls = (v: boolean) => { fastGlWalls = v; };
+export const resetWallStats = () => { wallStats.strips = 0; wallStats.rows = 0; wallStats.passthrough = 0; };
+export const getWallStats = () => wallStats;
+
 const SIN_LUT_SIZE = 2048;
 const SIN_LUT_MASK = SIN_LUT_SIZE - 1;
 const SIN_LUT = new Float32Array(SIN_LUT_SIZE);
@@ -570,14 +577,18 @@ export const renderWalls = ({
                     );
                 } else {
                     let actualBuf = buf;
-                    drawWallStrip(
-                        x, drawStart, drawEnd, texPosFixed, stepFixed, texX, actualBuf, screenBuffer, width,
-                        reusableLayerLightingResult.rMultInt, reusableLayerLightingResult.gMultInt, reusableLayerLightingResult.bMultInt,
-                        reusableLayerLightingResult.fRInt, reusableLayerLightingResult.fGInt, reusableLayerLightingResult.fBInt,
-                        resolutionDivisor, reusableLayerLightingResult.fogAmtInt || 0, 256,
-                        !!(ray.isDoor || ray.isDoorFrame || ray.isDoorEdge),
-                        ray.perpWallDist
-                    );
+                    wallStats.strips++;
+                    wallStats.rows += (drawEnd - drawStart);
+                    if (!(isWebGLActive && fastGlWalls && levelIndex === 0 && !ray.isDoor && !ray.isDoorFrame && !ray.isDoorEdge && currentTile?.type === 'WALL' && !currentTile.isWindow && !currentTile.mirror)) {
+                        drawWallStrip(
+                            x, drawStart, drawEnd, texPosFixed, stepFixed, texX, actualBuf, screenBuffer, width,
+                            reusableLayerLightingResult.rMultInt, reusableLayerLightingResult.gMultInt, reusableLayerLightingResult.bMultInt,
+                            reusableLayerLightingResult.fRInt, reusableLayerLightingResult.fGInt, reusableLayerLightingResult.fBInt,
+                            resolutionDivisor, reusableLayerLightingResult.fogAmtInt || 0, 256,
+                            !!(ray.isDoor || ray.isDoorFrame || ray.isDoorEdge),
+                            ray.perpWallDist
+                        );
+                    }
                 }
             }
 
@@ -1173,6 +1184,10 @@ export const renderWalls = ({
             lightningR, lightningG, lightningB, posX, posY, screenBuffer, width, cameraZ,
             resolutionDivisor, grids, grid
         );
+    }
+
+    for (let x = 0; x < width; x++) {
+        wallStats.passthrough += passThroughWalls[x].length;
     }
     
     return { zBuffer, passThroughDoors: [] };

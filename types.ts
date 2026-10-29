@@ -1062,6 +1062,7 @@ export interface Settings {
     pitLineVis?: boolean;
     noclip?: boolean;
     forceSoftRenderer?: boolean;
+    fastGlWalls?: boolean;
     combatOverlayDebug?: boolean;
     lightning5s?: boolean;
     magentaShadows?: boolean;
@@ -1097,6 +1098,7 @@ export const DEFAULT_SETTINGS: Settings = {
     pitLineVis: false,
     noclip: false,
     forceSoftRenderer: false,
+    fastGlWalls: false,
     combatOverlayDebug: false,
     lightning5s: false,
     magentaShadows: false,

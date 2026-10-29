@@ -1508,6 +1508,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ settings, strings, isGame
         )}
 
         {renderToggleItem(
+            (strings as any).debug_fast_gl_walls || "FAST GL WALLS", 
+            (strings as any).debug_fast_gl_walls_desc || "SKIP CPU REDRAW OF OPAQUE WALLS IN WEBGL (EXPERIMENTAL)", 
+            settings.debug.fastGlWalls || false, 
+            () => onUpdate({ ...settings, debug: { ...settings.debug, fastGlWalls: !settings.debug.fastGlWalls } }), 
+            Zap, 
+            "text-gray-400"
+        )}
+
+        {renderToggleItem(
             strings.debug_timer || "COMBAT TIMER", 
             strings.debug_timer_desc || "DISABLE TURN LIMITS", 
             settings.debug.combatTimer, 

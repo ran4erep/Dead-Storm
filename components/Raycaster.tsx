@@ -14,7 +14,7 @@ import { ShakeEvent } from '../hooks/useVisualEffects';
 import { getAngleFromDir, shortestAngleDiff, lerp, easeInOutQuad, createBufferFromImage, RaycasterBuffer, clearGlobalBufferCache } from './raycaster/RaycasterUtils';
 import { computeLightningMap } from './raycaster/LightningMap';
 import { renderBackground } from './raycaster/BackgroundRenderer';
-import { renderWalls } from './raycaster/WallRenderer';
+import { renderWalls, resetWallStats, getWallStats, setFastGlWalls } from './raycaster/WallRenderer';
 import { getDepthFactor, setDepthRenderDistance, setDepthWeather, setDepthAmbientBrightness, setDisableDistanceShading } from './raycaster/DepthEffect';
 import { setGlobalRenderDistance } from './raycaster/RaycasterConstants';
 import { PassThroughDoor, PassThroughWall, MirrorReflection } from './raycaster/RaycasterTypes';
@@ -425,6 +425,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
   const lastRenderFrameMsRef = useRef(0);
   const perfHistoryRef = useRef<{ t: number; fps: number; bg: number; walls: number; gl: number; ent: number; part: number; oth: number; ext: number }[]>([]);
   const perfStatsRef = useRef({ min: Infinity, max: 0, sum: 0, count: 0 });
+  const wallStatsRef = useRef({ strips: 0, rows: 0, passthrough: 0 });
 
   const [lightningIntensity, setLightningIntensity] = useState(0);
 
@@ -1792,6 +1793,8 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     // 3. RENDER WALLS & MIRRORS (Writes to currentScreenData)
     // Pass reusable buffers
     _st = performance.now();
+    resetWallStats();
+    setFastGlWalls(!!p.settings?.debug?.fastGlWalls);
     renderWalls({
         width: renderWidth, height: renderHeight, grid, grids, posX, posY, dirX, dirY, planeX, planeY, horizon,
         wallBuffer, doorBuffer, lightMap: currentLightMap, floorLightMaps: currentFloorLightMaps, outdoorMap: p.outdoorMap, lightningMap, lightningIntensity, muzzleFlashIntensity: currentMuzzleFlashIntensity, debugTextures,
@@ -1822,6 +1825,10 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
       const _d = performance.now() - _st;
       stageAccRef.current.walls += _d;
       _m.walls += _d;
+      const _ws = getWallStats();
+      wallStatsRef.current.strips += _ws.strips;
+      wallStatsRef.current.rows += _ws.rows;
+      wallStatsRef.current.passthrough += _ws.passthrough;
     }
 
     // 4. GENERATE REFLECTED POLYOBJECTS (FOR MIRROR INTERIORS)
@@ -2457,6 +2464,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
       lines.push('viewport: ' + width + 'x' + height + ' divisor=' + (p.resolutionDivisor || 1));
       lines.push('player: (' + p.player.pos.x.toFixed(2) + ', ' + p.player.pos.y.toFixed(2) + ')');
       lines.push('current avg ms: bg=' + (_a.bg / _n).toFixed(2) + ' walls=' + (_a.walls / _n).toFixed(2) + ' gl=' + (_a.gl / _n).toFixed(2) + ' ent=' + (_a.ent / _n).toFixed(2) + ' part=' + (_a.part / _n).toFixed(2) + ' oth=' + (_a.oth / _n).toFixed(2) + ' ext=' + (_a.loopExtra / _n).toFixed(2));
+      lines.push('wall stats: strips=' + ((wallStatsRef.current.strips / _n) | 0) + ' rows=' + ((wallStatsRef.current.rows / _n) | 0) + ' passthrough=' + ((wallStatsRef.current.passthrough / _n) | 0));
       lines.push('fps range: ' + (isFinite(stats.min) ? stats.min.toFixed(0) : '-') + '-' + stats.max.toFixed(0) + ' avg=' + (stats.count > 0 ? (stats.sum / stats.count).toFixed(1) : '-'));
       lines.push('samples: ' + perfHistoryRef.current.length);
       lines.push('');
@@ -2509,8 +2517,10 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
                   `ent: ${(_a.ent / _n).toFixed(2)}ms\n` +
                   `part: ${(_a.part / _n).toFixed(2)}ms\n` +
                   `oth: ${(_a.oth / _n).toFixed(2)}ms\n` +
-                  `ext: ${(_a.loopExtra / _n).toFixed(2)}ms`;
+                  `ext: ${(_a.loopExtra / _n).toFixed(2)}ms\n` +
+                  `strips: ${(wallStatsRef.current.strips / _n) | 0} rows: ${(wallStatsRef.current.rows / _n) | 0} pt: ${(wallStatsRef.current.passthrough / _n) | 0}`;
               _a.bg = 0; _a.walls = 0; _a.gl = 0; _a.ent = 0; _a.part = 0; _a.oth = 0; _a.loopExtra = 0; _a.frames = 0;
+              wallStatsRef.current.strips = 0; wallStatsRef.current.rows = 0; wallStatsRef.current.passthrough = 0;
           }
           frameCountRef.current = 0;
       }, 1000);
