@@ -636,7 +636,6 @@ export const renderPassthroughWalls = (
                 }
                 if (drawStart < drawEnd && ((pt.layer !== undefined && pt.layer > 0) || dist <= zBuffer[x] + 0.05)) {
                     for (let y = drawStart; y < drawEnd; y++) {
-                        if (isPixelOccluded(y, dist)) continue;
                         screenBuffer[y * width + x] = solidColor;
                         for (let d = 1; d < resolutionDivisor; d++) {
                             if (x + d < width) screenBuffer[y * width + (x + d)] = solidColor;
@@ -745,8 +744,6 @@ export const renderPassthroughWalls = (
                         if (ty < 0) ty += h;
                         texPosFixed += stepFixed;
                         
-                        if (isPixelOccluded(y, dist)) continue;
-
                         const color = texData[(ty * texW + texX) | 0];
                         let r = color & 0xFF; let g = (color >> 8) & 0xFF; let b = (color >> 16) & 0xFF;
                         
@@ -785,8 +782,6 @@ export const renderPassthroughWalls = (
                         if (ty < 0) ty += h;
                         texPosFixed += stepFixed;
 
-                        if (isPixelOccluded(y, dist)) continue;
-                        
                         const color = texData[(ty * texW + texX) | 0];
                         let r = color & 0xFF; let g = (color >> 8) & 0xFF; let b = (color >> 16) & 0xFF;
                         
