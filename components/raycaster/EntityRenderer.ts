@@ -63,6 +63,9 @@ const persistentElevatedEligible: any[] = [];
 const persistentGroundShadows: SpriteShadow[] = [];
 const persistentElevatedShadows: SpriteShadow[] = [];
 
+// Zero-GC persistent array reused each frame instead of allocating spritePool.slice()
+const persistentRenderSprites: any[] = [];
+
 // --- OVERLAY CACHE ---
 let overlayCanvas: HTMLCanvasElement | null = null;
 let overlayCtx: CanvasRenderingContext2D | null = null;
@@ -1712,17 +1715,20 @@ export const renderEntities = ({
         const isAdjacent = Math.abs(x - playerTileX) <= 1 && Math.abs(y - playerTileY) <= 1;
         const isBlockedByPit = (isPitTile(playerTile) !== isPitTile(enemyTile)) && isAdjacent;
 
-        const hasLOS = hasLineOfSight(
-          player.pos,
-          { x: enemyX, y: enemyY },
-          grid,
-          mapWidth,
-          mapHeight,
-          tile.enemyId,
-          false
-        );
-
-        const isClose = enemyDistSq <= 2.5 && !isBlockedByPit && hasLOS;
+        // OPTIMIZATION: LOS is only needed for the close-range portrait/combat decision.
+        // Skip the raycast entirely for enemies beyond that range.
+        const isClose =
+          enemyDistSq <= 2.5 &&
+          !isBlockedByPit &&
+          hasLineOfSight(
+            player.pos,
+            { x: enemyX, y: enemyY },
+            grid,
+            mapWidth,
+            mapHeight,
+            tile.enemyId,
+            false
+          );
 
         let isCameraRotating = false;
         let diff = Math.abs(player.dir - player.dir360);
@@ -2653,7 +2659,11 @@ export const renderEntities = ({
     }
   }
 
-  const renderSprites = spritePool.slice(0, spritePoolCount);
+  persistentRenderSprites.length = 0;
+  for (let i = 0; i < spritePoolCount; i++) {
+    persistentRenderSprites.push(spritePool[i]);
+  }
+  const renderSprites = persistentRenderSprites;
 
   // Collect shadows of visible sprites for high-performance GPU baking/rendering on the floor
   if (isWebGLActive && webglRenderer) {

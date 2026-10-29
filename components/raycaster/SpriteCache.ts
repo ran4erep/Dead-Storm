@@ -77,11 +77,13 @@ export const getTintedSprite = (
     const rKey = Math.min(16, Math.max(0, Math.round(lightColor.r * 16)));
     const gKey = Math.min(16, Math.max(0, Math.round(lightColor.g * 16)));
     const bKey = Math.min(16, Math.max(0, Math.round(lightColor.b * 16)));
-    const lKey = Math.min(8, Math.max(0, Math.round(lightningIntensity * 8)));
-    const fKey = Math.min(12, Math.max(0, Math.round(fogAmount * 12)));
+    // OPTIMIZATION: coarser quantization = more cache hits during dynamic lightning/fog,
+    // fewer expensive canvas composites per frame (visual delta is negligible).
+    const lKey = Math.min(4, Math.max(0, Math.round(lightningIntensity * 4)));
+    const fKey = Math.min(8, Math.max(0, Math.round(fogAmount * 8)));
     
     const cappedMuzzle = Math.min(2.0, muzzleFlashIntensity);
-    const mKey = Math.min(8, Math.max(0, Math.round(cappedMuzzle * 8)));
+    const mKey = Math.min(6, Math.max(0, Math.round(cappedMuzzle * 6)));
 
     // Fast 32-bit packed integer key for O(1) inline check
     const numKey = (rKey) | (gKey << 5) | (bKey << 10) | (lKey << 15) | (mKey << 18) | (fKey << 21) | (((fr ^ fg ^ fb) & 0x1F) << 25);
@@ -156,7 +158,7 @@ export const getTintedSprite = (
             
             if (fogAmount > 0) {
                 tempCtx.globalCompositeOperation = 'source-atop';
-                tempCtx.globalAlpha = Math.min(1.0, fKey / 12);
+                tempCtx.globalAlpha = Math.min(1.0, fKey / 8);
                 tempCtx.fillStyle = `rgb(${getFogColorR()}, ${getFogColorG()}, ${getFogColorB()})`;
                 tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
                 tempCtx.globalAlpha = 1.0;
