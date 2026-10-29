@@ -7,7 +7,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
 import { Tile, Player, Item, Enemy, AnimationConfig, RoamingEnemyAnim, GameStrings } from '../types';
 import { WebGLRenderer } from './raycaster/WebGLRenderer';
-import { isWebGLActive, setWebGLActive, clearQuads, wallQuadsCollector } from './raycaster/WebGLState';
+import { isWebGLActive, setWebGLActive, clearQuads, wallQuadsCollector, setFastGlPt } from './raycaster/WebGLState';
 import { Particle, createRainParticles, createDirectionalBlood, returnParticlesToPool, clearCasingParticles, clearBloodParticles, clearRainSplashParticles, getParticle, createFlareSmokeParticle } from '../utils/particleSystem';
 import { getFlareLightSpread } from '../utils/levelLogic';
 import { ShakeEvent } from '../hooks/useVisualEffects';
@@ -1795,6 +1795,7 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     _st = performance.now();
     resetWallStats();
     setFastGlWalls(!!p.settings?.debug?.fastGlWalls);
+    setFastGlPt(!!p.settings?.debug?.fastGlWalls);
     renderWalls({
         width: renderWidth, height: renderHeight, grid, grids, posX, posY, dirX, dirY, planeX, planeY, horizon,
         wallBuffer, doorBuffer, lightMap: currentLightMap, floorLightMaps: currentFloorLightMaps, outdoorMap: p.outdoorMap, lightningMap, lightningIntensity, muzzleFlashIntensity: currentMuzzleFlashIntensity, debugTextures,
