@@ -1490,6 +1490,35 @@ export const renderEntities = ({
   const playerTileY = Math.floor(posY);
   const now = performance.now();
 
+  // --- PER-FRAME LOOKUP PREP (keeps per-entity work O(1)) ---
+  const roamingAnimById = new Map<string, RoamingEnemyAnim>();
+  for (let i = 0; i < roamingAnims.length; i++) {
+    const a = roamingAnims[i];
+    roamingAnimById.set(a.id, a);
+  }
+  const combatEnemyById = new Map<string, any>();
+  let centerCombatEnemy: any;
+  for (let i = 0; i < combatEnemies.length; i++) {
+    const ce = combatEnemies[i];
+    combatEnemyById.set(ce.id, ce);
+    if (!centerCombatEnemy && ce.alignment === 'CENTER') centerCombatEnemy = ce;
+  }
+  const damagedEnemyIdSet = damagedEnemyIds ? new Set(damagedEnemyIds) : null;
+  const hiddenEnemyIdSet = hiddenEnemyIds ? new Set(hiddenEnemyIds) : null;
+
+  // When no mirror is on screen, tiles fully behind the camera are never drawn,
+  // so we can skip building sprites for them entirely.
+  let hasAnyMirrorOnScreen = false;
+  if (mirrorReflections) {
+    for (let x = 0; x < width; x += resolutionDivisor) {
+      const refs = mirrorReflections[x];
+      if (refs && refs.length > 0 && refs[0].maskBottom !== -1) {
+        hasAnyMirrorOnScreen = true;
+        break;
+      }
+    }
+  }
+
   // PRE-RESOLVE PASSTHROUGH DOOR PROPERTIES TO DRAMATICALLY IMPROVE PERFORMANCE
   const processedDoorsSet = new Set<any>();
   if (passThroughDoors) {
@@ -1599,6 +1628,16 @@ export const renderEntities = ({
 
       if (distSq > RENDER_DISTANCE * RENDER_DISTANCE) continue;
 
+      // CULL: with no mirrors on screen, tiles fully behind the camera are skipped
+      // by the draw pass anyway, so don't spend time building sprites for them.
+      if (!hasAnyMirrorOnScreen) {
+        const det = planeX * dirY - dirX * planeY;
+        if (det !== 0) {
+          const invDet = 1.0 / det;
+          if (invDet * (-planeY * relX + planeX * relY) < 0.001) continue;
+        }
+      }
+
       let sprLight = { r: 1.0, g: 1.0, b: 1.0 };
       if (lightMap && lightMap[y] && lightMap[y][x]) {
         sprLight = { ...lightMap[y][x] };
@@ -1634,8 +1673,8 @@ export const renderEntities = ({
           const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
           enemyX = lerp(enemyMoveAnim.startX, enemyMoveAnim.endX, ease) + 0.5;
           enemyY = lerp(enemyMoveAnim.startY, enemyMoveAnim.endY, ease) + 0.5;
-        } else if (roamingAnims.length > 0) {
-          const roaming = roamingAnims.find((a) => a.id === tile.enemyId);
+        } else if (roamingAnimById.size > 0) {
+          const roaming = roamingAnimById.get(tile.enemyId);
           if (roaming) {
             const elapsed = performance.now() - roaming.startTime;
             const t = Math.min(1, Math.max(0, elapsed / roaming.duration));
@@ -1756,13 +1795,9 @@ export const renderEntities = ({
               vOffset = 0.12;
             }
           }
-          if (isPortrait && combatEnemies.length > 0) {
-            const activeEnemy = combatEnemies.find(
-              (e) => e.id === tile.enemyId,
-            );
-            const centerEnemy = combatEnemies.find(
-              (e) => e.alignment === "CENTER",
-            );
+          if (isPortrait && combatEnemyById.size > 0) {
+            const activeEnemy = combatEnemyById.get(tile.enemyId);
+            const centerEnemy = centerCombatEnemy;
             const hasCenterPortrait =
               centerEnemy &&
               centerEnemy.distance !== undefined &&
@@ -1814,14 +1849,14 @@ export const renderEntities = ({
 
         const bleedId = tile.enemyId + "_NOBLEED";
         const hasDamaged =
-          damagedEnemyIds && damagedEnemyIds.includes(tile.enemyId);
+          !!damagedEnemyIdSet && damagedEnemyIdSet.has(tile.enemyId);
         const hasDamagedNoBleed =
-          damagedEnemyIds && damagedEnemyIds.includes(bleedId);
+          !!damagedEnemyIdSet && damagedEnemyIdSet.has(bleedId);
         const isDamaged = hasDamaged || hasDamagedNoBleed;
         const noBleeding = hasDamagedNoBleed && !hasDamaged;
         const isHighlighted = highlightedEntityId === tile.enemyId;
         const isHidden =
-          hiddenEnemyIds && hiddenEnemyIds.includes(tile.enemyId);
+          !!hiddenEnemyIdSet && hiddenEnemyIdSet.has(tile.enemyId);
 
         if (activeDialogueNPCId && tile.enemyId === activeDialogueNPCId && enemyDistSq <= 2.5) {
           let portraitResolved = false;
@@ -3681,8 +3716,8 @@ export const renderEntities = ({
         let shouldShowHeader = true;
         if (isCombatActive) {
           let combatDist = Math.sqrt((sprite.x - posX) ** 2 + (sprite.y - posY) ** 2);
-          if (combatEnemies && combatEnemies.length > 0) {
-            const ce = combatEnemies.find(e => e.id === sprite.id);
+          if (combatEnemyById.size > 0) {
+            const ce = combatEnemyById.get(sprite.id);
             if (ce && ce.distance !== undefined) {
               combatDist = ce.distance;
             }
