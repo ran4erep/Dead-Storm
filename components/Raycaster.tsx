@@ -14,7 +14,7 @@ import { ShakeEvent } from '../hooks/useVisualEffects';
 import { getAngleFromDir, shortestAngleDiff, lerp, easeInOutQuad, createBufferFromImage, RaycasterBuffer, clearGlobalBufferCache } from './raycaster/RaycasterUtils';
 import { computeLightningMap } from './raycaster/LightningMap';
 import { renderBackground } from './raycaster/BackgroundRenderer';
-import { renderWalls, resetWallStats, getWallStats, setFastGlWalls } from './raycaster/WallRenderer';
+import { renderWalls, resetWallStats, getWallStats } from './raycaster/WallRenderer';
 import { getDepthFactor, setDepthRenderDistance, setDepthWeather, setDepthAmbientBrightness, setDisableDistanceShading } from './raycaster/DepthEffect';
 import { setGlobalRenderDistance } from './raycaster/RaycasterConstants';
 import { PassThroughDoor, PassThroughWall, MirrorReflection } from './raycaster/RaycasterTypes';
@@ -1794,7 +1794,6 @@ const Raycaster = forwardRef<any, RaycasterProps>(({
     // Pass reusable buffers
     _st = performance.now();
     resetWallStats();
-    setFastGlWalls(!!p.settings?.debug?.fastGlWalls);
     renderWalls({
         width: renderWidth, height: renderHeight, grid, grids, posX, posY, dirX, dirY, planeX, planeY, horizon,
         wallBuffer, doorBuffer, lightMap: currentLightMap, floorLightMaps: currentFloorLightMaps, outdoorMap: p.outdoorMap, lightningMap, lightningIntensity, muzzleFlashIntensity: currentMuzzleFlashIntensity, debugTextures,
