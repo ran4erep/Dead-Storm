@@ -1275,6 +1275,10 @@ export class WebGLRenderer {
   private spriteVertexBufferCapacity = 0;
   private polyVertexBufferCapacity = 0;
 
+  // Reusable quad-split arrays (avoid per-frame allocation in the wall pass)
+  private realQuadsPool: QuadData[] = [];
+  private refQuadsPool: QuadData[] = [];
+
   // Persistent arrays to avoid garbage collection
   private cachedWallVertexArray = new Float32Array(65536);
   private cachedSpriteVertexArray = new Float32Array(65536);
@@ -2764,8 +2768,10 @@ export class WebGLRenderer {
       }
 
       // 1. Split wallQuads into real-world and mirror reflection virtual quads
-      const realQuads: QuadData[] = [];
-      const refQuads: QuadData[] = [];
+      const realQuads = this.realQuadsPool;
+      const refQuads = this.refQuadsPool;
+      realQuads.length = 0;
+      refQuads.length = 0;
 
       for (let i = 0; i < wallQuads.length; i++) {
         const q = wallQuads[i];
