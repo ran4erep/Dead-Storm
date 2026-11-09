@@ -2403,7 +2403,7 @@ export class WebGLRenderer {
       const flashCount = activeFlashes ? Math.min(8, activeFlashes.length) : 0;
       gl.uniform1i(this.getUniformLoc(this.bgProgram, "u_activeFlashCount"), flashCount);
       if (flashCount > 0) {
-        const flashArray = new Float32Array(24);
+        const flashArray = this.cachedFlashArray;
         let flashAttenuation = 0.25;
         if (flashlightActive) {
           let quality = 1.0;

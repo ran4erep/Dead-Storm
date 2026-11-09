@@ -34,6 +34,12 @@ let globalFlashCalculated = new Uint8Array(128 * 128);
 let globalFlashState = new Uint8Array(128 * 128);
 let globalLightMapCache: ({ r: number; g: number; b: number } | null)[] = new Array(128 * 128);
 
+// Cache tracking for the solid grid: rebuild only when the map changes or a door
+// is animating (door open state changes which cells are solid).
+let lastSolidGridRef: any = null;
+let lastSolidGridAnimated = false;
+let lastSolidGridSize = -1;
+
 function ensureBackgroundBuffers(size: number) {
     if (globalIsSolidGrid.length < size) {
         const nextSize = Math.max(size, globalIsSolidGrid.length * 2);
@@ -364,19 +370,28 @@ export const renderBackground = ({
         return DEFAULT_LIGHT;
     };
 
-    // Precompute a solid grid once per frame to make wall and door checks incredibly fast
+    // Precompute a solid grid once per frame to make wall and door checks incredibly fast.
+    // Cached across frames; rebuilt only when the grid changes, the size changes, or a
+    // door is animating (door open state affects solidity).
     const isSolidGrid = globalIsSolidGrid;
-    for (let y = 0; y < gridHeight; y++) {
-        const row = grid[y];
-        const rowOffset = y * gridWidth;
-        if (row) {
-            for (let x = 0; x < gridWidth; x++) {
-                const tile = row[x];
-                isSolidGrid[rowOffset + x] = (tile && (tile.type === 'WALL' || (tile.type === 'DOOR' && tile.door?.state !== 'OPEN' && !tile.door?.maskId && !tile.door?.broken))) ? 1 : 0;
+    const totalSolidCells = gridWidth * gridHeight;
+    const doorAnimating = !!(window as any).isAnyDoorAnimating;
+    if (grid !== lastSolidGridRef || doorAnimating !== lastSolidGridAnimated || lastSolidGridSize !== totalSolidCells) {
+        for (let y = 0; y < gridHeight; y++) {
+            const row = grid[y];
+            const rowOffset = y * gridWidth;
+            if (row) {
+                for (let x = 0; x < gridWidth; x++) {
+                    const tile = row[x];
+                    isSolidGrid[rowOffset + x] = (tile && (tile.type === 'WALL' || (tile.type === 'DOOR' && tile.door?.state !== 'OPEN' && !tile.door?.maskId && !tile.door?.broken))) ? 1 : 0;
+                }
+            } else {
+                isSolidGrid.fill(0, rowOffset, rowOffset + gridWidth);
             }
-        } else {
-            isSolidGrid.fill(0, rowOffset, rowOffset + gridWidth);
         }
+        lastSolidGridRef = grid;
+        lastSolidGridAnimated = doorAnimating;
+        lastSolidGridSize = totalSolidCells;
     }
 
     const interpRes = { r: 1.0, g: 1.0, b: 1.0 };
