@@ -4,7 +4,6 @@ import { calculateHingeIntersection, calculateSlideIntersection } from './DoorUt
 import { invalidateLightingSolidMapCache } from './Lighting';
 import { PassThroughDoor, PassThroughWall } from './RaycasterTypes';
 import { isFogWeather } from './DepthEffect';
-import { WINDOW_LOD_DIST } from './RaycasterConstants';
 
 const doorPool: PassThroughDoor[] = [];
 let doorPoolIndex = 0;
@@ -973,7 +972,7 @@ export const performRaycast = (
               if (isWallLike) {
                   let isSolidWall = true;
                   
-                  if (tile.type === 'WALL' && tile.isWindow && (dist <= WINDOW_LOD_DIST || !!tile.maskTargetAsset)) {
+                  if (tile.type === 'WALL' && tile.isWindow) {
                       let thickness = tile.thickness !== undefined ? tile.thickness : 1.0;
                       let offsetVal = tile.offset !== undefined ? tile.offset : 0.0;
                       let cutoutAxis = resolveTileCutoutAxis(tile, mapX, mapY, grid, mapWidth, mapHeight);

@@ -2,6 +2,7 @@ import { PassThroughWall } from './RaycasterTypes';
 import { RaycasterBuffer } from './RaycasterUtils';
 import { getDepthFactor, isFogWeather, getFogColorR, getFogColorG, getFogColorB } from './DepthEffect';
 import { isWebGLActive } from './WebGLState';
+import { WINDOW_LOD_DIST } from './RaycasterConstants';
 
 /**
  * NEW VOLUMETRIC WINDOW RENDERER
@@ -495,6 +496,100 @@ export function renderWindowSegment({
     }
 
     pt.isCutoutColumn = isCutoutCol;
+
+    // --- DISTANT WINDOW LOD: opaque static glass, no cheek parallax ---
+    if (isCutoutCol && pt.dist > WINDOW_LOD_DIST) {
+        const screenCutoutTop = Math.floor(levelDrawStart + (levelDrawEnd - levelDrawStart) * cutoutTop);
+        const screenCutoutBot = Math.floor(levelDrawStart + (levelDrawEnd - levelDrawStart) * cutoutBottom);
+
+        // Top frame (opaque)
+        const topDrawEnd = Math.min(drawEnd, screenCutoutTop);
+        if (drawStart < topDrawEnd) {
+            const spans = getUnoccludedSpans(drawStart, topDrawEnd, passThroughWallsCol, pt.dist);
+            for (let s = 0; s < spans.length; s++) {
+                drawWindowPart(
+                    x, spans[s].start, spans[s].end, pt, currentWallBuf, texX,
+                    levelDrawStart, texStartShift, lh,
+                    rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
+                    screenBuffer, width, resolutionDivisor
+                );
+            }
+        }
+
+        // Bottom frame (opaque)
+        const botDrawStart = Math.max(drawStart, screenCutoutBot);
+        if (botDrawStart < drawEnd) {
+            const spans = getUnoccludedSpans(botDrawStart, drawEnd, passThroughWallsCol, pt.dist);
+            for (let s = 0; s < spans.length; s++) {
+                drawWindowPart(
+                    x, spans[s].start, spans[s].end, pt, currentWallBuf, texX,
+                    levelDrawStart, texStartShift, lh,
+                    rMultInt, gMultInt, bMultInt, fRInt, fGInt, fBInt, distFogInt, 1.0,
+                    screenBuffer, width, resolutionDivisor
+                );
+            }
+        }
+
+        // Opaque static glass in the cutout (no transparency, no parallax)
+        let glassBuf: RaycasterBuffer | null = null;
+        if (upperTile.glassAssetId && !upperTile.isGlassBroken && auxBuffers?.has(upperTile.glassAssetId)) {
+            glassBuf = auxBuffers.get(upperTile.glassAssetId)!;
+        }
+        if (glassBuf) {
+            const glassDrawStart = Math.max(0, screenCutoutTop, drawStart);
+            const glassDrawEnd = Math.min(height, screenCutoutBot, drawEnd);
+            if (glassDrawStart < glassDrawEnd) {
+                let glassFrac = currentWallBuf.width > 0 ? (texX / currentWallBuf.width) : 0.5;
+                glassFrac = (glassFrac - cutoutLeft) / (cutoutRight - cutoutLeft);
+                if (glassFrac < 0) glassFrac = 0; else if (glassFrac > 1) glassFrac = 1;
+                let glassTexX = Math.floor(glassFrac * glassBuf.width) % glassBuf.width;
+                if (glassTexX < 0) glassTexX += glassBuf.width;
+
+                const cutoutScreenHeight = screenCutoutBot - screenCutoutTop;
+                const glassLh = cutoutScreenHeight > 0 ? cutoutScreenHeight : 1;
+                const stepFixed = ((glassBuf.height << 16) / glassLh) | 0;
+                let texPosFixed = 0;
+
+                const fogAmtInt = isFogWeather() ? 256 - distFogInt : 0;
+                const fogR = (getFogColorR() * fogAmtInt) >> 8;
+                const fogG = (getFogColorG() * fogAmtInt) >> 8;
+                const fogB = (getFogColorB() * fogAmtInt) >> 8;
+                const maxD = Math.min(resolutionDivisor, width - x);
+
+                for (let y = glassDrawStart; y < glassDrawEnd; y++) {
+                    let ty = (texPosFixed >> 16) % glassBuf.height;
+                    if (ty < 0) ty += glassBuf.height;
+                    texPosFixed += stepFixed;
+
+                    const color = glassBuf.data[(ty * glassBuf.width + glassTexX) | 0];
+                    let r = color & 0xFF;
+                    let g = (color >> 8) & 0xFF;
+                    let b = (color >> 16) & 0xFF;
+
+                    r = (r * rMultInt) >> 8;
+                    g = (g * gMultInt) >> 8;
+                    b = (b * bMultInt) >> 8;
+
+                    if (fogAmtInt > 0) {
+                        r = ((r * distFogInt) >> 8) + fogR;
+                        g = ((g * distFogInt) >> 8) + fogG;
+                        b = ((b * distFogInt) >> 8) + fogB;
+                    }
+                    if (r > 255) r = 255; else if (r < 0) r = 0;
+                    if (g > 255) g = 255; else if (g < 0) g = 0;
+                    if (b > 255) b = 255; else if (b < 0) b = 0;
+
+                    const finalColor = (255 << 24) | (b << 16) | (g << 8) | r;
+                    const screenIdx = y * width + x;
+                    screenBuffer[screenIdx] = finalColor;
+                    for (let d = 1; d < maxD; d++) {
+                        screenBuffer[screenIdx + d] = finalColor;
+                    }
+                }
+            }
+        }
+        return;
+    }
 
     if (!isCutoutCol) {
         if (drawStart < drawEnd && (pt.dist <= zBuffer[x] + 1.5 || (pt.layer !== undefined && pt.layer > 0))) {
