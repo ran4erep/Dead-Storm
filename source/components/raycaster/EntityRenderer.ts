@@ -69,6 +69,14 @@ const persistentRenderSprites: any[] = [];
 // Zero-GC persistent array reused across mirror segments for the reflected sprite pass
 const persistentReflectedSprites: any[] = [];
 
+// Zero-GC persistent particle lists reused each frame (replaces per-frame filter().sort() allocation)
+const reusableParticleListA: any[] = [];
+const reusableParticleListB: any[] = [];
+const reusableParticleListC: any[] = [];
+const reusableParticleListD: any[] = [];
+const reusableParticleListE: any[] = [];
+const sortParticlesByDist = (a: any, b: any) => a.dist - b.dist;
+
 // --- OVERLAY CACHE ---
 let overlayCanvas: HTMLCanvasElement | null = null;
 let overlayCtx: CanvasRenderingContext2D | null = null;
@@ -3378,30 +3386,66 @@ export const renderEntities = ({
   });
 
   // Pre-filter particles for faster rendering in painter's algorithm
-  let availableParticles = particlesRef.current
-    .filter((p) => !drawnParticles.has(p) && !p.isForeground && p.dist > 0)
-    .sort((a, b) => a.dist - b.dist);
-  let availableRain = rainRef.current
-    .filter((p) => !drawnParticles.has(p) && !p.isForeground && p.dist > 0)
-    .sort((a, b) => a.dist - b.dist);
-  let availableRainSplash = rainSplashParticles
-    .filter(
-      (p) =>
-        p.life > 0 && !drawnParticles.has(p) && !p.isForeground && p.dist > 0,
-    )
-    .sort((a, b) => a.dist - b.dist);
-  let availableCasings = casingParticles
-    .filter(
-      (p) =>
-        p.life > 0 && !drawnParticles.has(p) && !p.isForeground && p.dist > 0,
-    )
-    .sort((a, b) => a.dist - b.dist);
-  let availableBlood = bloodParticles
-    .filter(
-      (p) =>
-        p.life > 0 && !drawnParticles.has(p) && !p.isForeground && p.dist > 0,
-    )
-    .sort((a, b) => a.dist - b.dist);
+  // Persistent buffers are reused every frame to avoid per-frame array/closure allocation.
+  reusableParticleListA.length = 0;
+  {
+    const src = particlesRef.current;
+    const dest = reusableParticleListA;
+    for (let i = 0; i < src.length; i++) {
+      const p = src[i];
+      if (!drawnParticles.has(p) && !p.isForeground && p.dist > 0) dest.push(p);
+    }
+    dest.sort(sortParticlesByDist);
+  }
+  const availableParticles = reusableParticleListA;
+
+  reusableParticleListB.length = 0;
+  {
+    const src = rainRef.current;
+    const dest = reusableParticleListB;
+    for (let i = 0; i < src.length; i++) {
+      const p = src[i];
+      if (!drawnParticles.has(p) && !p.isForeground && p.dist > 0) dest.push(p);
+    }
+    dest.sort(sortParticlesByDist);
+  }
+  const availableRain = reusableParticleListB;
+
+  reusableParticleListC.length = 0;
+  {
+    const src = rainSplashParticles;
+    const dest = reusableParticleListC;
+    for (let i = 0; i < src.length; i++) {
+      const p = src[i];
+      if (p.life > 0 && !drawnParticles.has(p) && !p.isForeground && p.dist > 0) dest.push(p);
+    }
+    dest.sort(sortParticlesByDist);
+  }
+  const availableRainSplash = reusableParticleListC;
+
+  reusableParticleListD.length = 0;
+  {
+    const src = casingParticles;
+    const dest = reusableParticleListD;
+    for (let i = 0; i < src.length; i++) {
+      const p = src[i];
+      if (p.life > 0 && !drawnParticles.has(p) && !p.isForeground && p.dist > 0) dest.push(p);
+    }
+    dest.sort(sortParticlesByDist);
+  }
+  const availableCasings = reusableParticleListD;
+
+  reusableParticleListE.length = 0;
+  {
+    const src = bloodParticles;
+    const dest = reusableParticleListE;
+    for (let i = 0; i < src.length; i++) {
+      const p = src[i];
+      if (p.life > 0 && !drawnParticles.has(p) && !p.isForeground && p.dist > 0) dest.push(p);
+    }
+    dest.sort(sortParticlesByDist);
+  }
+  const availableBlood = reusableParticleListE;
 
   for (const sprite of renderSprites) {
     if (sprite.isPolyObject && sprite.polyModel) {

@@ -142,6 +142,10 @@ let lastGridRef: any = null;
 let lastGridsRef: any = null;
 let lastFlashlightActive = false;
 
+// Persistent fog lookup tables reused across frames (avoid per-frame allocation)
+let refFogTableCache = new Int32Array(0);
+let depthFogTableCache = new Int32Array(0);
+
 function isAnyDoorAnimating(grid: Tile[][]): boolean {
     return !!(window as any).isAnyDoorAnimating;
 }
@@ -276,8 +280,12 @@ export const renderWalls = ({
     const reusableLayerLightingResult = { rMultInt: 256, gMultInt: 256, bMultInt: 256, fRInt: 0, fGInt: 0, fBInt: 0, fogAmtInt: 0 };
 
     // Precalculate fog tables for mirrors and caps once per frame to maximize CPU efficiency
-    const refFogTable = new Int32Array(height);
-    const depthFogTable = new Int32Array(height);
+    if (refFogTableCache.length < height) {
+        refFogTableCache = new Int32Array(height);
+        depthFogTableCache = new Int32Array(height);
+    }
+    const refFogTable = refFogTableCache;
+    const depthFogTable = depthFogTableCache;
     for (let y = 0; y < height; y++) {
         const distToP = rowDistances[y];
         refFogTable[y] = (Math.min(1.0, 1.0 / (1 + (distToP * distToP) * 0.005)) * 256) | 0;

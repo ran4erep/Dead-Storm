@@ -1163,6 +1163,24 @@ export class WebGLRenderer {
     return loc;
   }
 
+  // Cached attribute locations: getAttribLocation is a synchronous driver call that
+  // is expensive when issued per frame. Locations are stable per program, so cache them.
+  private attribLocationsCache = new Map<WebGLProgram, Map<string, number>>();
+
+  private getAttribLoc(program: WebGLProgram, name: string): number {
+    let programCache = this.attribLocationsCache.get(program);
+    if (!programCache) {
+      programCache = new Map();
+      this.attribLocationsCache.set(program, programCache);
+    }
+    let loc = programCache.get(name);
+    if (loc === undefined) {
+      loc = this.gl!.getAttribLocation(program, name);
+      programCache.set(name, loc);
+    }
+    return loc;
+  }
+
   // 3D Mesh properties
   private meshProgram: WebGLProgram | null = null;
   private capProgram: WebGLProgram | null = null;
@@ -1255,6 +1273,7 @@ export class WebGLRenderer {
   private mirrorBgVertexBufferCapacity = 0;
   private particleVertexBufferCapacity = 0;
   private spriteVertexBufferCapacity = 0;
+  private polyVertexBufferCapacity = 0;
 
   // Persistent arrays to avoid garbage collection
   private cachedWallVertexArray = new Float32Array(65536);
@@ -2462,7 +2481,7 @@ export class WebGLRenderer {
       gl.uniform1i(this.getUniformLoc(this.bgProgram, "u_waterTex"), 5);
 
       // Draw screen aligned quad
-      const posAttr = gl.getAttribLocation(this.bgProgram, "position");
+      const posAttr = this.getAttribLoc(this.bgProgram, "position");
       gl.enableVertexAttribArray(posAttr);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.bgQuadBuffer);
       gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
@@ -2546,9 +2565,9 @@ export class WebGLRenderer {
       }
       gl.uniform1f(this.getUniformLoc(this.capProgram, "u_flashlightAttenuation"), capFlashAttenuation);
 
-      const posAttr = gl.getAttribLocation(this.capProgram, "a_position");
-      const texAttr = gl.getAttribLocation(this.capProgram, "a_texCoord");
-      const lightAttr = gl.getAttribLocation(this.capProgram, "a_light");
+      const posAttr = this.getAttribLoc(this.capProgram, "a_position");
+      const texAttr = this.getAttribLoc(this.capProgram, "a_texCoord");
+      const lightAttr = this.getAttribLoc(this.capProgram, "a_light");
       gl.enableVertexAttribArray(posAttr);
       gl.enableVertexAttribArray(texAttr);
       gl.enableVertexAttribArray(lightAttr);
@@ -2703,10 +2722,10 @@ export class WebGLRenderer {
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.uniform1i(this.getUniformLoc(this.meshProgram!, "u_texture"), 0);
 
-        const posAttr = gl.getAttribLocation(this.meshProgram!, "a_position");
-        const texAttr = gl.getAttribLocation(this.meshProgram!, "a_texCoord");
-        const lightAttr = gl.getAttribLocation(this.meshProgram!, "a_lightCoord");
-        const sideAttr = gl.getAttribLocation(this.meshProgram!, "a_side");
+        const posAttr = this.getAttribLoc(this.meshProgram!, "a_position");
+        const texAttr = this.getAttribLoc(this.meshProgram!, "a_texCoord");
+        const lightAttr = this.getAttribLoc(this.meshProgram!, "a_lightCoord");
+        const sideAttr = this.getAttribLoc(this.meshProgram!, "a_side");
 
         gl.enableVertexAttribArray(posAttr);
         gl.enableVertexAttribArray(texAttr);
@@ -2732,10 +2751,10 @@ export class WebGLRenderer {
       gl.uniform3f(this.getUniformLoc(this.wallProgram, "u_fogColor"), fogColorVec[0], fogColorVec[1], fogColorVec[2]);
       gl.uniform1f(this.getUniformLoc(this.wallProgram, "u_height"), height);
 
-      const posAttr = gl.getAttribLocation(this.wallProgram, "position");
-      const texAttr = gl.getAttribLocation(this.wallProgram, "texCoord");
-      const colAttr = gl.getAttribLocation(this.wallProgram, "color");
-      const maskAttr = gl.getAttribLocation(this.wallProgram, "a_maskTopBottom");
+      const posAttr = this.getAttribLoc(this.wallProgram, "position");
+      const texAttr = this.getAttribLoc(this.wallProgram, "texCoord");
+      const colAttr = this.getAttribLoc(this.wallProgram, "color");
+      const maskAttr = this.getAttribLoc(this.wallProgram, "a_maskTopBottom");
 
       gl.enableVertexAttribArray(posAttr);
       gl.enableVertexAttribArray(texAttr);
@@ -3261,11 +3280,11 @@ export class WebGLRenderer {
       );
 
       if (vertCount > 0) {
-        const posAttr = gl.getAttribLocation(this.polyProgram, "a_position");
-        const colAttr = gl.getAttribLocation(this.polyProgram, "a_color");
-        const lightAttr = gl.getAttribLocation(this.polyProgram, "a_lightCoord");
-        const sideAttr = gl.getAttribLocation(this.polyProgram, "a_side");
-        const texAttr = gl.getAttribLocation(this.polyProgram, "a_texCoord");
+        const posAttr = this.getAttribLoc(this.polyProgram, "a_position");
+        const colAttr = this.getAttribLoc(this.polyProgram, "a_color");
+        const lightAttr = this.getAttribLoc(this.polyProgram, "a_lightCoord");
+        const sideAttr = this.getAttribLoc(this.polyProgram, "a_side");
+        const texAttr = this.getAttribLoc(this.polyProgram, "a_texCoord");
 
         gl.enableVertexAttribArray(posAttr);
         gl.enableVertexAttribArray(colAttr);
@@ -3274,7 +3293,12 @@ export class WebGLRenderer {
         if (texAttr >= 0) gl.enableVertexAttribArray(texAttr);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.polyVertexBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, this.polyFloatArray.subarray(0, vertCount * 12), gl.DYNAMIC_DRAW);
+        const polyByteSize = vertCount * 12 * 4;
+        if (this.polyVertexBufferCapacity < polyByteSize) {
+          gl.bufferData(gl.ARRAY_BUFFER, polyByteSize, gl.DYNAMIC_DRAW);
+          this.polyVertexBufferCapacity = polyByteSize;
+        }
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.polyFloatArray.subarray(0, vertCount * 12));
 
         // Stride = 48 bytes (12 floats per vertex)
         gl.vertexAttribPointer(posAttr, 3, gl.FLOAT, false, 48, 0);
@@ -3602,12 +3626,12 @@ export class WebGLRenderer {
     }
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, mirrorBgSubArray);
 
-    const posAttr = gl.getAttribLocation(this.mirrorBgProgram, "position");
-    const pPosAttr = gl.getAttribLocation(this.mirrorBgProgram, "a_playerPos");
-    const dirAttr = gl.getAttribLocation(this.mirrorBgProgram, "a_dir");
-    const maskAttr = gl.getAttribLocation(this.mirrorBgProgram, "a_maskTopBottom");
-    const pwdAttr = gl.getAttribLocation(this.mirrorBgProgram, "a_perpWallDist");
-    const mlAttr = gl.getAttribLocation(this.mirrorBgProgram, "a_mirrorLight");
+    const posAttr = this.getAttribLoc(this.mirrorBgProgram, "position");
+    const pPosAttr = this.getAttribLoc(this.mirrorBgProgram, "a_playerPos");
+    const dirAttr = this.getAttribLoc(this.mirrorBgProgram, "a_dir");
+    const maskAttr = this.getAttribLoc(this.mirrorBgProgram, "a_maskTopBottom");
+    const pwdAttr = this.getAttribLoc(this.mirrorBgProgram, "a_perpWallDist");
+    const mlAttr = this.getAttribLoc(this.mirrorBgProgram, "a_mirrorLight");
 
     gl.enableVertexAttribArray(posAttr);
     gl.enableVertexAttribArray(pPosAttr);
@@ -3658,9 +3682,9 @@ export class WebGLRenderer {
     gl.useProgram(this.particleProgram);
     gl.uniform2f(this.getUniformLoc(this.particleProgram, "u_resolution"), width, height);
 
-    const posAttr = gl.getAttribLocation(this.particleProgram, "a_position");
-    const texAttr = gl.getAttribLocation(this.particleProgram, "a_texCoord");
-    const colAttr = gl.getAttribLocation(this.particleProgram, "a_color");
+    const posAttr = this.getAttribLoc(this.particleProgram, "a_position");
+    const texAttr = this.getAttribLoc(this.particleProgram, "a_texCoord");
+    const colAttr = this.getAttribLoc(this.particleProgram, "a_color");
 
     gl.enableVertexAttribArray(posAttr);
     gl.enableVertexAttribArray(texAttr);
@@ -4211,10 +4235,10 @@ export class WebGLRenderer {
       group.push(s);
     }
 
-    const posAttr = gl.getAttribLocation(this.spriteProgram, "a_position");
-    const texAttr = gl.getAttribLocation(this.spriteProgram, "a_texCoord");
-    const colAttr = gl.getAttribLocation(this.spriteProgram, "a_color");
-    const distAttr = gl.getAttribLocation(this.spriteProgram, "a_dist");
+    const posAttr = this.getAttribLoc(this.spriteProgram, "a_position");
+    const texAttr = this.getAttribLoc(this.spriteProgram, "a_texCoord");
+    const colAttr = this.getAttribLoc(this.spriteProgram, "a_color");
+    const distAttr = this.getAttribLoc(this.spriteProgram, "a_dist");
 
     gl.enableVertexAttribArray(posAttr);
     gl.enableVertexAttribArray(texAttr);
@@ -4603,7 +4627,7 @@ export class WebGLRenderer {
       gl.uniform1i(this.getUniformLoc(this.flashlightProgram, "u_maskTex"), 2);
     }
 
-    const posAttr = gl.getAttribLocation(this.flashlightProgram, "position");
+    const posAttr = this.getAttribLoc(this.flashlightProgram, "position");
     gl.enableVertexAttribArray(posAttr);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.bgQuadBuffer);
     gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
