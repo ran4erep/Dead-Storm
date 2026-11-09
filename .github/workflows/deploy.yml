@@ -35,6 +35,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Stamp build tag into the page
+        run: |
+          STAMP="build $(date -u '+%Y-%m-%d %H:%M UTC') sha=${{ github.sha }}"
+          sed -i "s|</body>|<div id='buildstamp' style='position:fixed;bottom:2px;right:6px;z-index:99999;font-family:monospace;font-size:10px;color:#22c55e;background:rgba(0,0,0,.5);padding:2px 6px;border-radius:4px'>$STAMP</div></body>|" index.html
+          echo "stamped: $STAMP"
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
