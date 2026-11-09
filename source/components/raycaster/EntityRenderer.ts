@@ -184,38 +184,11 @@ const getOverlayCanvas = (width: number, height: number) => {
 
 
 
-const EMPTY_INTERVALS: [number, number][] = [];
-
 const subtractInterval = (
   intervals: [number, number][],
   oStart: number,
   oEnd: number,
 ): [number, number][] => {
-  // Fast path: single visible interval (the overwhelmingly common case).
-  // Avoids allocating a fresh list + tuples every subtraction.
-  if (intervals.length === 1) {
-    const vStart = intervals[0][0];
-    const vEnd = intervals[0][1];
-    if (oStart <= vStart && oEnd >= vEnd) {
-      // Completely occluded
-      return EMPTY_INTERVALS;
-    }
-    if (oStart > vStart && oEnd < vEnd) {
-      // Split
-      return [[vStart, oStart], [oEnd, vEnd]];
-    }
-    if (oStart <= vStart && oEnd > vStart && oEnd < vEnd) {
-      // Trim start
-      return [[oEnd, vEnd]];
-    }
-    if (oStart > vStart && oStart < vEnd && oEnd >= vEnd) {
-      // Trim end
-      return [[vStart, oStart]];
-    }
-    // No overlap
-    return intervals;
-  }
-
   const result: [number, number][] = [];
   for (let i = 0; i < intervals.length; i++) {
     const [vStart, vEnd] = intervals[i];
