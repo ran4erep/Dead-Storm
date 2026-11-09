@@ -1,0 +1,320 @@
+{
+  "ANIM_EXPLOSION": {
+    "frames": [
+      "EXPLOSION1",
+      "EXPLOSION2",
+      "EXPLOSION3",
+      "EXPLOSION4",
+      "EXPLOSION5",
+      "EXPLOSION6",
+      "EXPLOSION7",
+      "EXPLOSION8",
+      "EXPLOSION9",
+      "EXPLOSION10",
+      "EXPLOSION11",
+      "EXPLOSION12",
+      "EXPLOSION13",
+      "EXPLOSION14",
+      "EXPLOSION15",
+      "EXPLOSION16"
+    ],
+    "fps": 20,
+    "scale": 4.0,
+    "centered": true,
+    "repeat": false
+  },
+  "ANIM_C4_EXPLOSION": {
+    "frames": [
+      "EXPLOSION1",
+      "EXPLOSION2",
+      "EXPLOSION3",
+      "EXPLOSION4",
+      "EXPLOSION5",
+      "EXPLOSION6",
+      "EXPLOSION7",
+      "EXPLOSION8",
+      "EXPLOSION9",
+      "EXPLOSION10",
+      "EXPLOSION11",
+      "EXPLOSION12",
+      "EXPLOSION13",
+      "EXPLOSION14",
+      "EXPLOSION15",
+      "EXPLOSION16"
+    ],
+    "fps": 20,
+    "scale": 8.0,
+    "centered": true,
+    "repeat": false
+  },
+  "ANIM_DOG_IDLE": {
+    "frames": [
+      "DOG_IDLE1",
+      "DOG_IDLE2",
+      "DOG_IDLE3",
+      "DOG_IDLE4",
+      "DOG_IDLE5",
+      "DOG_IDLE6"
+    ],
+    "fps": 8,
+    "scale": 1.0,
+    "repeat": true,
+    "randomRepeat": "3000-8000"
+  },
+  "ANIM_DOG_PORTRAIT": {
+    "frames": [
+      "DOG_PORTRAIT_IDLE1",
+      "DOG_PORTRAIT_IDLE2",
+      "DOG_PORTRAIT_IDLE3",
+      "DOG_PORTRAIT_IDLE4",
+      "DOG_PORTRAIT_IDLE5",
+      "DOG_PORTRAIT_IDLE6"
+    ],
+    "fps": 8,
+    "scale": 0.7,
+    "repeat": true,
+    "randomRepeat": "3000-8000"
+  },
+  "ANIM_DOG_ATTACK": {
+    "frames": [
+      "DOG_PORTRAIT_ATTACK1",
+      "DOG_PORTRAIT_ATTACK2",
+      "DOG_PORTRAIT_ATTACK3",
+      "DOG_PORTRAIT_ATTACK4",
+      "DOG_PORTRAIT_ATTACK5",
+      "DOG_PORTRAIT_ATTACK6"
+    ],
+    "fps": 10,
+    "scale": 0.7,
+    "repeat": false
+  },
+  "ANIM_ZOMBIE_IDLE": {
+    "frames": ["ZOMBIE_IDLE1", "ZOMBIE_IDLE2", "ZOMBIE_IDLE3", "ZOMBIE_IDLE4", "ZOMBIE_IDLE5", "ZOMBIE_IDLE6"],
+    "fps": 6,
+    "scale": 1.0,
+    "repeat": true,
+    "randomRepeat": "3000-8000"
+  },
+  "ANIM_ZOMBIE_PORTRAIT": {
+    "frames": ["ZOMBIE_PORTRAIT1", "ZOMBIE_PORTRAIT2", "ZOMBIE_PORTRAIT3", "ZOMBIE_PORTRAIT4", "ZOMBIE_PORTRAIT5"],
+    "fps": 7,
+    "scale": 1.0,
+    "repeat": true,
+    "randomRepeat": "3000-8000"
+  },
+  "ANIM_ZOMBIE_PORTRAIT_ATTACK": {
+    "frames": ["ZOMBIE_PORTRAIT_ATTACK1", "ZOMBIE_PORTRAIT_ATTACK2", "ZOMBIE_PORTRAIT_ATTACK3", "ZOMBIE_PORTRAIT_ATTACK4"],
+    "fps": 10,
+    "scale": 1.0,
+    "repeat": false
+  },
+  "ANIM_MERCHANT_IDLE": {
+    "frames": ["MERCHANT_IDLE1", "MERCHANT_IDLE2", "MERCHANT_IDLE3", "MERCHANT_IDLE4", "MERCHANT_IDLE5", "MERCHANT_IDLE6", "MERCHANT_IDLE7"],
+    "fps": 10,
+    "scale": 0.8,
+    "repeat": true,
+    "randomRepeat": "4000-8000"
+  },
+  "ANIM_MERCHANT_PORTRAIT": {
+    "frames": ["ANIM_MERCHANT_PORTRAIT1", "ANIM_MERCHANT_PORTRAIT2", "ANIM_MERCHANT_PORTRAIT3", "ANIM_MERCHANT_PORTRAIT4"],
+    "fps": 6,
+    "scale": 1.0,
+    "repeat": true,
+    "randomRepeat": "4000-8000"
+  },
+  "ANIM_MERCHANT_HANDSUP": {
+    "frames": ["MERCHANT_HANDSUP1", "MERCHANT_HANDSUP2", "MERCHANT_HANDSUP3", "MERCHANT_HANDSUP4"],
+    "fps": 6,
+    "scale": 0.8,
+    "repeat": true
+  },
+  "ANIM_LANA_TALKING": {
+    "frames": ["LANA_PORTRAIT1", "LANA_PORTRAIT2"],
+    "fps": 16,
+    "scale": 1.0,
+    "repeat": true
+  },
+  "ANIM_CASHIER_TALKING": {
+    "frames": ["CASHIER_PORTRAIT1", "CASHIER_PORTRAIT2"],
+    "fps": 16,
+    "scale": 1.0,
+    "repeat": true
+  },
+  "ANIM_BARMAN_TALKING": {
+    "frames": ["BARMAN_PORTRAIT1", "BARMAN_PORTRAIT2"],
+    "fps": 16,
+    "scale": 1.0,
+    "repeat": true
+  },
+  "ANIM_GENERAL_TALKING": {
+    "frames": ["GENERAL_PORTRAIT1", "GENERAL_PORTRAIT2"],
+    "fps": 16,
+    "scale": 1.0,
+    "repeat": true
+  },
+  "ANIM_DUTYMAN_TALKING": {
+    "frames": ["DUTYMAN_PORTRAIT1", "DUTYMAN_PORTRAIT2"],
+    "fps": 16,
+    "scale": 1.0,
+    "repeat": true
+  },
+  "ANIM_JOHN_TALKING": {
+    "frames": ["MALE_PORTRAIT1", "MALE_PORTRAIT2"],
+    "fps": 16,
+    "scale": 1.0,
+    "repeat": true
+  },
+  "ANIM_LILITH_TALKING": {
+    "frames": ["FEMALE_PORTRAIT1", "FEMALE_PORTRAIT2"],
+    "fps": 16,
+    "scale": 1.0,
+    "repeat": true
+  },
+  "ANIM_MERCHANT_TALKING": {
+    "frames": ["MERCHANT_PORTRAIT1", "MERCHANT_PORTRAIT2"],
+    "fps": 16,
+    "scale": 1.0,
+    "repeat": true
+  },
+  "C4_WALL_ANIM": {
+    "frames": ["C4_WALL", "C4_WALL_ARMED"],
+    "fps": 2,
+    "scale": 1.0,
+    "repeat": true
+  },
+  "PISTOL_SHOT": {
+    "frames": ["PISTOL_SHOT1", "PISTOL_SHOT2", "PISTOL_SHOT3", "PISTOL_SHOT4"],
+    "fps": 8,
+    "scale": 1.1,
+    "repeat": false
+  },
+  "PISTOL_SHOT_FEMALE": {
+    "frames": [
+      "PISTOL_SHOT_FEMALE1",
+      "PISTOL_SHOT_FEMALE2",
+      "PISTOL_SHOT_FEMALE3",
+      "PISTOL_SHOT_FEMALE4"
+    ],
+    "fps": 8,
+    "scale": 1.1,
+    "repeat": false
+  },
+  "AK47_SHOT": {
+    "frames": ["AK47_SHOT1", "AK47_SHOT2", "AK47_SHOT3", "AK47_SHOT4"],
+    "fps": 8,
+    "scale": 1.5,
+    "repeat": false
+  },
+  "AK47_SHOT_FEMALE": {
+    "frames": ["AK47_SHOT_FEMALE1", "AK47_SHOT_FEMALE2", "AK47_SHOT_FEMALE3", "AK47_SHOT_FEMALE4"],
+    "fps": 8,
+    "scale": 1.5,
+    "repeat": false
+  },
+  "SHOTGUN_SHOT": {
+    "frames": ["SHOTGUN_SHOT1", "SHOTGUN_SHOT2", "SHOTGUN_SHOT3", "SHOTGUN_SHOT4", "SHOTGUN_SHOT5", "SHOTGUN_SHOT6", "SHOTGUN_SHOT7", "SHOTGUN_SHOT8", "SHOTGUN_SHOT9"],
+    "fps": 9,
+    "scale": 1.7,
+    "repeat": false
+  },
+  "SHOTGUN_SHOT_FEMALE": {
+    "frames": ["SHOTGUN_SHOT_FEMALE1", "SHOTGUN_SHOT_FEMALE2", "SHOTGUN_SHOT_FEMALE3", "SHOTGUN_SHOT_FEMALE4", "SHOTGUN_SHOT_FEMALE5", "SHOTGUN_SHOT_FEMALE6", "SHOTGUN_SHOT_FEMALE7", "SHOTGUN_SHOT_FEMALE8", "SHOTGUN_SHOT_FEMALE9"],
+    "fps": 9,
+    "scale": 1.7,
+    "repeat": false
+  },
+  "RIFLE_SHOT": {
+    "frames": [
+      "RIFLE_SHOT1",
+      "RIFLE_SHOT2",
+      "RIFLE_SHOT3",
+      "RIFLE_SHOT4",
+      "RIFLE_SHOT5",
+      "RIFLE_SHOT6"
+    ],
+    "fps": 7,
+    "scale": 1.5,
+    "repeat": false
+  },
+  "RIFLE_SHOT_FEMALE": {
+    "frames": [
+      "RIFLE_SHOT_FEMALE1",
+      "RIFLE_SHOT_FEMALE2",
+      "RIFLE_SHOT_FEMALE3",
+      "RIFLE_SHOT_FEMALE4",
+      "RIFLE_SHOT_FEMALE5",
+      "RIFLE_SHOT_FEMALE6"
+    ],
+    "fps": 7,
+    "scale": 1.5,
+    "repeat": false
+  },
+  "TREE_ANIM": {
+    "frames": [
+      "TREE_ANIM1",
+      "TREE_ANIM2",
+      "TREE_ANIM3",
+      "TREE_ANIM4",
+      "TREE_ANIM5",
+      "TREE_ANIM6",
+      "TREE_ANIM7",
+      "TREE_ANIM8"
+    ],
+    "fps": 6,
+    "repeat": false,
+    "randomRepeat": "15000-30000"
+  },
+  "FIRE_ANIM": {
+    "frames": ["FIRE1", "FIRE2", "FIRE3", "FIRE4", "FIRE5", "FIRE6"],
+    "fps": 7,
+    "repeat": true
+  },
+  "MOLOTOV_ARMED_ANIM": {
+    "frames": [
+      "MOLOTOV_ARMED1",
+      "MOLOTOV_ARMED2",
+      "MOLOTOV_ARMED3",
+      "MOLOTOV_ARMED4",
+      "MOLOTOV_ARMED5",
+      "MOLOTOV_ARMED6",
+      "MOLOTOV_ARMED7",
+      "MOLOTOV_ARMED8"
+    ],
+    "fps": 24,
+    "repeat": true
+  },
+  "EXIT_ANIM": {
+    "frames": [
+      "EXIT_ANIM1",
+      "EXIT_ANIM2",
+      "EXIT_ANIM3",
+      "EXIT_ANIM4",
+      "EXIT_ANIM5",
+      "EXIT_ANIM6",
+      "EXIT_ANIM7",
+      "EXIT_ANIM8"
+    ],
+    "fps": 8,
+    "scale": 0.8,
+    "repeat": true
+  },
+  "SAVE_POINT_ANIM": {
+    "frames": [
+      "SAVE_POINT1",
+      "SAVE_POINT2",
+      "SAVE_POINT3",
+      "SAVE_POINT4",
+      "SAVE_POINT5",
+      "SAVE_POINT6",
+      "SAVE_POINT7",
+      "SAVE_POINT8",
+      "SAVE_POINT9",
+      "SAVE_POINT10",
+      "SAVE_POINT11",
+      "SAVE_POINT12"
+    ],
+    "fps": 14,
+    "scale": 0.4,
+    "repeat": true
+  }
+}

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Dead Storm</title>
+    <meta name="description" content="Dungeon Crawler со стволами" />
+    <meta name="game-version" content="1.2.5-beta" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Dead Storm" />
+    <meta property="og:description" content="Dungeon Crawler со стволами" />
+    <meta property="og:image" content="https://ran4erep.github.io/storm/logo.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:title" content="Dead Storm" />
+    <meta property="twitter:description" content="Dungeon Crawler со стволами" />
+    <meta property="twitter:image" content="https://ran4erep.github.io/storm/logo.png" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Jura:wght@500;600;700&family=Caveat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      html, body, #root {
+        height: 100%;
+        max-height: 100%;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+      @keyframes levelUpFloat {
+        0% { opacity: 1; transform: translate(0, 0) scale(1); }
+        15% { transform: translate(-15px, -40px) scale(1.05); }
+        30% { transform: translate(20px, -80px) scale(1.1); }
+        50% { transform: translate(-15px, -140px) scale(1.05); }
+        75% { opacity: 0.8; transform: translate(15px, -200px) scale(1); }
+        100% { opacity: 0; transform: translate(0, -250px) scale(0.95); }
+      }
+      @keyframes flash {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+      }
+      /* Custom scrollbar for inventory */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1f2937;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #4b5563;
+        border-radius: 4px;
+      }
+      
+      @media (pointer: coarse) {
+        .editor-scroll::-webkit-scrollbar {
+          width: 24px;
+          height: 24px;
+        }
+        .editor-scroll::-webkit-scrollbar-thumb {
+          background: #6b7280;
+          border: 6px solid #1f2937;
+          background-clip: padding-box;
+          border-radius: 12px;
+        }
+        .editor-scroll::-webkit-scrollbar-track {
+          background: #27303f;
+        }
+      }
+
+      .hide-scrollbar::-webkit-scrollbar { display: none; }
+      .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+      /* Custom Cursor */
+      body, html, * {
+        cursor: url('https://ran4erep.github.io/storm/hand2.png'), auto;
+        cursor: -webkit-image-set(url('https://ran4erep.github.io/storm/hand2.png') 1x, url('https://ran4erep.github.io/storm/hand.png') 2x), auto;
+        cursor: image-set(url('https://ran4erep.github.io/storm/hand2.png') 1x, url('https://ran4erep.github.io/storm/hand.png') 2x), auto;
+      }
+      .cursor-pointer, button, a, [role="button"] {
+        cursor: url('https://ran4erep.github.io/storm/hand2.png'), pointer !important;
+        cursor: -webkit-image-set(url('https://ran4erep.github.io/storm/hand2.png') 1x, url('https://ran4erep.github.io/storm/hand.png') 2x), pointer !important;
+        cursor: image-set(url('https://ran4erep.github.io/storm/hand2.png') 1x, url('https://ran4erep.github.io/storm/hand.png') 2x), pointer !important;
+      }
+      .cursor-not-allowed, :disabled {
+        cursor: url('https://ran4erep.github.io/storm/hand2.png'), not-allowed !important;
+        cursor: -webkit-image-set(url('https://ran4erep.github.io/storm/hand2.png') 1x, url('https://ran4erep.github.io/storm/hand.png') 2x), not-allowed !important;
+        cursor: image-set(url('https://ran4erep.github.io/storm/hand2.png') 1x, url('https://ran4erep.github.io/storm/hand.png') 2x), not-allowed !important;
+      }
+      .cursor-default {
+        cursor: url('https://ran4erep.github.io/storm/hand2.png'), default !important;
+        cursor: -webkit-image-set(url('https://ran4erep.github.io/storm/hand2.png') 1x, url('https://ran4erep.github.io/storm/hand.png') 2x), default !important;
+        cursor: image-set(url('https://ran4erep.github.io/storm/hand2.png') 1x, url('https://ran4erep.github.io/storm/hand.png') 2x), default !important;
+      }
+      /* Gamepad Focus Style */
+      body.gamepad-navigation-active .gamepad-hide-buttons {
+        display: none !important;
+      }
+      body.gamepad-navigation-active button:focus,
+      body.gamepad-navigation-active [role="button"]:focus,
+      body.gamepad-navigation-active .cursor-pointer:focus,
+      body.gamepad-navigation-active input:focus,
+      body.gamepad-navigation-active select:focus,
+      body.gamepad-navigation-active textarea:focus,
+      body.gamepad-navigation-active [tabindex="0"]:focus,
+      .gamepad-focused {
+        outline: 2px solid #3b82f6 !important; /* Blue-500 matching game accents */
+        outline-offset: 1px !important;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.7) !important;
+      }
+      /* Remove standard ugly click focus outline when NOT in gamepad mode */
+      body:not(.gamepad-navigation-active) button:focus,
+      body:not(.gamepad-navigation-active) [role="button"]:focus,
+      body:not(.gamepad-navigation-active) .cursor-pointer:focus,
+      body:not(.gamepad-navigation-active) input:focus,
+      body:not(.gamepad-navigation-active) select:focus,
+      body:not(.gamepad-navigation-active) textarea:focus {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+    </style>
+
+<link rel="stylesheet" href="/index.css">
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+  }
+}
+</script>
+  <script type="module" crossorigin src="./assets/index-DlpdJ_uJ.js"></script>
+</head>
+  <body class="bg-gray-900 text-white overflow-hidden select-none">
+    <div style="font-family: 'Caveat'; font-weight: 600; position: absolute; opacity: 0; pointer-events: none;">preload caveat</div>
+    <div style="font-family: 'Jura'; font-weight: 700; position: absolute; opacity: 0; pointer-events: none;">preload jura</div>
+    <div id="root"></div>
+</body>
+</html>

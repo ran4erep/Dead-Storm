@@ -1,0 +1,560 @@
+{
+  "lana": {
+    "name": "Лана/Lana",
+    "description": "Журналистка из другой игровой вселенной./Journalist from another game universe.",
+    "canBeKilled": true,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "LANA",
+        "scale": 0.8
+      },
+      "hands_up": {
+        "assetId": "LANA_HANDSUP",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "LANA_DEAD"
+      },
+      "portrait": {
+        "assetId": "LANA_PORTRAIT"
+      },
+      "dialogue_portrait": {
+        "assetId": "ANIM_LANA_TALKING"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "lana_intro",
+    "voice": {
+      "pitch": 2,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1.2,
+      "resonance": 1.4
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 3,
+    "sounds": {
+      "death": "BODY_HIT",
+      "gasp": "LANA_GASP"
+    }
+  },
+  "merchant": {
+    "name": "Торговец/Merchant",
+    "description": "Хитрый торговец./Catchy merchant.",
+    "canBeKilled": true,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "ANIM_MERCHANT_IDLE"
+      },
+      "hands_up": {
+        "assetId": "ANIM_MERCHANT_HANDSUP"
+      },
+      "dead": {
+        "assetId": "MERCHANT_DEAD"
+      },
+      "portrait": {
+        "assetId": "ANIM_MERCHANT_PORTRAIT"
+      },
+      "dialogue_portrait": {
+        "assetId": "ANIM_MERCHANT_TALKING"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "merchant",
+    "voice": {
+      "pitch": 1.2,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1.4,
+      "resonance": 0.9
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 4,
+    "tradeItems": [
+      {
+        "id": "ammo_9mm",
+        "price": 1,
+        "count": 0
+      },
+      {
+        "id": "ak47",
+        "price": 100,
+        "count": 1
+      },
+      {
+        "id": "ammo_762",
+        "price": 1
+      },
+      {
+        "id": "ammo_12g",
+        "price": 1,
+        "count": 30
+      },
+      {
+        "id": "ammo_357_magnum",
+        "price": 1
+      },
+      {
+        "id": "C4",
+        "price": 50,
+        "count": 3
+      }
+    ],
+    "tradeResponses": {
+      "success": "Отличный выбор, друг{подруга}!/Great choice, friend!",
+      "sell_success": "Держи плату, друг{подруга}./Here is your payment, friend.",
+      "no_money": "Не хватает денег, друг{подруга}, я не работаю в долг./Not enough money, friend, I don't work on credit.",
+      "no_space": "У тебя нет места, разгрузись сначала./You have no space, unload first."
+    },
+    "keepPrice": 10,
+    "sounds": {
+      "death": "BODY_HIT",
+      "gasp": "MERCHANT_GASP"
+    }
+  },
+  "general": {
+    "name": "Генерал/General",
+    "description": "Опытный военачальник в строгом мундире./Experienced military leader in a strict uniform.",
+    "canBeKilled": false,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "GENERAL",
+        "scale": 0.8
+      },
+      "hands_up": {
+        "assetId": "GENERAL",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "GENERAL"
+      },
+      "portrait": {
+        "assetId": "GENERAL"
+      },
+      "dialogue_portrait": {
+        "assetId": "ANIM_GENERAL_TALKING"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "",
+    "voice": {
+      "pitch": 0.8,
+      "rate": 0.9,
+      "waveform": "sawtooth",
+      "volume": 1.2,
+      "resonance": 1
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 2,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  },
+  "pushuper": {
+    "name": "Атлет/Athlete",
+    "description": "Парень в спортивной одежде на воркаут площадке./A guy in sports attire practicing.",
+    "canBeKilled": false,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "PUSHUPER",
+        "scale": 0.4
+      },
+      "hands_up": {
+        "assetId": "PUSHUPER",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "PUSHUPER"
+      },
+      "portrait": {
+        "assetId": "PUSHUPER"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "",
+    "voice": {
+      "pitch": 1.1,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1.1,
+      "resonance": 0.9
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 3,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  },
+  "npc1": {
+    "name": "Солдат/Soldier",
+    "description": "Он выглядит весёлым и довольным своей жизнью./He looks cheerful and happy with his life.",
+    "canBeKilled": false,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "NPC1",
+        "scale": 0.8
+      },
+      "hands_up": {
+        "assetId": "NPC1",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "NPC1"
+      },
+      "portrait": {
+        "assetId": "NPC1"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "",
+    "voice": {
+      "pitch": 1,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1,
+      "resonance": 1
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 3,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  },
+  "npc2": {
+    "name": "Скромный солдат/Shy soldier",
+    "description": "Эта девушка выглядит скромной. И всё же она солдат./This girl looks shy. And yet she is a soldier.",
+    "canBeKilled": false,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "NPC2",
+        "scale": 0.8
+      },
+      "hands_up": {
+        "assetId": "NPC2",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "NPC2"
+      },
+      "portrait": {
+        "assetId": "NPC2"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "",
+    "voice": {
+      "pitch": 1.1,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1,
+      "resonance": 1
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 3,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  },
+  "npc3": {
+    "name": "Военный преподаватель/Military instructor",
+    "description": "Вполне доброжелательный парень./He's a pretty nice guy.",
+    "canBeKilled": false,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "NPC3",
+        "scale": 0.8
+      },
+      "hands_up": {
+        "assetId": "NPC3",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "NPC3"
+      },
+      "portrait": {
+        "assetId": "NPC3"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "",
+    "voice": {
+      "pitch": 0.9,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1,
+      "resonance": 1
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 3,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  },
+  "npc4": {
+    "name": "Дежурный/Dutyman",
+    "description": "Тихий и настороженный человек./Quiet and cautious person.",
+    "canBeKilled": false,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "NPC4",
+        "scale": 0.8
+      },
+      "hands_up": {
+        "assetId": "NPC4",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "NPC4"
+      },
+      "portrait": {
+        "assetId": "NPC4"
+      },
+      "dialogue_portrait": {
+        "assetId": "ANIM_DUTYMAN_TALKING"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "",
+    "voice": {
+      "pitch": 1.2,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1,
+      "resonance": 1
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 0,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  },
+  "npc5": {
+    "name": "Дама с собачкой/Lady wit a dog",
+    "description": "Симпатичная женщина, которая гуляет со своей собакой./A pretty woman walking her dog.",
+    "canBeKilled": false,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "NPC5",
+        "scale": 0.8
+      },
+      "hands_up": {
+        "assetId": "NPC5",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "NPC5"
+      },
+      "portrait": {
+        "assetId": "NPC5"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "",
+    "voice": {
+      "pitch": 1,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1,
+      "resonance": 1
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 3,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  },
+  "npc6": {
+    "name": "Подросток/Teenager",
+    "description": "Вполне обычный подросток лет тринадцати на вид./A perfectly ordinary thirteen-year-old boy.",
+    "canBeKilled": false,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "NPC6",
+        "scale": 0.6
+      },
+      "hands_up": {
+        "assetId": "NPC6",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "NPC6"
+      },
+      "portrait": {
+        "assetId": "NPC6"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "",
+    "voice": {
+      "pitch": 0.95,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1,
+      "resonance": 1.1
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 3,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  },
+  "npc7": {
+    "name": "Старик/Old man",
+    "description": "Кажется у него есть возрастные проблемы со спиной. Надеюсь я в будущем не буду ими страдать./It seems like he has some age-related back problems. I hope I won't have to deal with them in the future.",
+    "canBeKilled": false,
+    "talkRange": 1,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "NPC7",
+        "scale": 0.8
+      },
+      "hands_up": {
+        "assetId": "NPC7",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "NPC7"
+      },
+      "portrait": {
+        "assetId": "NPC7"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "",
+    "voice": {
+      "pitch": 1.05,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1,
+      "resonance": 1
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 3,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  },
+  "cashier": {
+    "name": "Кассир/Cashier",
+    "description": "Кассир супермаркета, уставший от бесконечной смены./A supermarket cashier tired of an endless shift.",
+    "talkRange": 2,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "CASHIER",
+        "scale": 0.8
+      },
+      "hands_up": {
+        "assetId": "CASHIER",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "CASHIER"
+      },
+      "portrait": {
+        "assetId": "CASHIER"
+      },
+      "dialogue_portrait": {
+        "assetId": "ANIM_CASHIER_TALKING"
+      }
+    },
+    "hp": 1,
+    "dialogueId": "cashier",
+    "tradeItems": [
+      {
+        "id": "bottle_of_water",
+        "price": 15
+      }
+    ],
+    "tradeResponses": {
+      "success": "Спасибо за покупку, приходите ещё!/Thank you for your purchase, come again!",
+      "sell_success": "Спасибо, принимаю./Thanks, I'll take it.",
+      "no_money": "Милок{Девушка}, у вас денег не хватает!/Young man{Lady}, you don't have enough money!",
+      "no_space": "У вас карманы трещат, разгрузитесь сначала!/Your pockets are full, unload first!"
+    },
+    "voice": {
+      "pitch": 0.9,
+      "rate": 1,
+      "waveform": "sawtooth",
+      "volume": 1,
+      "resonance": 1
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 1,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  },
+  "barman": {
+    "name": "Бармен/Barman",
+    "description": "Бармен в бильярдном клубе. Всегда уважаемая профессия./A bartender at a billiards club. It's always been a respected profession.",
+    "talkRange": 2,
+    "canBeInspected": true,
+    "assets": {
+      "map": {
+        "assetId": "BARMAN",
+        "scale": 0.8
+      },
+      "hands_up": {
+        "assetId": "BARMAN",
+        "scale": 0.8
+      },
+      "dead": {
+        "assetId": "BARMAN"
+      },
+      "portrait": {
+        "assetId": "BARMAN"
+      },
+      "dialogue_portrait": {
+        "assetId": "ANIM_BARMAN_TALKING"
+      }
+    },
+    "hp": 1,
+    "voice": {
+      "pitch": 0.6,
+      "rate": 1.2,
+      "waveform": "sawtooth",
+      "volume": 1,
+      "resonance": 0.8
+    },
+    "corpseScale": 0.5,
+    "deadScale": 0.32,
+    "roamRadius": 1,
+    "sounds": {
+      "death": "BODY_HIT"
+    }
+  }
+}

@@ -1,0 +1,488 @@
+{
+  "locationName": "Склад ГСМ/Fuel Depot",
+  "locationDescription": "Заброшенный склад горюче-смазочных материалов. В воздухе висит тяжёлый запах бензина. Повсюду разбросаны пустые бочки и строительный мусор./An abandoned fuel and lubricant warehouse. The air hangs heavy with the smell of gasoline. Empty barrels and construction debris are scattered everywhere.",
+  "tasks": [
+    {
+      "id": "task_find_keycard",
+      "descriptionKey": "find_keycard",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "task_leave_sector",
+      "descriptionKey": "leave_sector",
+      "status": "HIDDEN"
+    }
+  ],
+  "triggers": [
+    {
+      "id": "trigger_zombie_ambush",
+      "type": "ON_ENTER_TILE",
+      "params": {
+        "x": 9,
+        "y": 13
+      },
+      "runOnce": true,
+      "actions": [
+        {
+          "type": "SPAWN_ENTITY",
+          "params": {
+            "entityType": "ENEMY",
+            "definitionId": "zombie_tech",
+            "x": 9,
+            "y": 11
+          }
+        },
+        {
+          "type": "PLAY_SOUND",
+          "params": {
+            "soundId": "ZOMBIE_DAMAGE"
+          }
+        },
+        {
+          "type": "ADD_LOG",
+          "params": {
+            "messageKey": "ambush_trigger",
+            "toast": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "trigger_keycard_pickup",
+      "type": "ON_ITEM_PICKUP",
+      "params": {
+        "itemId": "keycard"
+      },
+      "runOnce": true,
+      "actions": [
+        {
+          "type": "COMPLETE_TASK",
+          "params": {
+            "taskId": "task_find_keycard"
+          }
+        },
+        {
+          "type": "REVEAL_TASK",
+          "params": {
+            "taskId": "task_leave_sector"
+          }
+        }
+      ]
+    },
+    {
+      "id": "trigger_radio_lana",
+      "type": "ON_ENTER_TILE",
+      "params": {
+        "x": 1,
+        "y": 11
+      },
+      "requiredItemType": "RADIO",
+      "runOnce": true,
+      "actions": [
+        {
+          "type": "SHOW_DIALOGUE",
+          "params": {
+            "dialogueId": "test_trigger",
+            "isRadio": true,
+            "name": "Лана / Lana",
+            "portrait": "ANIM_LANA_TALKING",
+            "voice": {
+              "pitch": 2.0,
+              "rate": 1.0,
+              "waveform": "sawtooth",
+              "volume": 1.2,
+              "resonance": 1.4
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "soundtrack": "AMBIENT",
+  "globalLight": 0.3,
+  "ceilingType": "OUTDOOR",
+  "skyboxTextureId": "SKY",
+  "weather": "rain",
+  "playerStart": {
+    "dir": "E"
+  },
+  "grids": [
+    [
+      "#######################",
+      "#.....................#",
+      "#.....................#",
+      "########.%#############",
+      "#,,,,,,,,,,,,,,,,,,,,,#",
+      "####,,,,,,,,,,,,,,,,,,#",
+      "#,,,,,,,,,,,,,,,,,,,,,#",
+      "#############,#########",
+      "#..............#......#",
+      "#.##.....#.#####......#",
+      "#.#...................#",
+      "#.##.......###.##.....#",
+      "#..............#......#",
+      "####..###.######......#",
+      "#....##........#......#",
+      "#..#.##........########",
+      "#########@#############"
+    ],
+    [
+      "#######################",
+      "#.....................#",
+      "#.....................#",
+      "#######################",
+      "#.....................#",
+      "####..................#",
+      "####..................#",
+      "#######################",
+      "####...........#......#",
+      "####.....#######......#",
+      "####.....###..........#",
+      "####.....#####.##.....#",
+      "####.....###...#......#",
+      "####..##########......#",
+      "####.##........#......#",
+      "#######################",
+      "#######################"
+    ],
+    [
+      "#######################",
+      "#######################",
+      "#######################",
+      "#######################",
+      ".......................",
+      ".......................",
+      ".......................",
+      ".......................",
+      ".......................",
+      ".......................",
+      ".......................",
+      ".......................",
+      ".......................",
+      ".......................",
+      ".......................",
+      ".......................",
+      "......................."
+    ]
+  ],
+  "entities": [
+    [
+      ".......................",
+      "....*...............=..",
+      "...*...............^^^.",
+      "........6..............",
+      "...T....D......D..TЦ...",
+      "....7TD..EE.T.......T..",
+      ".$+3....TEE......T.....",
+      ".....|.......5.........",
+      ".Sh.Р|...P..BBB..ZZZ...",
+      ".C..!|ZZO........ZZ.ZZ.",
+      ".F.0-|.K...3........Z..",
+      ".Б.....R............Z..",
+      ".....Z.....2.W....9....",
+      ".........1........G.М..",
+      ".BN4...L....(&....O....",
+      ".цЯ.X..П....)M.........",
+      "......................."
+    ]
+  ],
+  "gridLight": [
+    ".......................",
+    "....O..................",
+    "...O...................",
+    ".......................",
+    "...W.............W.....",
+    "..........W............",
+    ".......................",
+    ".......................",
+    "......R................",
+    "............R.....B....",
+    ".......................",
+    ".......................",
+    ".......................",
+    "...R........R.....B....",
+    ".......................",
+    ".......................",
+    "......................."
+  ],
+  "lightDefinitions": {
+    "W": { "r": 255, "g": 255, "b": 255, "intensity": 0.66, "range": 6, "mode": "FLICKERING" },
+    "R": { "r": 0, "g": 0, "b": 255, "intensity": 0.77, "range": 7, "mode": "STATIC" },
+    "B": { "r": 100, "g": 100, "b": 255, "intensity": 0.55, "range": 5, "mode": "STATIC" },
+    "O": { "r": 120, "g": 30, "b": 0, "intensity": 0.77, "range": 5, "mode": "STATIC" }
+  },
+  "doorDefinitions": {
+    "1": {
+      "type": "HINGE",
+      "dir": "LEFT",
+      "textureId": "DOOR",
+      "openSound": "DOOR_HINGED_OPEN",
+      "closeSound": "DOOR_HINGED_CLOSE"
+    },
+    "2": {
+      "type": "HINGE",
+      "dir": "RIGHT",
+      "textureId": "DOOR",
+      "openSound": "DOOR_HINGED_OPEN",
+      "closeSound": "DOOR_HINGED_CLOSE"
+    },
+    "3": {
+      "type": "SLIDE",
+      "textureId": "DOOR_SLIDE",
+      "openSound": "DOOR_SLIDE_OPEN",
+      "closeSound": "DOOR_SLIDE_CLOSE"
+    },
+    "4": {
+      "type": "LIFT",
+      "textureId": "DOOR",
+      "keyId": "keycard",
+      "openSound": "DOOR_SLIDE_OPEN",
+      "closeSound": "DOOR_SLIDE_CLOSE"
+    },
+    "5": {
+      "type": "SLIDE",
+      "textureId": "GLASS_DOOR",
+      "maskId": "GLASS_DOOR_MASK",
+      "openSound": "DOOR_SLIDE_OPEN",
+      "closeSound": "DOOR_SLIDE_CLOSE"
+    },
+    "6": {
+      "type": "SLIDE",
+      "textureId": "DOOR",
+      "id": "vault_door",
+      "isLocked": true,
+      "openSound": "DOOR_SLIDE_OPEN",
+      "closeSound": "DOOR_SLIDE_CLOSE"
+    }
+  },
+  "portals": [
+    {
+      "symbol": "X",
+      "destination": "./data/levels/level1/sector2.json",
+      "assetId": "EXIT_ANIM",
+      "portalId": "sec1_to_sec2",
+      "targetPortalId": "sec2_to_sec1",
+      "targetDirection": "N"
+    },
+    {
+      "symbol": "П",
+      "destination": "./data/levels/level1/sector_scripts.json",
+      "assetId": "EXIT_ANIM",
+      "portalId": "sec1_to_secs",
+      "targetPortalId": "secs_to_sec1",
+      "targetDirection": "E"
+    }
+  ],
+  "NPCs": [
+    {
+      "symbol": "L",
+      "id": "lana"
+    },
+    {
+      "symbol": "$",
+      "id": "merchant"
+    }
+  ],
+  "enemies": [
+    {
+      "symbol": "Z",
+      "id": "zombie_tech"
+    },
+    {
+      "symbol": "O",
+      "id": "soldier_guard"
+    },
+    {
+      "symbol": "D",
+      "id": "zombie_dog"
+    },
+    {
+      "symbol": "ц",
+      "id": "zombie_swat"
+    }
+  ],
+  "items": [
+    {
+      "symbol": "C",
+      "id": "C4"
+    },
+    {
+      "symbol": "Р",
+      "id": "radio"
+    },
+    {
+      "symbol": "F",
+      "id": "flashlight"
+    },
+    {
+      "symbol": "N",
+      "id": "grenade"
+    },
+    {
+      "symbol": "(",
+      "id": "molotov"
+    },
+    {
+      "symbol": ")",
+      "id": "flashbang"
+    },
+    {
+      "symbol": "M",
+      "id": "map"
+    },
+    {
+      "symbol": "B",
+      "id": "bandage"
+    },
+    {
+      "symbol": "P",
+      "id": "pistol"
+    },
+    {
+      "symbol": "K",
+      "id": "keycard"
+    },
+    {
+      "symbol": "&",
+      "id": "compass"
+    },
+    {
+      "symbol": "^",
+      "id": "cash"
+    },
+    {
+      "symbol": "W",
+      "id": "shotgun"
+    },
+    {
+      "symbol": "+",
+      "id": "revolver"
+    },
+    {
+      "symbol": "7",
+      "id": "ammo_357_magnum"
+    },
+    {
+      "symbol": "9",
+      "id": "ammo_9mm"
+    },
+    {
+      "symbol": "G",
+      "id": "ammo_12g"
+    },
+    {
+      "symbol": "Б",
+      "id": "battery"
+    },
+    {
+      "symbol": "Я",
+      "id": "test_container"
+    }
+  ],
+  "decorations": [
+    {
+      "symbol": "0",
+      "id": "barrel"
+    },
+    {
+      "symbol": "E",
+      "id": "explosive_barrel"
+    },
+    {
+      "symbol": "R",
+      "id": "debris"
+    },
+    {
+      "symbol": "T",
+      "id": "tree"
+    },
+    {
+      "symbol": "h",
+      "id": "poly_chair"
+    },
+    {
+      "symbol": "М",
+      "id": "car"
+    },
+    {
+      "symbol": "Ц",
+      "id": "moto"
+    },
+    {
+      "symbol": "=",
+      "id": "workbench"
+    },
+    {
+      "symbol": "*",
+      "id": "fire"
+    },
+    {
+      "symbol": "-",
+      "id": "chain_fence_x"
+    },
+    {
+      "symbol": "|",
+      "id": "chain_fence_y"
+    },
+    {
+      "symbol": "!",
+      "id": "save_point"
+    }
+  ],
+  "construction": [
+    {
+      "symbol": ".",
+      "type": "floor",
+      "assetId": "FLOOR",
+      "footstepSound": "CONCRETE"
+    },
+    {
+      "symbol": "?",
+      "type": "floor",
+      "assetId": "WATER",
+      "isWater": true,
+      "height": -0.1,
+      "footstepSound": "CONCRETE"
+    },
+    {
+      "symbol": ",",
+      "type": "floor",
+      "assetId": "GRASS",
+      "footstepSound": "GRASS_STEP"
+    },
+    {
+      "symbol": "#",
+      "type": "wall",
+      "assetId": "WALL",
+      "bottomTextureId": "CEILING",
+      "canBeDestroyed": true
+    },
+    {
+      "symbol": "%",
+      "type": "wall",
+      "assetId": "WALL",
+      "faces": { "S": "WALL_LOCK" },
+      "keypadAssetId": "KEYPAD",
+      "keypadMaskAssetId": "KEYPAD_MASK",
+      "keypadSound": "KEYPAD_BUTTON",
+      "keypadSuccessSound": "KEYPAD_SUCCESS",
+      "keypadFailSound": "KEYPAD_FAILED",
+      "bottomTextureId": "CEILING",
+      "keylock": true,
+      "keypadDirection": "S",
+      "targetId": "vault_door",
+      "password": "1993"
+    },
+    {
+      "symbol": "@",
+      "type": "wall",
+      "assetId": "WALL",
+      "faces": { "N": "WALL_MIRROR" },
+      "maskId": "WALL_MIRROR_MASK",
+      "maskTargetAsset": "WALL_MIRROR",
+      "bottomTextureId": "CEILING",
+      "mirror": true,
+      "mirrorOpacity": 0.5
+    }
+  ]
+}
