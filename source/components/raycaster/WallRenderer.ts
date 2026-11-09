@@ -195,6 +195,12 @@ export const renderWalls = ({
     const lightningR = 0.6, lightningG = 0.65, lightningB = 0.8;
     const muzzleR = 1.0, muzzleG = 0.8, muzzleB = 0.3;
 
+    // Snapshot fog state once per frame (used by expensive per-pixel cap loops)
+    const _fogEnabled = isFogWeather();
+    const _fogR = _fogEnabled ? getFogColorR() : 0;
+    const _fogG = _fogEnabled ? getFogColorG() : 0;
+    const _fogB = _fogEnabled ? getFogColorB() : 0;
+
     resetRaycastPools();
     resetMirrorPool();
     updateLightingSolidMap(grid, grids);
@@ -787,11 +793,11 @@ export const renderWalls = ({
                                         let bFinalInc = (fB * 255 * distFogInt) >> 8;
 
                                         let fogRInc = 0, fogGInc = 0, fogBInc = 0;
-                                        if (isFogWeather()) {
+                                        if (_fogEnabled) {
                                             const fogAmt = 256 - distFogInt;
-                                            fogRInc = (getFogColorR() * fogAmt) >> 8;
-                                            fogGInc = (getFogColorG() * fogAmt) >> 8;
-                                            fogBInc = (getFogColorB() * fogAmt) >> 8;
+                                            fogRInc = (_fogR * fogAmt) >> 8;
+                                            fogGInc = (_fogG * fogAmt) >> 8;
+                                            fogBInc = (_fogB * fogAmt) >> 8;
                                         }
 
                                         currR = exactR; currG = exactG; currB = exactB;
@@ -876,11 +882,11 @@ export const renderWalls = ({
                                             let nextBFinalInc = (nextFB * 255 * nextDistFogInt) >> 8;
 
                                             let nextFogRInc = 0, nextFogGInc = 0, nextFogBInc = 0;
-                                            if (isFogWeather()) {
+                                            if (_fogEnabled) {
                                                 const fogAmt = 256 - nextDistFogInt;
-                                                nextFogRInc = (getFogColorR() * fogAmt) >> 8;
-                                                nextFogGInc = (getFogColorG() * fogAmt) >> 8;
-                                                nextFogBInc = (getFogColorB() * fogAmt) >> 8;
+                                                nextFogRInc = (_fogR * fogAmt) >> 8;
+                                                nextFogGInc = (_fogG * fogAmt) >> 8;
+                                                nextFogBInc = (_fogB * fogAmt) >> 8;
                                             }
 
                                             stepR = (nextR - currR) / actualSteps;
@@ -1056,11 +1062,11 @@ export const renderWalls = ({
                                         let bFinalInc = (fB * 255 * distFogInt) >> 8;
 
                                         let fogRInc = 0, fogGInc = 0, fogBInc = 0;
-                                        if (isFogWeather()) {
+                                        if (_fogEnabled) {
                                             const fogAmt = 256 - distFogInt;
-                                            fogRInc = (getFogColorR() * fogAmt) >> 8;
-                                            fogGInc = (getFogColorG() * fogAmt) >> 8;
-                                            fogBInc = (getFogColorB() * fogAmt) >> 8;
+                                            fogRInc = (_fogR * fogAmt) >> 8;
+                                            fogGInc = (_fogG * fogAmt) >> 8;
+                                            fogBInc = (_fogB * fogAmt) >> 8;
                                         }
 
                                         currR = exactR; currG = exactG; currB = exactB;
@@ -1142,11 +1148,11 @@ export const renderWalls = ({
                                             let nextBFinalInc = (nextFB * 255 * nextDistFogInt) >> 8;
 
                                             let nextFogRInc = 0, nextFogGInc = 0, nextFogBInc = 0;
-                                            if (isFogWeather()) {
+                                            if (_fogEnabled) {
                                                 const fogAmt = 256 - nextDistFogInt;
-                                                nextFogRInc = (getFogColorR() * fogAmt) >> 8;
-                                                nextFogGInc = (getFogColorG() * fogAmt) >> 8;
-                                                nextFogBInc = (getFogColorB() * fogAmt) >> 8;
+                                                nextFogRInc = (_fogR * fogAmt) >> 8;
+                                                nextFogGInc = (_fogG * fogAmt) >> 8;
+                                                nextFogBInc = (_fogB * fogAmt) >> 8;
                                             }
 
                                             stepR = (nextR - currR) / actualSteps;

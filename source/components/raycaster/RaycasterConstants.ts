@@ -7,3 +7,6 @@ export const FLY_SPAWN_DELAY = 60000;
 export let RENDER_DISTANCE = 30;
 export const setGlobalRenderDistance = (dist: number) => { RENDER_DISTANCE = 30; };
 export const DOOR_THICKNESS = 0.15; // Increased thickness for visible volume
+// Window LOD: beyond this distance windows render as plain solid walls (no cutout/glass).
+// Mirrors (tiles with a maskTargetAsset) are excluded so reflections never pop out.
+export const WINDOW_LOD_DIST = 8;

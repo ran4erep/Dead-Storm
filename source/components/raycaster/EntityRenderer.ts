@@ -5006,28 +5006,28 @@ export const renderEntities = ({
         ctx.save();
         ctx.beginPath();
 
-        // OPTIMIZATION: Merge adjacent vertical strips into single rectangles
-        const optimizedRects = [];
+        // OPTIMIZATION: Merge adjacent vertical strips into single rectangles (in place)
         if (rects.length > 0) {
-          let current = { ...rects[0] };
+          let write = 0;
           for (let i = 1; i < rects.length; i++) {
             const r = rects[i];
+            const cur = rects[write];
             if (
-              current.y === r.y &&
-              current.h === r.h &&
-              Math.abs(current.x + current.w - r.x) < 0.1
+              cur.y === r.y &&
+              cur.h === r.h &&
+              Math.abs(cur.x + cur.w - r.x) < 0.1
             ) {
-              current.w += r.w;
+              cur.w += r.w;
             } else {
-              optimizedRects.push(current);
-              current = { ...r };
+              write++;
+              rects[write] = r;
             }
           }
-          optimizedRects.push(current);
+          rects.length = write + 1;
         }
 
-        for (let i = 0; i < optimizedRects.length; i++) {
-          const r = optimizedRects[i];
+        for (let i = 0; i < rects.length; i++) {
+          const r = rects[i];
           ctx.rect(r.x, r.y, r.w, r.h);
         }
         ctx.clip();
