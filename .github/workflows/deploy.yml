@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
@@ -33,18 +35,37 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: source/dist
+
   deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  mirror:
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy build output
-        run: cp -r source/dist .
+      - uses: actions/download-artifact@v4
+        with:
+          name: github-pages
+          path: ./dist
 
-      - name: Deploy to gh-pages
+      - name: Mirror build files to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
