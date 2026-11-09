@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -38,40 +36,33 @@ jobs:
       - name: Stamp build tag into the page
         run: |
           STAMP="build $(date -u '+%Y-%m-%d %H:%M UTC') sha=${{ github.sha }}"
-          sed -i "s|</body>|<div id='buildstamp' style='position:fixed;bottom:2px;right:6px;z-index:99999;font-family:monospace;font-size:10px;color:#22c55e;background:rgba(0,0,0,.5);padding:2px 6px;border-radius:4px'>$STAMP</div></body>|" index.html
+          sed -i "s|</body>|<script>if(location.hostname.endsWith('github.io')\&\&location.pathname!='/Dead-Storm/'\&\&location.pathname.toLowerCase()==='/dead-storm/')location.replace('/Dead-Storm/');</script><div id='buildstamp' style='position:fixed;bottom:2px;right:6px;z-index:99999;font-family:monospace;font-size:10px;color:#22c55e;background:rgba(0,0,0,.5);padding:2px 6px;border-radius:4px'>$STAMP</div></body>|" index.html
           echo "stamped: $STAMP"
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Prevent Jekyll processing
+        run: touch dist/.nojekyll
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
         with:
+          name: site
           path: source/dist
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-  mirror:
-    needs: build
-    runs-on: ubuntu-latest
     permissions:
       contents: write
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - name: Download build output
+        uses: actions/download-artifact@v4
         with:
-          name: github-pages
+          name: site
           path: ./dist
 
-      - name: Mirror build files to gh-pages branch
+      - name: Publish to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
