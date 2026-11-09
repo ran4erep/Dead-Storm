@@ -212,51 +212,6 @@ const subtractInterval = (
   return result;
 };
 
-type AlphaSpan = { start: number; end: number; alpha: number };
-
-const subtractSpan = (currentSpans: AlphaSpan[], clipStart: number, clipEnd: number): AlphaSpan[] => {
-  if (clipStart >= clipEnd) return currentSpans;
-  const result: AlphaSpan[] = [];
-  for (let i = 0; i < currentSpans.length; i++) {
-    const s = currentSpans[i];
-    if (clipEnd <= s.start || clipStart >= s.end) {
-      result.push(s);
-    } else {
-      if (clipStart > s.start) {
-        result.push({ start: s.start, end: clipStart, alpha: s.alpha });
-      }
-      if (clipEnd < s.end) {
-        result.push({ start: clipEnd, end: s.end, alpha: s.alpha });
-      }
-    }
-  }
-  return result;
-};
-
-const multiplySpan = (currentSpans: AlphaSpan[], clipStart: number, clipEnd: number, multiplier: number): AlphaSpan[] => {
-  if (clipStart >= clipEnd) return currentSpans;
-  const result: AlphaSpan[] = [];
-  for (let i = 0; i < currentSpans.length; i++) {
-    const s = currentSpans[i];
-    if (clipEnd <= s.start || clipStart >= s.end) {
-      result.push(s);
-    } else {
-      const overlapStart = Math.max(s.start, clipStart);
-      const overlapEnd = Math.min(s.end, clipEnd);
-      if (s.start < overlapStart) {
-        result.push({ start: s.start, end: overlapStart, alpha: s.alpha });
-      }
-      if (overlapStart < overlapEnd) {
-        result.push({ start: overlapStart, end: overlapEnd, alpha: s.alpha * multiplier });
-      }
-      if (s.end > overlapEnd) {
-        result.push({ start: overlapEnd, end: s.end, alpha: s.alpha });
-      }
-    }
-  }
-  return result;
-};
-
 
 
 const spritePool: SpriteToRender[] = [];
@@ -4809,6 +4764,49 @@ export const renderEntities = ({
             for (let i = 0; i < intervals.length; i++) {
               spans.push({ start: intervals[i][0], end: intervals[i][1], alpha: 1.0 });
             }
+
+            const subtractSpan = (currentSpans: Span[], clipStart: number, clipEnd: number): Span[] => {
+              if (clipStart >= clipEnd) return currentSpans;
+              const result: Span[] = [];
+              for (let i = 0; i < currentSpans.length; i++) {
+                const s = currentSpans[i];
+                if (clipEnd <= s.start || clipStart >= s.end) {
+                  result.push(s);
+                } else {
+                  if (clipStart > s.start) {
+                    result.push({ start: s.start, end: clipStart, alpha: s.alpha });
+                  }
+                  if (clipEnd < s.end) {
+                    result.push({ start: clipEnd, end: s.end, alpha: s.alpha });
+                  }
+                }
+              }
+              return result;
+            };
+
+            const multiplySpan = (currentSpans: Span[], clipStart: number, clipEnd: number, multiplier: number): Span[] => {
+              if (clipStart >= clipEnd) return currentSpans;
+              const result: Span[] = [];
+              for (let i = 0; i < currentSpans.length; i++) {
+                const s = currentSpans[i];
+                if (clipEnd <= s.start || clipStart >= s.end) {
+                  result.push(s);
+                } else {
+                  const overlapStart = Math.max(s.start, clipStart);
+                  const overlapEnd = Math.min(s.end, clipEnd);
+                  if (s.start < overlapStart) {
+                    result.push({ start: s.start, end: overlapStart, alpha: s.alpha });
+                  }
+                  if (overlapStart < overlapEnd) {
+                    result.push({ start: overlapStart, end: overlapEnd, alpha: s.alpha * multiplier });
+                  }
+                  if (s.end > overlapEnd) {
+                    result.push({ start: overlapEnd, end: s.end, alpha: s.alpha });
+                  }
+                }
+              }
+              return result;
+            };
 
             const stripeCameraX = (2 * stripe) / width - 1;
             const stripeRDirX = dirX + planeX * stripeCameraX;
